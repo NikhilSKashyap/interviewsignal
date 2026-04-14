@@ -55,11 +55,11 @@ def create_interview(
 
     # Embed HM's relay config so candidates need zero transport setup
     relay_url = ""
-    relay_api_key = ""
+    hm_key = ""
     try:
-        from interview.core.transport import get_relay_url, get_relay_api_key
+        from interview.core.transport import get_relay_url, get_hm_key
         relay_url = get_relay_url() or ""
-        relay_api_key = get_relay_api_key() if relay_url else ""
+        hm_key = get_hm_key() if relay_url else ""
     except Exception:
         pass
 
@@ -77,9 +77,10 @@ def create_interview(
         # Integrity: hash of the problem + rubric so candidates can't claim
         # the problem was different
         "problem_hash": hashlib.sha256(problem.encode()).hexdigest()[:16],
-        # Transport: relay config flows from HM → package → candidate
+        # Transport: relay config flows HM → package → candidate
+        # hm_key scopes the session to this HM on the relay (Model B)
         "relay_url": relay_url,
-        "relay_api_key": relay_api_key,
+        "hm_key": hm_key,
     }
 
     # Save locally on HM's machine
@@ -90,6 +91,16 @@ def create_interview(
     token = encode_package(payload)
     token_file = CREATED_DIR / f"{code}.token"
     token_file.write_text(token)
+
+    # Push to relay so candidates can fetch via code (no file transfer needed)
+    if relay_url and hm_key:
+        try:
+            from interview.core.transport import RelayTransport
+            rt = RelayTransport(relay_url, hm_key=hm_key)
+            rt.push_interview(code, payload)
+        except Exception as e:
+            print(f"  ⚠ Could not push interview to relay: {e}")
+            print(f"    Candidates will need the token string to start instead.")
 
     return {"code": code, "payload": payload, "token": token}
 
@@ -114,9 +125,15 @@ def load_interview(code: str) -> dict | None:
     except Exception:
         pass
 
-    # 3. TODO: relay lookup (Phase 2)
-    # from interview.relay.client import fetch_from_relay
-    # return fetch_from_relay(code)
+    # 3. Relay lookup — fetch the package from the relay (no auth needed)
+    try:
+        from interview.core.transport import get_relay_url, RelayTransport, TransportError
+        relay_url = get_relay_url()
+        if relay_url:
+            rt = RelayTransport(relay_url)
+            return rt.get_interview(code)
+    except Exception:
+        pass
 
     return None
 

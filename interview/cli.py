@@ -219,7 +219,7 @@ def cmd_configure_email(args):
 
 
 def cmd_configure_relay(args):
-    """Configure relay server URL and API key."""
+    """Configure relay server URL; auto-registers HM and stores hm_key."""
     config_file = Path.home() / ".interview" / "config.json"
     config_file.parent.mkdir(parents=True, exist_ok=True)
 
@@ -231,6 +231,8 @@ def cmd_configure_relay(args):
             pass
 
     current_url = config.get("relay_url", "")
+    current_hm_key = config.get("hm_key", "")
+
     print("\nConfigure interviewsignal relay")
     print("─" * 45)
     print("Hosted default:  https://relay.interviewsignal.dev")
@@ -240,22 +242,43 @@ def cmd_configure_relay(args):
     relay_url = input(prompt).strip() or current_url
     relay_url = relay_url.rstrip("/")
 
-    api_key = input("Relay API key: ").strip()
+    print("\nRelay API key (optional — only for self-hosted relays with RELAY_API_KEY set).")
+    print("Leave blank for hosted relay.interviewsignal.dev\n")
+    api_key = input("Relay API key [blank]: ").strip()
 
     if relay_url:
         config["relay_url"] = relay_url
     if api_key:
         config["relay_api_key"] = api_key
 
+    # Write config before registration attempt
     config_file.write_text(json.dumps(config, indent=2))
     os.chmod(config_file, 0o600)
 
-    if relay_url:
+    if not relay_url:
+        print(f"\n  No relay URL set — staying in email mode.\n")
+        return
+
+    # Auto-register HM and get hm_key if not already registered
+    if current_hm_key and config.get("relay_url") == relay_url:
+        key_preview = current_hm_key[:8] + "..."
         print(f"\n✓ Relay configured: {relay_url}")
-        print(f"  /submit   → routes to relay (candidates need api key too)")
+        print(f"  hm_key:   {key_preview} (existing — already registered)")
         print(f"  dashboard → reads sessions from relay\n")
     else:
-        print(f"\n  No relay URL set — staying in email mode.\n")
+        print(f"\n  Registering with relay...")
+        try:
+            from interview.core.transport import RelayTransport, set_hm_key
+            hm_key = RelayTransport.register_hm(relay_url)
+            set_hm_key(hm_key)
+            key_preview = hm_key[:8] + "..."
+            print(f"\n✓ Relay configured: {relay_url}")
+            print(f"  hm_key:   {key_preview} (new — keep this safe)")
+            print(f"  Your sessions are isolated from other HMs on this relay.")
+            print(f"  dashboard → reads sessions from relay\n")
+        except Exception as e:
+            print(f"\n  ⚠ Could not auto-register: {e}")
+            print(f"  Relay URL saved. Re-run 'interview configure-relay' once relay is reachable.\n")
 
 
 def cmd_configure_api_key(args):

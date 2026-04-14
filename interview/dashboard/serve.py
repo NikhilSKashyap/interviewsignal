@@ -7,17 +7,23 @@ Runs at http://localhost:7832
 Transport-aware: if relay_url is set in ~/.interview/config.json, the dashboard
 reads from and writes to the relay. Otherwise falls back to local file reads
 (email attachments saved to ~/.interview/received/).
+
+Multi-tenant relay (Model B): sessions are scoped by hm_key. Each candidate
+is identified by cid (sha256 of email[:12]). All action endpoints accept cid
+and thread it through to the relay.
 """
 
 import http.server
 import json
 import os
 import time
+import urllib.error
+import urllib.request
 import webbrowser
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from interview.core.transport import get_transport, get_relay_url
+from interview.core.transport import get_relay_url, get_transport
 
 INTERVIEW_DIR = Path.home() / ".interview"
 RECEIVED_DIR  = INTERVIEW_DIR / "received"
@@ -83,7 +89,7 @@ def _load_all_reports() -> list[dict]:
     return reports
 
 
-def _ensure_local_cache(code: str):
+def _ensure_local_cache(code: str, cid: str = ""):
     """
     In relay mode: download events.jsonl and manifest.json to the local
     sessions directory so grader.py (which reads local files) can work normally.
@@ -95,26 +101,28 @@ def _ensure_local_cache(code: str):
     session_dir.mkdir(parents=True, exist_ok=True)
 
     transport = get_transport()
-    session = transport.get_session(code)
+    session = transport.get_session(code, cid or None)
     if not session:
         return
 
     # Write manifest if missing
     manifest_file = session_dir / "manifest.json"
-    if not manifest_file.exists() and session.get("manifest"):
-        manifest_file.write_text(json.dumps(session["manifest"], indent=2))
+    if not manifest_file.exists():
+        manifest = session.get("manifest")
+        if manifest:
+            manifest_file.write_text(json.dumps(manifest, indent=2))
 
     # Fetch raw events.jsonl from relay
     events_file = session_dir / "events.jsonl"
     if not events_file.exists():
-        import urllib.request, urllib.error
-        config = json.loads((INTERVIEW_DIR / "config.json").read_text()) if (INTERVIEW_DIR / "config.json").exists() else {}
-        relay_url = config.get("relay_url", "").rstrip("/")
-        api_key   = config.get("relay_api_key", "")
         try:
+            from interview.core.transport import get_hm_key, get_relay_api_key
+            relay_url = get_relay_url()
+            token = get_hm_key() or get_relay_api_key()
+            path = f"/sessions/{code}/{cid}/events" if cid else f"/sessions/{code}/events"
             req = urllib.request.Request(
-                f"{relay_url}/sessions/{code}/events",
-                headers={"Authorization": f"Bearer {api_key}"} if api_key else {},
+                f"{relay_url}{path}",
+                headers={"Authorization": f"Bearer {token}"} if token else {},
             )
             with urllib.request.urlopen(req, timeout=15) as resp:
                 events_file.write_bytes(resp.read())
@@ -143,9 +151,11 @@ def _apply_labels(reports: list[dict]) -> list[dict]:
     return result
 
 
-def _format_time(ts: float | None) -> str:
+def _format_time(ts: float | str | None) -> str:
     if not ts:
         return "—"
+    if isinstance(ts, str):
+        return ts[:16].replace("T", " ")
     return time.strftime("%b %d, %H:%M", time.localtime(ts))
 
 
@@ -168,33 +178,49 @@ def _build_candidate_row(r: dict) -> str:
     score_str = f"{score}/10" if score is not None else "Pending"
     score_col = _score_color(score)
     elapsed = r.get("elapsed_minutes", "—")
-    submitted = _format_time(r.get("ended_at"))
+    submitted = _format_time(r.get("submitted_at") or r.get("ended_at"))
     event_count = r.get("event_count", "—")
     code = r["code"]
-    graded = is_graded(code)
+    cid = r.get("cid", "")
+
+    # Relay mode: graded/revealed state comes from relay summary data
+    if r.get("_source") == "relay":
+        graded = r.get("graded", False)
+        decision_obj = None  # Decision shown on detail page only
+    else:
+        graded = is_graded(code)
+        decision_obj = get_decision(code)
 
     # Reveal button: only shown for anonymized interviews AND only enabled after grading
     if show_reveal:
         if graded:
-            reveal_btn = f'<button class="btn btn-sm btn-reveal" data-code="{code}">Reveal</button>'
+            reveal_btn = (
+                f'<button class="btn btn-sm btn-reveal"'
+                f' data-code="{code}" data-cid="{cid}">Reveal</button>'
+            )
         else:
-            reveal_btn = f'<button class="btn btn-sm btn-reveal" data-code="{code}" disabled title="Grade this candidate first to unlock Reveal">Reveal 🔒</button>'
+            reveal_btn = (
+                f'<button class="btn btn-sm btn-reveal"'
+                f' data-code="{code}" data-cid="{cid}"'
+                f' disabled title="Grade this candidate first to unlock Reveal">Reveal 🔒</button>'
+            )
     else:
         reveal_btn = ""
 
-    # Decision badge
-    decision = get_decision(code)
+    # Decision badge (local mode only)
     decision_badge = ""
-    if decision:
-        d = decision["decision"]
+    if decision_obj:
+        d = decision_obj["decision"]
         d_color = {"hire": "#22c55e", "next_round": "#60a5fa", "reject": "#ef4444"}.get(d, "#888")
         d_label = {"hire": "✓ Hired", "next_round": "→ Next Round", "reject": "✗ Rejected"}.get(d, d)
         decision_badge = f' <span style="color:{d_color};font-size:11px;font-weight:600">{d_label}</span>'
 
+    view_url = f"/candidate?code={code}&cid={cid}" if cid else f"/candidate?code={code}"
+
     return f"""
-    <tr data-code="{code}">
+    <tr data-code="{code}" data-cid="{cid}">
       <td class="td-label">
-        <input type="checkbox" class="candidate-checkbox" value="{code}">
+        <input type="checkbox" class="candidate-checkbox" data-code="{code}" data-cid="{cid}">
         <span class="display-label">{label}</span>{decision_badge}
       </td>
       <td><span class="score-badge" style="color:{score_col}">{score_str}</span></td>
@@ -202,8 +228,8 @@ def _build_candidate_row(r: dict) -> str:
       <td>{event_count}</td>
       <td>{submitted}</td>
       <td>
-        <a class="btn btn-sm" href="/candidate?code={code}" target="_blank">View</a>
-        <button class="btn btn-sm btn-grade" data-code="{code}">Grade</button>
+        <a class="btn btn-sm" href="{view_url}" target="_blank">View</a>
+        <button class="btn btn-sm btn-grade" data-code="{code}" data-cid="{cid}">Grade</button>
         {reveal_btn}
       </td>
     </tr>"""
@@ -312,16 +338,19 @@ def _build_dashboard_html(reports: list[dict]) -> str:
     document.querySelectorAll('.candidate-checkbox').forEach(cb => cb.checked = this.checked);
   }});
   document.getElementById('btn-grade-selected')?.addEventListener('click', function() {{
-    const codes = [...document.querySelectorAll('.candidate-checkbox:checked')].map(cb => cb.value);
-    if (!codes.length) {{ alert('Select at least one candidate.'); return; }}
-    gradeMultiple(codes);
+    const entries = [...document.querySelectorAll('.candidate-checkbox:checked')]
+      .map(cb => ({{code: cb.dataset.code, cid: cb.dataset.cid || ''}}));
+    if (!entries.length) {{ alert('Select at least one candidate.'); return; }}
+    gradeMultiple(entries);
   }});
   document.getElementById('btn-grade-all')?.addEventListener('click', function() {{
-    const codes = [...document.querySelectorAll('.candidate-checkbox')].map(cb => cb.value);
-    gradeMultiple(codes);
+    const entries = [...document.querySelectorAll('.candidate-checkbox')]
+      .map(cb => ({{code: cb.dataset.code, cid: cb.dataset.cid || ''}}));
+    gradeMultiple(entries);
   }});
   document.querySelectorAll('.btn-grade').forEach(btn =>
-    btn.addEventListener('click', () => gradeMultiple([btn.dataset.code]))
+    btn.addEventListener('click', () =>
+      gradeMultiple([{{code: btn.dataset.code, cid: btn.dataset.cid || ''}}]))
   );
   document.querySelectorAll('.btn-reveal').forEach(btn => {{
     btn.addEventListener('click', function() {{
@@ -329,7 +358,7 @@ def _build_dashboard_html(reports: list[dict]) -> str:
       const row = this.closest('tr');
       const label = row.querySelector('.display-label');
       fetch('/reveal', {{method:'POST', headers:{{'Content-Type':'application/json'}},
-        body: JSON.stringify({{code: btn.dataset.code}})}})
+        body: JSON.stringify({{code: btn.dataset.code, cid: btn.dataset.cid || ''}})}})
         .then(r => r.json())
         .then(d => {{
           label.textContent = d.code;
@@ -343,9 +372,9 @@ def _build_dashboard_html(reports: list[dict]) -> str:
         }});
     }});
   }});
-  function gradeMultiple(codes) {{
+  function gradeMultiple(entries) {{
     fetch('/grade', {{method:'POST', headers:{{'Content-Type':'application/json'}},
-      body: JSON.stringify({{codes}})}})
+      body: JSON.stringify({{entries}})}})
       .then(r => r.json()).then(d => {{ alert(d.message); location.reload(); }})
       .catch(e => alert('Grade failed: ' + e));
   }}
@@ -354,23 +383,41 @@ def _build_dashboard_html(reports: list[dict]) -> str:
 </html>"""
 
 
-def _build_candidate_detail_html(code: str) -> str:
+def _build_candidate_detail_html(code: str, cid: str = "") -> str:
     """Full candidate detail page: report + comments + decision buttons."""
     from interview.core.decisions import get_comments, get_decision, is_graded
     from interview.core.audit import read_events as read_audit_events, get_reveal_delta
 
-    session_dir = SESSIONS_DIR / code
-    report_html_file = session_dir / "report.html"
-    grading_file = session_dir / "grading.json"
+    # In relay mode with cid, fetch all state from the relay session object
+    relay_session = None
+    if get_relay_url() and cid:
+        transport = get_transport()
+        relay_session = transport.get_session(code, cid)
 
-    # Embed the report iframe content
-    report_iframe = f'<iframe src="/report-raw?code={code}" style="width:100%;height:600px;border:none;border-radius:8px;background:#111"></iframe>'
+    if relay_session:
+        raw_comments = relay_session.get("comments", [])
+        decision_obj = relay_session.get("decision")
+        graded = relay_session.get("grading") is not None
+        audit_events = relay_session.get("audit_entries", [])
+        revealed = relay_session.get("revealed", False)
+    else:
+        raw_comments = get_comments(code)
+        decision_obj = get_decision(code)
+        graded = is_graded(code)
+        audit_events = read_audit_events(code)
+        revealed = any(e.get("type") == "identity_revealed" for e in audit_events)
+
+    # Embed the report via iframe
+    report_iframe_src = f"/report-raw?code={code}&cid={cid}" if cid else f"/report-raw?code={code}"
+    report_iframe = (
+        f'<iframe src="{report_iframe_src}"'
+        f' style="width:100%;height:600px;border:none;border-radius:8px;background:#111"></iframe>'
+    )
 
     # Comments section
-    comments = get_comments(code)
     comments_html = ""
-    for c in comments:
-        ts = c.get("timestamp_iso", "")
+    for c in raw_comments:
+        ts = c.get("created_at") or c.get("timestamp_iso", "")
         author = c.get("author", "HM")
         text = c.get("text", "")
         comments_html += f"""
@@ -382,25 +429,24 @@ def _build_candidate_detail_html(code: str) -> str:
         comments_html = '<div class="no-comments">No comments yet.</div>'
 
     # Decision section
-    decision = get_decision(code)
     decision_html = ""
-    if decision:
-        d = decision["decision"]
+    if decision_obj:
+        d = decision_obj.get("decision", "")
+        recorded = decision_obj.get("recorded_at") or decision_obj.get("timestamp_iso", "")
         colors = {"hire": "#22c55e", "next_round": "#60a5fa", "reject": "#ef4444"}
         labels_map = {"hire": "✓ Hired", "next_round": "→ Next Round", "reject": "✗ Rejected"}
         decision_html = f"""
         <div class="current-decision" style="color:{colors.get(d,'#888')}">
           Current decision: <strong>{labels_map.get(d, d)}</strong>
-          <span style="color:#555;font-size:12px;margin-left:12px">{decision.get('timestamp_iso','')}</span>
+          <span style="color:#555;font-size:12px;margin-left:12px">{recorded}</span>
         </div>
-        <div style="color:#888;font-size:13px;margin-top:8px">Reason: {decision.get('reason','—')}</div>"""
+        <div style="color:#888;font-size:13px;margin-top:8px">Reason: {decision_obj.get('reason','—')}</div>"""
 
-    # Audit trail for this candidate
-    audit_events = read_audit_events(code)
+    # Audit trail
     audit_rows = ""
     for e in audit_events:
-        etype = e["type"]
-        ts = e.get("timestamp_iso", "")
+        etype = e.get("type", "")
+        ts = e.get("ts") or e.get("timestamp_iso", "")
         h = e.get("hash", "")[:8]
         color_map = {
             "grade_recorded": "#fbbf24",
@@ -410,10 +456,25 @@ def _build_candidate_detail_html(code: str) -> str:
             "next_round_scheduled": "#60a5fa",
         }
         color = color_map.get(etype, "#555")
-        audit_rows += f'<div class="audit-row"><span style="color:{color}">{etype}</span><span class="audit-ts">{ts}</span><span class="audit-hash">{h}</span></div>'
+        audit_rows += (
+            f'<div class="audit-row">'
+            f'<span style="color:{color}">{etype}</span>'
+            f'<span class="audit-ts">{ts}</span>'
+            f'<span class="audit-hash">{h}</span>'
+            f'</div>'
+        )
 
-    graded = is_graded(code)
-    reveal_delta = get_reveal_delta(code) if audit_events else ""
+    # Reveal delta
+    if relay_session:
+        reveal_delta = ""
+        for e in audit_events:
+            if e.get("type") == "identity_revealed":
+                reveal_delta = e.get("delta", "")
+                break
+    else:
+        reveal_delta = get_reveal_delta(code) if audit_events else ""
+
+    cid_attr = f'data-cid="{cid}"' if cid else ""
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -469,7 +530,7 @@ def _build_candidate_detail_html(code: str) -> str:
       <div class="section-title">Comments <span style="color:#555;font-size:10px">(append-only · audited)</span></div>
       <div id="comments-list">{comments_html}</div>
       <textarea id="comment-input" placeholder="Add a note... (cannot be edited or deleted)"></textarea>
-      <button class="btn btn-sm" style="margin-top:8px" id="btn-add-comment" data-code="{code}">Add Comment</button>
+      <button class="btn btn-sm" style="margin-top:8px" id="btn-add-comment" data-code="{code}" {cid_attr}>Add Comment</button>
     </div>
 
     <!-- Decision -->
@@ -479,16 +540,16 @@ def _build_candidate_detail_html(code: str) -> str:
       <div id="decision-display">{decision_html}</div>
       <input class="reason-input" id="decision-reason" placeholder="Reason (optional but recommended)">
       <div class="decision-btns">
-        <button class="btn btn-sm btn-hire" id="btn-hire" data-code="{code}" {'disabled' if not graded else ''}>✓ Hire</button>
-        <button class="btn btn-sm btn-next" id="btn-next" data-code="{code}" {'disabled' if not graded else ''}>→ Next Round</button>
-        <button class="btn btn-sm btn-reject" id="btn-reject" data-code="{code}" {'disabled' if not graded else ''}>✗ Reject</button>
+        <button class="btn btn-sm btn-hire" id="btn-hire" data-code="{code}" {cid_attr} {'disabled' if not graded else ''}>✓ Hire</button>
+        <button class="btn btn-sm btn-next" id="btn-next" data-code="{code}" {cid_attr} {'disabled' if not graded else ''}>→ Next Round</button>
+        <button class="btn btn-sm btn-reject" id="btn-reject" data-code="{code}" {cid_attr} {'disabled' if not graded else ''}>✗ Reject</button>
       </div>
     </div>
 
     <!-- Reveal -->
     {'<div class="panel"><div class="section-title">Identity</div>' +
-     ('<div class="reveal-note">✓ Blind grading confirmed — ' + reveal_delta + '</div>' if 'revealed' in [e["type"] for e in audit_events] else
-      ('<button class="btn btn-sm" id="btn-reveal-detail" data-code="' + code + '" ' + ('disabled title="Grade first to unlock Reveal"' if not graded else '') + '>Reveal Identity' + (' 🔒' if not graded else '') + '</button>' +
+     ('<div class="reveal-note">✓ Blind grading confirmed — ' + reveal_delta + '</div>' if revealed else
+      ('<button class="btn btn-sm" id="btn-reveal-detail" data-code="' + code + '" ' + (f'data-cid="{cid}"' if cid else '') + ' ' + ('disabled title="Grade first to unlock Reveal"' if not graded else '') + '>Reveal Identity' + (' 🔒' if not graded else '') + '</button>' +
        ('<div style="font-size:11px;color:#555;margin-top:8px">Reveal is locked until a grade is saved. This ensures blind evaluation is preserved in the audit trail.</div>' if not graded else ''))) +
      '</div>'}
 
@@ -502,11 +563,14 @@ def _build_candidate_detail_html(code: str) -> str:
 
 </div>
 <script>
+  const _code = "{code}";
+  const _cid  = "{cid}";
+
   document.getElementById('btn-add-comment')?.addEventListener('click', function() {{
     const text = document.getElementById('comment-input').value.trim();
     if (!text) {{ alert('Comment cannot be empty.'); return; }}
     fetch('/add-comment', {{method:'POST', headers:{{'Content-Type':'application/json'}},
-      body: JSON.stringify({{code: this.dataset.code, text}})}})
+      body: JSON.stringify({{code: _code, cid: _cid, text}})}})
       .then(r => r.json()).then(d => {{
         if (d.ok) {{ location.reload(); }}
         else {{ alert('Error: ' + d.error); }}
@@ -517,9 +581,9 @@ def _build_candidate_detail_html(code: str) -> str:
     document.getElementById(id)?.addEventListener('click', function() {{
       const decision = {{'btn-hire':'hire','btn-next':'next_round','btn-reject':'reject'}}[id];
       const reason = document.getElementById('decision-reason').value.trim();
-      if (!confirm('Record decision: ' + decision.toUpperCase() + '?\\nThis will be audit-logged and emailed.')) return;
+      if (!confirm('Record decision: ' + decision.toUpperCase() + '?\\nThis will be audit-logged.')) return;
       fetch('/record-decision', {{method:'POST', headers:{{'Content-Type':'application/json'}},
-        body: JSON.stringify({{code: this.dataset.code, decision, reason}})}})
+        body: JSON.stringify({{code: _code, cid: _cid, decision, reason}})}})
         .then(r => r.json()).then(d => {{
           if (d.ok) {{ location.reload(); }}
           else {{ alert('Error: ' + d.error); }}
@@ -530,7 +594,7 @@ def _build_candidate_detail_html(code: str) -> str:
   document.getElementById('btn-reveal-detail')?.addEventListener('click', function() {{
     if (this.disabled) return;
     fetch('/reveal', {{method:'POST', headers:{{'Content-Type':'application/json'}},
-      body: JSON.stringify({{code: this.dataset.code}})}})
+      body: JSON.stringify({{code: _code, cid: _cid}})}})
       .then(r => r.json()).then(d => {{ location.reload(); }});
   }});
 </script>
@@ -636,6 +700,7 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
 
         elif path == "/candidate":
             code = params.get("code", [""])[0]
+            cid  = params.get("cid", [""])[0]
             if not code:
                 self._send_html("<p>No code specified.</p>", 400)
                 return
@@ -643,37 +708,39 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
             existing = audit_mod.read_events(code)
             if not any(e["type"] == "report_opened" for e in existing):
                 audit_mod.append("report_opened", code, {})
-            self._send_html(_build_candidate_detail_html(code))
+            self._send_html(_build_candidate_detail_html(code, cid))
 
         elif path == "/report-raw":
-            # Raw report HTML for iframe embed
             code = params.get("code", [""])[0]
+            cid  = params.get("cid", [""])[0]
             report_file = SESSIONS_DIR / code / "report.html"
             if report_file.exists():
                 self._send_html(report_file.read_text())
             elif get_relay_url():
-                # Fetch directly from relay
-                transport = get_transport()
-                session = transport.get_session(code)
-                html = (session or {}).get("report", {}).get("html_report", "")
-                if html:
-                    self._send_html(html)
-                else:
-                    import urllib.request, urllib.error
-                    cfg = json.loads((INTERVIEW_DIR / "config.json").read_text()) if (INTERVIEW_DIR / "config.json").exists() else {}
-                    relay_url = cfg.get("relay_url", "").rstrip("/")
-                    api_key   = cfg.get("relay_api_key", "")
-                    try:
-                        req = urllib.request.Request(
-                            f"{relay_url}/sessions/{code}/report.html",
-                            headers={"Authorization": f"Bearer {api_key}"} if api_key else {},
-                        )
-                        with urllib.request.urlopen(req, timeout=15) as resp:
-                            self._send_html(resp.read().decode())
-                    except Exception:
-                        self._send_html("<p style='color:#555;padding:32px;font-family:sans-serif'>Report not available.</p>")
+                try:
+                    from interview.core.transport import get_hm_key, get_relay_api_key
+                    relay_url = get_relay_url()
+                    token = get_hm_key() or get_relay_api_key()
+                    rpath = (
+                        f"/sessions/{code}/{cid}/report.html"
+                        if cid else f"/sessions/{code}/report.html"
+                    )
+                    req = urllib.request.Request(
+                        f"{relay_url}{rpath}",
+                        headers={"Authorization": f"Bearer {token}"} if token else {},
+                    )
+                    with urllib.request.urlopen(req, timeout=15) as resp:
+                        self._send_html(resp.read().decode())
+                except Exception:
+                    self._send_html(
+                        "<p style='color:#555;padding:32px;font-family:sans-serif'>"
+                        "Report not available.</p>"
+                    )
             else:
-                self._send_html("<p style='color:#555;padding:32px;font-family:sans-serif'>Report not yet generated. Run /submit to generate it.</p>")
+                self._send_html(
+                    "<p style='color:#555;padding:32px;font-family:sans-serif'>"
+                    "Report not yet generated. Run /submit to generate it.</p>"
+                )
 
         elif path == "/audit":
             code = params.get("code", [""])[0] or None
@@ -694,28 +761,34 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
         body = json.loads(self.rfile.read(length)) if length else {}
 
         if path == "/grade":
-            codes = body.get("codes", [])
+            # Accept entries=[{code, cid}] (relay mode) or codes=[...] (legacy)
+            entries = body.get("entries", [])
+            if not entries and body.get("codes"):
+                entries = [{"code": c, "cid": ""} for c in body["codes"]]
             results = []
-            for code in codes:
+            for entry in entries:
+                code = entry.get("code", "")
+                cid  = entry.get("cid", "")
                 try:
-                    _run_grading(code)
+                    _run_grading(code, cid)
                     results.append({"code": code, "status": "graded"})
                 except Exception as e:
                     results.append({"code": code, "status": "error", "error": str(e)})
             succeeded = sum(1 for r in results if r["status"] == "graded")
             self._send_json({
-                "message": f"Graded {succeeded}/{len(codes)} candidates. Refresh to see scores.",
+                "message": f"Graded {succeeded}/{len(entries)} candidates. Refresh to see scores.",
                 "results": results,
             })
 
         elif path == "/reveal":
             code = body.get("code", "")
+            cid  = body.get("cid", "")
             if not code:
                 self._send_json({"error": "Missing code"}, 400)
                 return
             transport = get_transport()
             try:
-                result = transport.post_action(code, "reveal", {})
+                result = transport.post_action(code, "reveal", {}, cid=cid or None)
                 self._send_json({
                     "code": code,
                     "delta": result.get("delta", ""),
@@ -726,28 +799,32 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
 
         elif path == "/add-comment":
             code = body.get("code", "")
+            cid  = body.get("cid", "")
             text = body.get("text", "").strip()
             if not code or not text:
                 self._send_json({"ok": False, "error": "Missing code or text"}, 400)
                 return
             transport = get_transport()
             try:
-                comment = transport.post_action(code, "comment", {"text": text})
+                comment = transport.post_action(code, "comment", {"text": text}, cid=cid or None)
                 self._send_json({"ok": True, "comment": comment})
             except Exception as e:
                 self._send_json({"ok": False, "error": str(e)}, 400)
 
         elif path == "/record-decision":
-            code = body.get("code", "")
+            code     = body.get("code", "")
+            cid      = body.get("cid", "")
             decision = body.get("decision", "")
-            reason = body.get("reason", "")
+            reason   = body.get("reason", "")
             if not code or not decision:
                 self._send_json({"ok": False, "error": "Missing code or decision"}, 400)
                 return
             transport = get_transport()
             try:
-                record = transport.post_action(code, "decision",
-                                               {"decision": decision, "reason": reason})
+                record = transport.post_action(
+                    code, "decision", {"decision": decision, "reason": reason},
+                    cid=cid or None,
+                )
                 self._send_json({"ok": True, "record": record})
             except Exception as e:
                 self._send_json({"ok": False, "error": str(e)}, 400)
@@ -756,7 +833,7 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
             self._send_json({"error": "Not found"}, 404)
 
 
-def _run_grading(code: str):
+def _run_grading(code: str, cid: str = ""):
     """
     Grade a session using the Anthropic API.
 
@@ -788,7 +865,7 @@ def _run_grading(code: str):
 
     # In relay mode, ensure session files are cached locally before grading
     if get_relay_url():
-        _ensure_local_cache(code)
+        _ensure_local_cache(code, cid)
 
     # Grade locally (reads from ~/.interview/sessions/<code>/)
     grading = grade_session(code)  # raises GradingError on failure
@@ -797,7 +874,7 @@ def _run_grading(code: str):
     if get_relay_url():
         transport = get_transport()
         try:
-            transport.post_action(code, "grade", grading)
+            transport.post_action(code, "grade", grading, cid=cid or None)
         except Exception as e:
             print(f"  ⚠ Grade saved locally but relay sync failed: {e}")
 
