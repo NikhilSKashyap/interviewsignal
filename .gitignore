@@ -10,6 +10,7 @@ build/
 
 # Dev context (internal only)
 HANDOFF.md
+CLAUDE.md
 worked/
 
 # macOS
