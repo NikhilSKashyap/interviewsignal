@@ -6,21 +6,25 @@ from the underlying mechanism (email vs. relay).
 
 Config-driven — no code changes needed to switch:
   ~/.interview/config.json:
-    relay_url set   → RelayTransport (candidate pushes to relay, dashboard reads from relay)
-    relay_url absent → EmailTransport (current behaviour: SMTP send, local file read)
+    relay_url + hm_key set  → RelayTransport (multi-tenant hosted relay)
+    relay_url only           → RelayTransport (self-hosted, master key auth)
+    neither                  → EmailTransport (SMTP send, local file read)
 
 Public surface:
-  get_transport()              → returns the right Transport for current config
-  transport.send(code)         → candidate: deliver sealed session to HM
-  transport.list_sessions()    → HM dashboard: list available sessions
-  transport.get_session(code)  → HM dashboard: fetch one session detail
-  transport.post_action(...)   → HM dashboard: grade / reveal / comment / decision
+  get_transport()                    → returns the right Transport for current config
+  transport.send(code)               → candidate: deliver sealed session to HM
+  transport.list_sessions()          → HM dashboard: list available sessions
+  transport.get_session(code, cid)   → HM dashboard: fetch one session detail
+  transport.post_action(...)         → HM dashboard: grade / reveal / comment / decision
+  transport.get_interview(code)      → candidate: fetch interview package from relay
+  RelayTransport.register_hm(url)    → static: register and get hm_key
 
 All relay calls use stdlib urllib only — no external dependencies.
 """
 
 import base64
 import json
+import os
 import urllib.error
 import urllib.request
 from abc import ABC, abstractmethod
@@ -51,11 +55,26 @@ def get_relay_api_key() -> str:
     return _load_config().get("relay_api_key", "")
 
 
+def get_hm_key() -> str:
+    return _load_config().get("hm_key", "")
+
+
+def set_hm_key(hm_key: str):
+    """Atomically write hm_key to config.json."""
+    config = _load_config()
+    config["hm_key"] = hm_key
+    CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = CONFIG_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(config, indent=2))
+    tmp.replace(CONFIG_FILE)
+    os.chmod(CONFIG_FILE, 0o600)
+
+
 def is_transport_configured() -> bool:
     """True if either relay or SMTP is configured."""
     config = _load_config()
     has_relay = bool(config.get("relay_url", "").strip())
-    has_smtp = bool(config.get("smtp_host", "").strip())
+    has_smtp  = bool(config.get("smtp_host", "").strip())
     return has_relay or has_smtp
 
 
@@ -65,48 +84,34 @@ class Transport(ABC):
 
     @abstractmethod
     def send(self, code: str) -> bool:
-        """
-        Candidate-side: deliver the sealed session to the HM.
-        Returns True on success, False on failure.
-        On failure, always print a human-readable message and the local report path
-        so the candidate has a manual fallback.
-        """
+        """Candidate-side: deliver the sealed session. Returns True on success."""
 
     @abstractmethod
     def list_sessions(self) -> list[dict]:
-        """
-        HM dashboard: return a list of session summary dicts.
-        Each dict must include at minimum: code, submitted_at, elapsed_minutes,
-        overall_score (or None), graded (bool), revealed (bool).
-        Returns [] on failure — dashboard handles empty state.
-        """
+        """HM dashboard: return flat list of session summaries."""
 
     @abstractmethod
-    def get_session(self, code: str) -> dict | None:
-        """
-        HM dashboard: return full session detail dict, or None if not found.
-        Must include: manifest, report (report.json contents), grading, comments,
-        decision, revealed, audit_entries.
-        """
+    def get_session(self, code: str, cid: str | None = None) -> dict | None:
+        """HM dashboard: return full session detail, or None if not found."""
 
     @abstractmethod
-    def post_action(self, code: str, action: str, payload: dict) -> dict:
-        """
-        HM dashboard: POST a state-changing action.
-        action is one of: grade, reveal, comment, decision
-        Returns the response dict, or raises TransportError on failure.
-        """
+    def post_action(self, code: str, action: str, payload: dict, cid: str | None = None) -> dict:
+        """HM dashboard: POST a state-changing action."""
+
+    def get_interview(self, code: str) -> dict | None:
+        """Candidate: fetch interview package by code. None if not found."""
+        return None
 
 
 class TransportError(Exception):
     """Raised by transport methods when an operation fails unrecoverably."""
 
 
-# ─── Email transport (current behaviour) ─────────────────────────────────────
+# ─── Email transport (local fallback) ────────────────────────────────────────
 
 class EmailTransport(Transport):
     """
-    Original local-first transport.
+    Local-first transport.
     - send()           → SMTP via email_sender.send_report()
     - list_sessions()  → reads ~/.interview/received/*.json
     - get_session()    → reads ~/.interview/received/<code>.json
@@ -128,7 +133,7 @@ class EmailTransport(Transport):
                 pass
         return sessions
 
-    def get_session(self, code: str) -> dict | None:
+    def get_session(self, code: str, cid: str | None = None) -> dict | None:
         f = RECEIVED_DIR / f"{code}.json"
         if not f.exists():
             return None
@@ -137,27 +142,19 @@ class EmailTransport(Transport):
         except Exception:
             return None
 
-    def post_action(self, code: str, action: str, payload: dict) -> dict:
+    def post_action(self, code: str, action: str, payload: dict, cid: str | None = None) -> dict:
         if action == "grade":
             from interview.core.decisions import save_grade
             return save_grade(code, payload)
-
         elif action == "reveal":
             from interview.core.decisions import record_reveal
             return record_reveal(code)
-
         elif action == "comment":
             from interview.core.decisions import add_comment
             return add_comment(code, payload.get("text", ""))
-
         elif action == "decision":
             from interview.core.decisions import record_decision
-            return record_decision(
-                code,
-                payload.get("decision"),
-                payload.get("reason", ""),
-            )
-
+            return record_decision(code, payload.get("decision"), payload.get("reason", ""))
         raise TransportError(f"Unknown action: {action}")
 
 
@@ -165,21 +162,24 @@ class EmailTransport(Transport):
 
 class RelayTransport(Transport):
     """
-    Relay-backed transport. Candidate pushes full sealed session to the relay.
-    HM dashboard reads from the relay. All HM actions POST to the relay.
+    Multi-tenant relay transport.
 
-    Falls back to EmailTransport.send() if relay submission fails, so
-    candidates always have a path to deliver their work.
+    Auth: hm_key is the per-HM bearer token (from POST /register).
+    Fallback: relay_api_key used if hm_key not set (self-hosted operator access).
+
+    Candidate submit falls back to EmailTransport if relay is unreachable.
     """
 
-    def __init__(self, relay_url: str, api_key: str = ""):
+    def __init__(self, relay_url: str, hm_key: str = "", api_key: str = ""):
         self.relay_url = relay_url.rstrip("/")
-        self.api_key = api_key
+        self.hm_key    = hm_key
+        self.api_key   = api_key   # master relay_api_key (self-hosted fallback)
 
     def _headers(self) -> dict:
         h = {"Content-Type": "application/json"}
-        if self.api_key:
-            h["Authorization"] = f"Bearer {self.api_key}"
+        token = self.hm_key or self.api_key
+        if token:
+            h["Authorization"] = f"Bearer {token}"
         return h
 
     def _request(
@@ -195,7 +195,7 @@ class RelayTransport(Transport):
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 raw = resp.read()
-                ct = resp.headers.get("Content-Type", "")
+                ct  = resp.headers.get("Content-Type", "")
                 if "text/html" in ct:
                     return raw.decode()
                 if "text/plain" in ct:
@@ -207,11 +207,75 @@ class RelayTransport(Transport):
         except Exception as e:
             raise TransportError(f"Relay {method} {path} failed: {e}")
 
+    # ── Registration (static — no auth needed) ────────────────────────────────
+
+    @staticmethod
+    def register_hm(relay_url: str) -> str:
+        """
+        POST /register — open route, returns hm_key.
+        Raises TransportError on failure.
+        """
+        url = relay_url.rstrip("/") + "/register"
+        req = urllib.request.Request(
+            url,
+            data=b"{}",
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = json.loads(resp.read())
+                hm_key = data.get("hm_key", "")
+                if not hm_key:
+                    raise TransportError("Registration response missing hm_key.")
+                return hm_key
+        except TransportError:
+            raise
+        except Exception as e:
+            raise TransportError(f"Registration failed: {e}")
+
+    # ── Interview package (open route — no auth header) ───────────────────────
+
+    def get_interview(self, code: str) -> dict | None:
+        """
+        GET /interviews/<code> — open route, no auth header sent.
+        Returns the interview payload dict, or None if not found.
+        """
+        url = f"{self.relay_url}/interviews/{code}"
+        req = urllib.request.Request(url, method="GET")
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                return json.loads(resp.read())
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                return None
+            raise TransportError(f"GET /interviews/{code} → {e.code}")
+        except Exception as e:
+            raise TransportError(f"GET /interviews/{code} failed: {e}")
+
+    def push_interview(self, code: str, payload: dict) -> dict:
+        """POST /interviews — push an interview package to the relay."""
+        payload_b64 = base64.b64encode(json.dumps(payload).encode()).decode()
+        result = self._request("POST", "/interviews", body={"code": code, "payload_b64": payload_b64})
+        return result if isinstance(result, dict) else {}
+
+    # ── Candidate submit ──────────────────────────────────────────────────────
+
     def send(self, code: str) -> bool:
         session_dir = SESSIONS_DIR / code
+        manifest_path = session_dir / "manifest.json"
 
-        # Encode all available session files
-        payload: dict = {"code": code}
+        if not manifest_path.exists():
+            print(f"✗ Cannot submit: manifest.json missing for {code}.")
+            return False
+
+        manifest = json.loads(manifest_path.read_text())
+        candidate_email = manifest.get("candidate_email", "")
+        if not candidate_email:
+            print("⚠ No candidate_email in manifest — falling back to email.")
+            return EmailTransport().send(code)
+
+        body: dict = {"code": code, "candidate_email": candidate_email}
         file_map = {
             "manifest_json": "manifest.json",
             "events_jsonl":  "events.jsonl",
@@ -221,14 +285,14 @@ class RelayTransport(Transport):
         for key, fname in file_map.items():
             f = session_dir / fname
             if f.exists():
-                payload[key] = base64.b64encode(f.read_bytes()).decode()
+                body[key] = base64.b64encode(f.read_bytes()).decode()
 
-        if "manifest_json" not in payload or "events_jsonl" not in payload:
-            print(f"✗ Cannot submit: manifest.json or events.jsonl missing for {code}.")
+        if "manifest_json" not in body or "events_jsonl" not in body:
+            print(f"✗ Cannot submit: required files missing for {code}.")
             return False
 
         try:
-            self._request("POST", "/sessions", body=payload, timeout=60)
+            self._request("POST", "/sessions", body=body, timeout=60)
             print(f"✓ Session submitted to relay: {self.relay_url}")
             return True
         except TransportError as e:
@@ -236,23 +300,56 @@ class RelayTransport(Transport):
             print(f"  Falling back to email...")
             return EmailTransport().send(code)
 
+    # ── HM dashboard ──────────────────────────────────────────────────────────
+
     def list_sessions(self) -> list[dict]:
+        """
+        Returns a flat list of candidate summaries for the dashboard.
+        Each entry includes 'code' and 'cid' alongside session metadata.
+        """
         try:
             result = self._request("GET", "/sessions")
-            return result if isinstance(result, list) else []
+            if not isinstance(result, dict):
+                return []
+            flat = []
+            for interview in result.get("interviews", []):
+                code  = interview.get("code", "")
+                title = interview.get("title", "")
+                for candidate in interview.get("candidates", []):
+                    entry = dict(candidate)
+                    entry["code"]  = code
+                    entry["title"] = title
+                    entry.setdefault("_source", "relay")
+                    entry.setdefault("_anonymize", True)
+                    flat.append(entry)
+            return flat
         except TransportError:
             return []
 
-    def get_session(self, code: str) -> dict | None:
+    def get_session(self, code: str, cid: str | None = None) -> dict | None:
+        if cid:
+            path = f"/sessions/{code}/{cid}"
+        else:
+            # No cid: list candidates for this code, return first
+            path = f"/sessions/{code}"
         try:
-            result = self._request("GET", f"/sessions/{code}")
-            return result if isinstance(result, dict) else None
+            result = self._request("GET", path)
+            if isinstance(result, dict):
+                return result
+            if isinstance(result, list):
+                return result[0] if result else None
+            return None
         except TransportError:
             return None
 
-    def post_action(self, code: str, action: str, payload: dict) -> dict:
+    def post_action(self, code: str, action: str, payload: dict, cid: str | None = None) -> dict:
+        if cid:
+            path = f"/sessions/{code}/{cid}/{action}"
+        else:
+            # Legacy path (email-mode compatibility; shouldn't be hit in relay mode)
+            path = f"/sessions/{code}/{action}"
         try:
-            result = self._request("POST", f"/sessions/{code}/{action}", body=payload)
+            result = self._request("POST", path, body=payload)
             return result if isinstance(result, dict) else {}
         except TransportError as e:
             raise TransportError(f"Action '{action}' failed: {e}")
@@ -261,13 +358,9 @@ class RelayTransport(Transport):
 # ─── Factory ──────────────────────────────────────────────────────────────────
 
 def get_transport() -> Transport:
-    """
-    Return the appropriate transport based on config.
-    This is the only function callers need — they never instantiate transports directly.
-    """
     relay_url = get_relay_url()
     if relay_url:
-        return RelayTransport(relay_url, api_key=get_relay_api_key())
+        return RelayTransport(relay_url, hm_key=get_hm_key(), api_key=get_relay_api_key())
     return EmailTransport()
 
 
@@ -284,10 +377,7 @@ def main():
         transport = get_transport()
         mode = "relay" if get_relay_url() else "email"
         print(f"  Sending via {mode}...")
-        success = transport.send(args.code)
-        if not success and mode == "email":
-            # email_sender already printed instructions
-            pass
+        transport.send(args.code)
 
 
 if __name__ == "__main__":

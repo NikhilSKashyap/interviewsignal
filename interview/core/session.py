@@ -34,7 +34,7 @@ def ensure_dirs():
     SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def _write_relay_config(relay_url: str, relay_api_key: str = ""):
+def _write_relay_config(relay_url: str, hm_key: str = "", relay_api_key: str = ""):
     """Write relay config to ~/.interview/config.json from interview package."""
     config = {}
     if CONFIG_FILE.exists():
@@ -43,6 +43,8 @@ def _write_relay_config(relay_url: str, relay_api_key: str = ""):
         except Exception:
             pass
     config["relay_url"] = relay_url
+    if hm_key:
+        config["hm_key"] = hm_key
     if relay_api_key:
         config["relay_api_key"] = relay_api_key
     tmp = CONFIG_FILE.with_suffix(".tmp")
@@ -154,10 +156,15 @@ def start_session(code: str, candidate_email: str | None = None) -> dict:
         print(f"  Ask the hiring manager to re-share the code.\n")
         return {}
 
-    # Auto-configure relay from package (Option B) so candidates need zero setup
+    # Auto-configure relay from package so candidates need zero setup
+    # hm_key scopes the session to this HM on the multi-tenant relay (Model B)
     relay_url = interview.get("relay_url", "")
     if relay_url:
-        _write_relay_config(relay_url, interview.get("relay_api_key", ""))
+        _write_relay_config(
+            relay_url,
+            hm_key=interview.get("hm_key", ""),
+            relay_api_key=interview.get("relay_api_key", ""),
+        )
 
     # Resolve candidate email
     resolved_candidate_email = candidate_email or interview.get("candidate_email")
