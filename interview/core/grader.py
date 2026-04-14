@@ -25,24 +25,92 @@ INTERVIEW_DIR = Path.home() / ".interview"
 SESSIONS_DIR = INTERVIEW_DIR / "sessions"
 CONFIG_FILE = INTERVIEW_DIR / "config.json"
 
-ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
-ANTHROPIC_API_VERSION = "2023-06-01"
-GRADING_MODEL = "claude-3-5-haiku-20241022"   # fast + cheap, good enough for grading
-MAX_TOKENS = 2048
+ANTHROPIC_API_VERSION  = "2023-06-01"
+DEFAULT_GRADING_MODEL  = "claude-3-5-haiku-20241022"   # fast + cheap, good enough for grading
+DEFAULT_BASE_URL       = "https://api.anthropic.com"
+MAX_TOKENS             = 2048
 
 
-# ─── API key ─────────────────────────────────────────────────────────────────
+# ─── LLM config ──────────────────────────────────────────────────────────────
+#
+# Enterprises often can't issue personal Anthropic API keys. Instead they run
+# an internal proxy (Floodgate, Azure AI, Bedrock gateway, etc.) that speaks
+# either the Anthropic Messages API or the OpenAI Chat Completions API.
+#
+# Config keys (in ~/.interview/config.json):
+#   anthropic_api_key      — bearer token; omit if the proxy handles auth
+#   anthropic_base_url     — override base URL (default: https://api.anthropic.com)
+#   anthropic_extra_headers — {key: value} dict of additional request headers
+#   grading_model          — model name/alias (proxy may use different IDs)
+#   api_format             — "anthropic" (default) or "openai"
+#
+# Environment variable overrides (take precedence over config file):
+#   ANTHROPIC_API_KEY      — API key
+#   ANTHROPIC_BASE_URL     — base URL
+#   INTERVIEW_GRADING_MODEL — model override
+
+def _load_config() -> dict:
+    if CONFIG_FILE.exists():
+        try:
+            return json.loads(CONFIG_FILE.read_text())
+        except Exception:
+            pass
+    return {}
+
 
 def _get_api_key() -> str | None:
+    """
+    Returns the API key if one is set. Returns None only when no key AND no
+    custom base_url is configured (i.e. grading is genuinely unconfigured).
+    Enterprise proxies often handle auth at the network layer — the key is
+    optional when anthropic_base_url is set.
+    """
     key = os.environ.get("ANTHROPIC_API_KEY", "")
     if key:
         return key
-    if CONFIG_FILE.exists():
-        try:
-            return json.loads(CONFIG_FILE.read_text()).get("anthropic_api_key", "")
-        except Exception:
-            pass
-    return None
+    config = _load_config()
+    if config.get("anthropic_api_key"):
+        return config["anthropic_api_key"]
+    # Enterprise path: no key but a custom endpoint is configured → allow grading
+    if config.get("anthropic_base_url") or os.environ.get("ANTHROPIC_BASE_URL"):
+        return ""          # empty string = "configured, no key needed"
+    return None            # None = "not configured at all"
+
+
+def _get_llm_config() -> dict:
+    """
+    Build the effective LLM configuration by merging env vars and config file.
+    Called once per grade_session() call.
+    """
+    config = _load_config()
+
+    base_url = (
+        os.environ.get("ANTHROPIC_BASE_URL", "")
+        or config.get("anthropic_base_url", "")
+        or DEFAULT_BASE_URL
+    ).rstrip("/")
+
+    api_key = (
+        os.environ.get("ANTHROPIC_API_KEY", "")
+        or config.get("anthropic_api_key", "")
+    )
+
+    model = (
+        os.environ.get("INTERVIEW_GRADING_MODEL", "")
+        or config.get("grading_model", "")
+        or DEFAULT_GRADING_MODEL
+    )
+
+    api_format = config.get("api_format", "anthropic")   # "anthropic" | "openai"
+    extra_headers = config.get("anthropic_extra_headers") or {}
+
+    return {
+        "base_url":      base_url,
+        "api_key":       api_key,
+        "model":         model,
+        "api_format":    api_format,
+        "extra_headers": extra_headers,
+    }
 
 
 # ─── Transcript builder ───────────────────────────────────────────────────────
@@ -197,27 +265,62 @@ Respond with ONLY valid JSON, no markdown, no code fences. Schema:
 
 # ─── API call ─────────────────────────────────────────────────────────────────
 
-def _call_anthropic(prompt: str, api_key: str) -> str:
-    """POST to Anthropic Messages API. Returns the text content of the response."""
-    payload = {
-        "model": GRADING_MODEL,
+def _call_api(prompt: str, llm_config: dict) -> str:
+    """
+    POST to either the Anthropic Messages API or an OpenAI-compatible endpoint.
+    Returns the text content of the first message in the response.
+
+    api_format="anthropic" (default):
+      POST {base_url}/v1/messages
+      Headers: x-api-key, anthropic-version
+      Response: body["content"][0]["text"]
+
+    api_format="openai":
+      POST {base_url}/v1/chat/completions
+      Headers: Authorization: Bearer <key>
+      Response: body["choices"][0]["message"]["content"]
+
+    Extra headers (e.g. X-Team-ID) are merged in last, after format defaults.
+    """
+    base_url     = llm_config["base_url"]
+    api_key      = llm_config["api_key"]
+    model        = llm_config["model"]
+    api_format   = llm_config.get("api_format", "anthropic")
+    extra_hdrs   = llm_config.get("extra_headers", {})
+
+    body_payload = {
+        "model":      model,
         "max_tokens": MAX_TOKENS,
-        "messages": [{"role": "user", "content": prompt}],
+        "messages":   [{"role": "user", "content": prompt}],
     }
-    data = json.dumps(payload).encode()
-    req = urllib.request.Request(
-        ANTHROPIC_API_URL,
-        data=data,
-        headers={
-            "x-api-key": api_key,
+
+    if api_format == "openai":
+        url = f"{base_url}/v1/chat/completions"
+        headers = {"content-type": "application/json"}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+    else:
+        # Anthropic Messages API (default)
+        url = f"{base_url}/v1/messages"
+        headers = {
             "anthropic-version": ANTHROPIC_API_VERSION,
-            "content-type": "application/json",
-        },
-        method="POST",
-    )
+            "content-type":      "application/json",
+        }
+        if api_key:
+            headers["x-api-key"] = api_key
+
+    # Enterprise extra headers last — they can override anything above
+    headers.update(extra_hdrs)
+
+    data = json.dumps(body_payload).encode()
+    req = urllib.request.Request(url, data=data, headers=headers, method="POST")
     with urllib.request.urlopen(req, timeout=60) as resp:
-        body = json.loads(resp.read())
-    return body["content"][0]["text"]
+        resp_body = json.loads(resp.read())
+
+    if api_format == "openai":
+        return resp_body["choices"][0]["message"]["content"]
+    else:
+        return resp_body["content"][0]["text"]
 
 
 def _parse_grading_response(text: str) -> dict:
@@ -252,14 +355,15 @@ def grade_session(code: str) -> dict:
         )
     manifest = json.loads(manifest_file.read_text())
 
-    # Check API key
-    api_key = _get_api_key()
-    if not api_key:
+    # Check grading is configured (API key OR enterprise proxy URL)
+    if _get_api_key() is None:
         raise GradingError(
-            "No Anthropic API key found.\n"
-            "Run: interview configure-api-key\n"
-            "Or set: export ANTHROPIC_API_KEY=sk-ant-..."
+            "Grading not configured.\n"
+            "Direct:     interview configure-api-key\n"
+            "Enterprise: interview configure-llm"
         )
+
+    llm_config = _get_llm_config()
 
     # Build prompt
     transcript = build_transcript(code)
@@ -267,7 +371,7 @@ def grade_session(code: str) -> dict:
 
     # Call API
     try:
-        raw = _call_anthropic(prompt, api_key)
+        raw = _call_api(prompt, llm_config)
     except urllib.error.HTTPError as e:
         body = e.read().decode()[:300]
         raise GradingError(f"Anthropic API error {e.code}: {body}")
