@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=59", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "interviewsignal"
+version = "0.1.0"
+description = "AI-native interview platform — capture thought process, not puzzle performance"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+keywords = ["interview", "hiring", "claude-code", "ai", "developer-experience"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Testing",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = []  # Zero hard dependencies — uses stdlib only
+
+[project.optional-dependencies]
+relay = ["fastapi>=0.110", "uvicorn>=0.27", "sqlmodel>=0.0.16"]
+dev = ["pytest>=8", "ruff", "mypy"]
+
+[project.scripts]
+interview = "interview.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/nikhilkashyap/interviewsignal"
+Issues = "https://github.com/nikhilkashyap/interviewsignal/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["interview*"]
+
+[tool.setuptools.package-data]
+"interview.skills.interview" = ["SKILL.md"]
+"interview.skills.submit" = ["SKILL.md"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
