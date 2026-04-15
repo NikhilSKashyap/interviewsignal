@@ -5,7 +5,7 @@
 [![CI](https://github.com/nikhilkashyap/interviewsignal/actions/workflows/ci.yml/badge.svg)](https://github.com/nikhilkashyap/interviewsignal/actions)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**An AI-native interview platform.** Type `/interview` in Claude Code, Codex, Cursor, or any AI coding assistant — it captures your entire thought process as you solve a problem and sends a structured audit to the hiring manager.
+**An AI-native interview platform.** Type `/interview` in Claude Code, Codex, Cursor, or any AI coding assistant — it captures your entire thought process as you solve a problem and sends a structured, tamper-evident audit to the hiring manager.
 
 No contrived puzzles. No whiteboard anxiety. No bias. Just signal.
 
@@ -35,7 +35,7 @@ Meanwhile, every one of those candidates uses AI coding assistants every day. Yo
 **For candidates:**
 - Work the way you actually work — with AI assistance, in your own environment
 - Get evaluated on your thinking, not your ability to memorise algorithms
-- Receive a copy of your own submission
+- No file transfers, no email attachments — just a short code
 
 **For teams:**
 - Close the interview loop in half the time
@@ -50,13 +50,16 @@ Meanwhile, every one of those candidates uses AI coding assistants every day. Yo
 pip install interviewsignal && interview install
 ```
 
-Requires Python 3.10+ and one of: [Claude Code](https://claude.ai/code), [Codex](https://openai.com/codex), [Cursor](https://cursor.com), [Gemini CLI](https://github.com/google-gemini/gemini-cli), [GitHub Copilot CLI](https://docs.github.com/copilot/copilot-cli), or [Aider](https://aider.chat).
+Requires Python 3.10+ and one of: [Claude Code](https://claude.ai/code), [Codex](https://openai.com/codex), [Cursor](https://cursor.com), [Gemini CLI](https://github.com/google-gemini/gemini-cli), [Aider](https://aider.chat).
 
-Store your Anthropic API key (used for grading):
+Then configure grading and (optionally) the relay:
 
 ```bash
-interview configure-api-key
+interview configure-api-key    # Anthropic API key — for grading
+interview configure-relay      # relay URL — auto-registers your HM account
 ```
+
+> **Enterprise / no personal API key?** See [Enterprise configuration](#enterprise-configuration) below.
 
 ---
 
@@ -76,7 +79,7 @@ You'll be asked for:
 - Time limit (optional)
 - Anonymize candidates? (yes / no)
 
-You get back a code like `INT-4829-XK`. Share it with your candidate.
+You get back a code like `INT-4829-XK`. Share it with your candidate — that's all they need.
 
 ### Candidate
 
@@ -88,7 +91,7 @@ pip install interviewsignal && interview install
 /interview INT-4829-XK
 ```
 
-The problem appears. Work normally — ask the AI questions, write code, run tests. The session records everything automatically.
+The problem appears. Relay is auto-configured — no API keys or file transfers required. Work normally — ask the AI questions, write code, run tests. The session records everything automatically.
 
 When done:
 
@@ -96,7 +99,7 @@ When done:
 /submit
 ```
 
-The session is sealed, graded against the rubric, and a full report is emailed to the hiring manager. You get a copy too.
+The session is sealed and sent to the relay. The hiring manager's dashboard updates automatically.
 
 ### Hiring manager — review
 
@@ -111,33 +114,38 @@ Candidates appear as "Candidate A", "Candidate B" — scores first, names second
 
 ## How it works
 
-interviewsignal installs as a skill into your AI coding assistant. It hooks into every tool call — reads, writes, bash commands — and builds an append-only, hash-chained session log. On `/submit`, the log is sealed, graded via the Anthropic API, and emailed as a self-contained HTML report.
+interviewsignal installs as a skill into your AI coding assistant. It hooks into every tool call — reads, writes, bash commands — and builds an append-only, hash-chained session log. On `/submit`, the log is sealed and pushed to the relay. The HM grades from their dashboard using their own AI key.
 
 ```
 Candidate side                          HM side
 ─────────────────────────               ───────────────────────
-/interview INT-4829-XK                  /interview hm
-  ↓ fetches problem                       ↓ creates interview code
-Session starts                          Dashboard: localhost:7832
-  ↓ hooks capture every tool call         ↓ candidates arrive
-  ↓ append-only events.jsonl              ↓ anonymous by default
-  ↓ hash chain (tamper-evident)           ↓ Grade All / Grade Selected
-/submit                                   ↓ score before name
-  ↓ session sealed                        ↓ Reveal unlocks after grading
-  ↓ graded via Anthropic API              ↓ comment thread
-  ↓ report.html generated                 ↓ hire / next round / reject
-  ↓ emailed to HM + CC                    ↓ full audit trail
-  ↓ copy to candidate
+interview configure-relay               interview configure-relay
+  ↓ auto-registered via relay             ↓ gets unique hm_key
+
+/interview hm                           ← share code INT-4829-XK
+  ↓ creates interview
+  ↓ pushes package to relay
+
+/interview INT-4829-XK                  interview dashboard
+  ↓ fetches problem from relay            ↓ localhost:7832
+  ↓ relay auto-configured locally         ↓ candidates arrive
+Session starts                            ↓ anonymous by default
+  ↓ hooks capture every tool call         ↓ Grade All / Grade Selected
+  ↓ append-only events.jsonl              ↓ score before name
+  ↓ hash chain (tamper-evident)           ↓ Reveal unlocks after grading
+/submit                                   ↓ comment thread
+  ↓ session sealed                        ↓ hire / next round / reject
+  ↓ pushed to relay                       ↓ full audit trail
 ```
 
 **Three passes on submit:**
 1. `session seal` — finalises hash chain, captures git diff (start → end)
-2. `grader grade` — sends session timeline + rubric + diff to Claude, returns structured JSON scores
-3. `report generate` — produces a dark-mode self-contained HTML report
+2. Push to relay — sealed session (events + manifest + report) stored server-side
+3. HM grades from dashboard — sends timeline + rubric + diff to their AI key, returns structured JSON scores
 
 **The integrity model:**
 
-Every HM action — grading, revealing identity, adding a comment, recording a decision — is logged to `~/.interview/audit.jsonl` with a SHA-256 hash chain. Key events are silently emailed to a designated audit recipient (typically HR). The mail server's timestamp is outside the HM's control. Reveal is physically disabled until a grade is saved, ensuring blind evaluation is provable.
+Every HM action — grading, revealing identity, adding a comment, recording a decision — is logged with a SHA-256 hash chain. Key events are silently emailed to a designated audit recipient (typically HR). The mail server's timestamp is outside the HM's control. Reveal is physically disabled until a grade is saved, ensuring blind evaluation is provable.
 
 ```
 [2026-04-13T10:47:22Z] grade_recorded       INT-4829-XK  hash=d4abe5e6
@@ -148,16 +156,64 @@ Every HM action — grading, revealing identity, adding a comment, recording a d
 
 ---
 
-## Platform support
+## Relay
 
-| Platform | Install | Hook mechanism |
-|---|---|---|
-| Claude Code (Linux/Mac/Windows) | `interview install` | PreToolUse + PostToolUse hooks |
-| Codex | `interview install --platform codex` | PreToolUse hook + AGENTS.md |
-| Cursor | `interview install --platform cursor` | `.cursor/rules/interview.mdc` |
-| Gemini CLI | `interview install --platform gemini` | BeforeTool hook + GEMINI.md |
-| GitHub Copilot CLI | `interview install --platform copilot` | Skill file |
-| Aider | `interview install --platform aider` | AGENTS.md |
+The relay is a lightweight server that stores interview packages and candidate sessions. A single hosted relay at `relay.interviewsignal.dev` serves all teams — each HM gets an isolated namespace via a UUID key (`hm_key`). No HM can see another's sessions.
+
+```bash
+interview configure-relay
+# → Relay URL: https://relay.interviewsignal.dev
+# → Registering... ✓ hm_key: a3f91b2c... (stored in ~/.interview/config.json)
+```
+
+**Self-hosting:** Enterprises that can't send data to a hosted relay can run their own:
+
+```bash
+docker run -e RELAY_API_KEY=secret -v /data:/data -p 8080:8080 \
+  ghcr.io/nikhilskashyap/interviewsignal:latest
+```
+
+Then point `interview configure-relay` at your internal URL. See [docs/self-hosting.md](docs/self-hosting.md) for data layout, backup, and key rotation.
+
+---
+
+## Enterprise configuration
+
+Companies that don't issue personal API keys — or that route all AI traffic through an internal gateway — can configure a custom LLM endpoint:
+
+```bash
+interview configure-llm
+```
+
+This covers three patterns:
+
+| Pattern | What to set |
+|---|---|
+| Anthropic direct | API key only (default) |
+| Internal proxy (Floodgate, corporate gateway) | Base URL + optional key; proxy handles auth |
+| OpenAI-compatible endpoint | Base URL + key + `format=openai` |
+
+**What gets configured (`~/.interview/config.json`):**
+
+```json
+{
+  "anthropic_base_url":      "https://ai-gateway.corp.internal/anthropic",
+  "anthropic_api_key":       "",
+  "api_format":              "anthropic",
+  "grading_model":           "claude-3-5-haiku",
+  "anthropic_extra_headers": {"X-Team-ID": "ml-hiring"}
+}
+```
+
+The API key is optional — leave it blank if your proxy handles auth at the network or SSO level. Extra headers let you pass team/project routing headers required by some gateways.
+
+Environment variable overrides (useful for CI or shared machines):
+
+```bash
+ANTHROPIC_API_KEY=...           # API key
+ANTHROPIC_BASE_URL=...          # base URL override
+INTERVIEW_GRADING_MODEL=...     # model name override
+```
 
 ---
 
@@ -186,6 +242,18 @@ That one line is the whole argument. You hired the person with the best score. Y
 
 ---
 
+## Platform support
+
+| Platform | Install | Hook mechanism |
+|---|---|---|
+| Claude Code (Linux/Mac/Windows) | `interview install` | PreToolUse + PostToolUse hooks |
+| Codex | `interview install --platform codex` | PreToolUse hook + AGENTS.md |
+| Cursor | `interview install --platform cursor` | `.cursor/rules/interview.mdc` |
+| Gemini CLI | `interview install --platform gemini` | BeforeTool hook + GEMINI.md |
+| Aider | `interview install --platform aider` | AGENTS.md |
+
+---
+
 ## What gets captured
 
 | Event | Captured |
@@ -204,21 +272,18 @@ What is **not** captured: file contents (only hashes and paths, for privacy). Th
 
 ---
 
-## Worked example
-
-See [`worked/rate-limiter/`](worked/rate-limiter/) for a complete example:
-- Problem statement and rubric
-- Full session transcript (47 minutes)
-- AI grading output
-- The HTML report an HM would receive
-
----
-
-## Configuration
+## Configuration reference
 
 ```bash
-interview configure-api-key    # Anthropic API key (for grading)
-interview configure-email      # SMTP credentials (for sending reports)
+# Grading
+interview configure-api-key    # Anthropic API key (direct access)
+interview configure-llm        # Enterprise: custom endpoint, proxy, format, extra headers
+
+# Delivery
+interview configure-relay      # Relay URL + auto-register HM account
+interview configure-email      # SMTP fallback (no relay)
+
+# Runtime
 interview dashboard            # Local HM dashboard at localhost:7832
 interview status               # Check active session
 interview install --help       # Platform install options
@@ -230,15 +295,19 @@ All config stored in `~/.interview/config.json` (permissions: 600).
 
 ## Privacy
 
-interviewsignal sends the session timeline and git diff to the Anthropic API for grading — the same API your AI coding assistant already uses. Raw file contents are never sent. All other data stays local.
+**Candidate sessions** are stored on the relay (or locally, in email mode). The relay stores: `events.jsonl`, `manifest.json`, `report.html`, and `report.json`. Raw file contents are never stored — only paths, hashes, and command summaries.
 
-No telemetry. No analytics. No server. The only network call is to the Anthropic API during grading, using your own API key.
+**Grading** sends the session timeline and git diff to the configured AI endpoint (Anthropic API by default, or your enterprise proxy). No raw file contents. The grading call uses your own API key — interviewsignal never sees it.
+
+**Self-hosted relay:** Run the relay inside your own infrastructure and nothing leaves your network. See [docs/self-hosting.md](docs/self-hosting.md).
+
+No telemetry. No analytics. No tracking.
 
 ---
 
 ## Built with
 
-Python stdlib only (no dependencies for the core). Grading via [Anthropic Messages API](https://docs.anthropic.com/en/api). Dashboard is a self-contained local HTTP server. Reports are single-file HTML.
+Python stdlib only (no external dependencies for core or relay). Grading via [Anthropic Messages API](https://docs.anthropic.com/en/api) or any compatible endpoint. Dashboard is a self-contained local HTTP server. Reports are single-file HTML. Relay is a single-process stdlib HTTP server backed by flat files.
 
 ---
 
@@ -248,7 +317,7 @@ Python stdlib only (no dependencies for the core). Grading via [Anthropic Messag
 
 **Platform support** — each new platform is a ~30 line adapter in `cli.py`. If you use an AI coding tool not listed above, adding support is straightforward.
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for module responsibilities.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for module responsibilities and [docs/relay-api.md](docs/relay-api.md) for the full relay API contract.
 
 ---
 
