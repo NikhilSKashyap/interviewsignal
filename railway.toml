@@ -3,7 +3,7 @@ dockerfilePath = "Dockerfile"
 
 [deploy]
 startCommand = "python -m interview.relay.server"
-healthcheckPath = "/register"
+healthcheckPath = "/healthz"
 healthcheckTimeout = 10
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3

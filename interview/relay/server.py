@@ -100,6 +100,10 @@ class RelayHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         parts = self._parts()
 
+        # Health check — open, no auth
+        if not parts or parts == ["healthz"]:
+            return self._json({"status": "ok"})
+
         # Open routes — no auth
         if len(parts) == 2 and parts[0] == "interviews":
             return self._get_interview(parts[1])
