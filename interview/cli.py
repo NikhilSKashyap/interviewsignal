@@ -265,6 +265,10 @@ def cmd_configure_relay(args):
             print("\n  No URL entered — no changes made.\n")
             return
 
+        # Add https:// if user forgot the scheme
+        if relay_url and "://" not in relay_url:
+            relay_url = "https://" + relay_url
+
         print("\nRelay API key — only needed if you set RELAY_API_KEY on your server.")
         api_key = input("API key [blank]: ").strip()
 
