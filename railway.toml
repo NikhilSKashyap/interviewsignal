@@ -1,0 +1,12 @@
+[build]
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "python -m interview.relay.server"
+healthcheckPath = "/register"
+healthcheckTimeout = 10
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+[[volumes]]
+mountPath = "/data"
