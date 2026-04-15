@@ -243,38 +243,20 @@ def cmd_configure_relay(args):
 
     print("\nHow do you want to deliver interview sessions?")
     print("─" * 50)
-    print("  1. Hosted relay   relay.interviewsignal.dev — zero setup, shared")
-    print("  2. Your own relay Railway / Render / self-hosted — private, ~$5/mo")
-    print("                    Deploy button: github.com/NikhilSKashyap/interviewsignal")
-    print("  3. Email only     SMTP — no server, reports arrive by email")
+    print("  1. Your own relay  Railway / Render / self-hosted — private, ~$5/mo")
+    print("                     Deploy: github.com/NikhilSKashyap/interviewsignal")
+    print("  2. Email only      SMTP — no server, reports arrive by email")
     print()
 
-    current_label = {"relay": "2 or 1", "email": "3", "none": "1"}.get(current_mode, "1")
-    choice = input(f"Choice [{current_label}]: ").strip() or current_label.split()[0]
+    current_label = {"relay": "1", "email": "2", "none": "1"}.get(current_mode, "1")
+    choice = input(f"Choice [{current_label}]: ").strip() or current_label
 
     if choice == "1":
-        # ── Hosted relay ──────────────────────────────────────────────────────
-        relay_url = "https://relay.interviewsignal.dev"
-        config["relay_url"] = relay_url
-        # Clear email mode if switching from it
-        config.pop("smtp_host", None)
-
-        config_file.write_text(json.dumps(config, indent=2))
-        os.chmod(config_file, 0o600)
-
-        if current_hm_key and current_url == relay_url:
-            key_preview = current_hm_key[:8] + "..."
-            print(f"\n✓ Using hosted relay: {relay_url}")
-            print(f"  hm_key: {key_preview} (already registered)\n")
-        else:
-            print(f"\n  Registering with hosted relay...")
-            _register_relay(relay_url, config, config_file)
-
-    elif choice == "2":
         # ── Self-hosted / own relay ───────────────────────────────────────────
         print()
-        print("  Enter the URL of your relay (Railway / Render / your own server).")
-        print("  Deploy one now: https://railway.com/new/template?template=https://github.com/NikhilSKashyap/interviewsignal")
+        print("  Enter your relay URL (Railway / Render / your own server).")
+        print("  Don't have one? Deploy in one click:")
+        print("  https://railway.com/new/template?template=https://github.com/NikhilSKashyap/interviewsignal")
         print()
         prompt = f"Relay URL [{current_url}]: " if current_url else "Relay URL: "
         relay_url = input(prompt).strip().rstrip("/") or current_url
@@ -302,7 +284,7 @@ def cmd_configure_relay(args):
             print(f"\n  Registering with relay...")
             _register_relay(relay_url, config, config_file)
 
-    elif choice == "3":
+    elif choice == "2":
         # ── Email only ────────────────────────────────────────────────────────
         config.pop("relay_url", None)
         config.pop("hm_key", None)

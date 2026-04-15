@@ -160,37 +160,28 @@ Every HM action — grading, revealing identity, adding a comment, recording a d
 
 The relay stores interview packages and candidate sessions so hiring managers and candidates only need to share a short code — no file transfers, no email attachments.
 
-Run `interview configure-relay` to choose one of three modes:
+Run `interview configure-relay` to choose:
 
 ```
 How do you want to deliver interview sessions?
 ──────────────────────────────────────────────
-  1. Hosted relay   relay.interviewsignal.dev — zero setup, shared
-  2. Your own relay Railway / Render / self-hosted — private, ~$5/mo
-  3. Email only     SMTP — no server, reports arrive by email
+  1. Your own relay  Railway / Render / self-hosted — private, ~$5/mo
+  2. Email only      SMTP — no server, reports arrive by email
 ```
 
-### Option 1 — Hosted relay (zero setup)
+### Option 1 — Your own relay (~$5/mo, fully private)
 
-```bash
-interview configure-relay   # choose 1 → auto-registers, stores hm_key locally
-```
-
-Uses `relay.interviewsignal.dev`. Your sessions are isolated from other teams via a private `hm_key` — no other HM can see your candidates. Free to try.
-
-### Option 2 — Your own relay (private, ~$5/mo)
-
-Deploy a private relay in one click:
+Deploy in one click:
 
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/new/template?template=https://github.com/NikhilSKashyap/interviewsignal)
 
 After deploying:
-1. Add environment variable `RELAY_API_KEY` (any random string) in Railway → Variables
-2. Railway will prompt to add a `/data` volume — accept it
-3. Copy your Railway URL (e.g. `https://interviewsignal-production.up.railway.app`)
-4. Run `interview configure-relay`, choose option 2, paste your URL
+1. Set environment variable `RELAY_API_KEY` (any random string) in Railway → Variables
+2. Add a `/data` volume when prompted — this is where sessions are stored
+3. Copy your Railway URL (e.g. `https://myrelay.up.railway.app`)
+4. Run `interview configure-relay` → option 1 → paste URL
 
-Your data never leaves your own Railway account. Cost is ~$5/month (Railway Hobby plan).
+Your data stays in your own Railway account. Cost is ~$5/month (Railway Hobby plan).
 
 Or run it anywhere with Docker:
 
@@ -201,14 +192,14 @@ docker run -e RELAY_API_KEY=secret -v /data:/data -p 8080:8080 \
 
 See [docs/self-hosting.md](docs/self-hosting.md) for data layout, backup, and key rotation.
 
-### Option 3 — Email only (no server, free)
+### Option 2 — Email only (free, no server)
 
 ```bash
-interview configure-relay   # choose 3
+interview configure-relay   # choose 2
 interview configure-email   # set up SMTP credentials
 ```
 
-Candidates run `/submit` → report is emailed to the HM. The HM saves the JSON attachment to `~/.interview/received/` and it appears in the dashboard. No relay server needed, no ongoing cost. The trade-off: manual file handling and no raw session re-grading from the dashboard.
+Candidates run `/submit` → report is emailed directly to the HM. The HM saves the JSON attachment to `~/.interview/received/` and it appears in the dashboard. No server needed, no ongoing cost. Trade-off: manual file handling and the dashboard can't re-grade from raw events.
 
 ---
 
