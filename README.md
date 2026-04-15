@@ -253,6 +253,8 @@ When you know who someone is before you evaluate them, bias isn't a failure of c
 
 **Same tools, same environment.** Every candidate works with the same AI assistant they use on the job. The person who drilled Leetcode for six months has no advantage over the person who just builds things. The only variable is how well they think.
 
+**You can't prevent a candidate from having a second screen. Neither can a Leetcode proctoring tool.** The difference is that with interviewsignal, gaming it well requires understanding the problem — and that's the signal.
+
 **Score before name, always.** Grades are locked in before identity is revealed — not as a policy, but as a technical constraint. You cannot click Reveal until a score is saved. The order of events is cryptographically provable.
 
 **A tamper-evident record.** Every action — grading, revealing identity, adding a comment, recording a decision — is hash-chained and email-anchored to a timestamp outside your control. The audit trail doesn't just log what happened. It proves it.
