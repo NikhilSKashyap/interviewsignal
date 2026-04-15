@@ -219,7 +219,14 @@ def cmd_configure_email(args):
 
 
 def cmd_configure_relay(args):
-    """Configure relay server URL; auto-registers HM and stores hm_key."""
+    """
+    Configure how interview sessions are delivered to the HM.
+
+    Three options:
+      1. Hosted relay  — relay.interviewsignal.dev (shared, free to try)
+      2. Your own relay — Railway / Render / self-hosted (private, ~$5/mo)
+      3. Email only    — SMTP, no server needed (free, manual workflow)
+    """
     config_file = Path.home() / ".interview" / "config.json"
     config_file.parent.mkdir(parents=True, exist_ok=True)
 
@@ -230,55 +237,101 @@ def cmd_configure_relay(args):
         except Exception:
             pass
 
-    current_url = config.get("relay_url", "")
-    current_hm_key = config.get("hm_key", "")
+    current_url     = config.get("relay_url", "")
+    current_hm_key  = config.get("hm_key", "")
+    current_mode    = "relay" if current_url else ("email" if config.get("smtp_host") else "none")
 
-    print("\nConfigure interviewsignal relay")
-    print("─" * 45)
-    print("Hosted default:  https://relay.interviewsignal.dev")
-    print("Self-hosted:     https://interviews.yourcompany.com\n")
+    print("\nHow do you want to deliver interview sessions?")
+    print("─" * 50)
+    print("  1. Hosted relay   relay.interviewsignal.dev — zero setup, shared")
+    print("  2. Your own relay Railway / Render / self-hosted — private, ~$5/mo")
+    print("                    Deploy button: github.com/NikhilSKashyap/interviewsignal")
+    print("  3. Email only     SMTP — no server, reports arrive by email")
+    print()
 
-    prompt = f"Relay URL [{current_url}]: " if current_url else "Relay URL: "
-    relay_url = input(prompt).strip() or current_url
-    relay_url = relay_url.rstrip("/")
+    current_label = {"relay": "2 or 1", "email": "3", "none": "1"}.get(current_mode, "1")
+    choice = input(f"Choice [{current_label}]: ").strip() or current_label.split()[0]
 
-    print("\nRelay API key (optional — only for self-hosted relays with RELAY_API_KEY set).")
-    print("Leave blank for hosted relay.interviewsignal.dev\n")
-    api_key = input("Relay API key [blank]: ").strip()
-
-    if relay_url:
+    if choice == "1":
+        # ── Hosted relay ──────────────────────────────────────────────────────
+        relay_url = "https://relay.interviewsignal.dev"
         config["relay_url"] = relay_url
-    if api_key:
-        config["relay_api_key"] = api_key
+        # Clear email mode if switching from it
+        config.pop("smtp_host", None)
 
-    # Write config before registration attempt
-    config_file.write_text(json.dumps(config, indent=2))
-    os.chmod(config_file, 0o600)
+        config_file.write_text(json.dumps(config, indent=2))
+        os.chmod(config_file, 0o600)
 
-    if not relay_url:
-        print(f"\n  No relay URL set — staying in email mode.\n")
-        return
+        if current_hm_key and current_url == relay_url:
+            key_preview = current_hm_key[:8] + "..."
+            print(f"\n✓ Using hosted relay: {relay_url}")
+            print(f"  hm_key: {key_preview} (already registered)\n")
+        else:
+            print(f"\n  Registering with hosted relay...")
+            _register_relay(relay_url, config, config_file)
 
-    # Auto-register HM and get hm_key if not already registered
-    if current_hm_key and config.get("relay_url") == relay_url:
-        key_preview = current_hm_key[:8] + "..."
-        print(f"\n✓ Relay configured: {relay_url}")
-        print(f"  hm_key:   {key_preview} (existing — already registered)")
-        print(f"  dashboard → reads sessions from relay\n")
-    else:
-        print(f"\n  Registering with relay...")
-        try:
-            from interview.core.transport import RelayTransport, set_hm_key
-            hm_key = RelayTransport.register_hm(relay_url)
-            set_hm_key(hm_key)
-            key_preview = hm_key[:8] + "..."
+    elif choice == "2":
+        # ── Self-hosted / own relay ───────────────────────────────────────────
+        print()
+        print("  Enter the URL of your relay (Railway / Render / your own server).")
+        print("  Deploy one now: https://railway.com/new/template?template=https://github.com/NikhilSKashyap/interviewsignal")
+        print()
+        prompt = f"Relay URL [{current_url}]: " if current_url else "Relay URL: "
+        relay_url = input(prompt).strip().rstrip("/") or current_url
+
+        if not relay_url:
+            print("\n  No URL entered — no changes made.\n")
+            return
+
+        print("\nRelay API key — only needed if you set RELAY_API_KEY on your server.")
+        api_key = input("API key [blank]: ").strip()
+
+        config["relay_url"] = relay_url
+        if api_key:
+            config["relay_api_key"] = api_key
+        config.pop("smtp_host", None)
+
+        config_file.write_text(json.dumps(config, indent=2))
+        os.chmod(config_file, 0o600)
+
+        if current_hm_key and current_url == relay_url:
+            key_preview = current_hm_key[:8] + "..."
             print(f"\n✓ Relay configured: {relay_url}")
-            print(f"  hm_key:   {key_preview} (new — keep this safe)")
-            print(f"  Your sessions are isolated from other HMs on this relay.")
-            print(f"  dashboard → reads sessions from relay\n")
-        except Exception as e:
-            print(f"\n  ⚠ Could not auto-register: {e}")
-            print(f"  Relay URL saved. Re-run 'interview configure-relay' once relay is reachable.\n")
+            print(f"  hm_key: {key_preview} (already registered)\n")
+        else:
+            print(f"\n  Registering with relay...")
+            _register_relay(relay_url, config, config_file)
+
+    elif choice == "3":
+        # ── Email only ────────────────────────────────────────────────────────
+        config.pop("relay_url", None)
+        config.pop("hm_key", None)
+        config.pop("relay_api_key", None)
+
+        config_file.write_text(json.dumps(config, indent=2))
+        os.chmod(config_file, 0o600)
+
+        print(f"\n✓ Email mode selected.")
+        print(f"  Sessions will be sent by SMTP when candidates run /submit.")
+        print(f"  Run 'interview configure-email' to set up your SMTP credentials.\n")
+
+    else:
+        print(f"\n  Unknown choice '{choice}' — no changes made.\n")
+
+
+def _register_relay(relay_url: str, config: dict, config_file: Path):
+    """Attempt to register with the relay and store the hm_key. Shared helper."""
+    try:
+        from interview.core.transport import RelayTransport, set_hm_key
+        hm_key = RelayTransport.register_hm(relay_url)
+        set_hm_key(hm_key)
+        key_preview = hm_key[:8] + "..."
+        print(f"✓ Relay configured: {relay_url}")
+        print(f"  hm_key: {key_preview} — your sessions are private to you")
+        print(f"  Run 'interview dashboard' to review candidates\n")
+    except Exception as e:
+        print(f"  ⚠ Could not register: {e}")
+        print(f"  Relay URL saved. Re-run 'interview configure-relay' once the relay is reachable.\n")
 
 
 def cmd_configure_api_key(args):
