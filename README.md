@@ -2,7 +2,7 @@
 
 [![PyPI](https://img.shields.io/pypi/v/interviewsignal)](https://pypi.org/project/interviewsignal/)
 [![Downloads](https://static.pepy.tech/badge/interviewsignal/month)](https://pepy.tech/project/interviewsignal)
-[![CI](https://github.com/nikhilkashyap/interviewsignal/actions/workflows/ci.yml/badge.svg)](https://github.com/nikhilkashyap/interviewsignal/actions)
+[![GitHub](https://img.shields.io/badge/github-NikhilSKashyap%2Finterviewsignal-blue)](https://github.com/NikhilSKashyap/interviewsignal)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 **An AI-native interview platform.** Type `/interview` in Claude Code, Codex, Cursor, or any AI coding assistant — it captures your entire thought process as you solve a problem and sends a structured, tamper-evident audit to the hiring manager.
