@@ -11,19 +11,25 @@ Claude Code passes hook input via stdin as JSON:
 
 The hook:
   1. Logs the event to the active session (if one exists)
-  2. On PreToolUse: injects a session reminder into the tool context
+  2. On PreToolUse: injects a capture instruction or status reminder
   3. On PostToolUse: captures tool output content hash
 
+Turn detection:
+  The hook tracks the timestamp of the last non-log tool call in the session.
+  A gap of > 30 seconds means the candidate sent a new message — a "new turn".
+  On new turns, a PROMINENT instruction fires asking Claude to log both the
+  candidate's message and its plan before acting. Mid-turn tool calls get only
+  the status line (to avoid noise).
+
 Special handling:
-  - Bash calls to `python -m interview.core.session log` are NOT logged as tool_call
-    events (they log themselves — no double-logging)
-  - These log calls get a minimal reminder, not the full capture hint
+  - Bash calls to `python -m interview.core.session log` are NOT logged as
+    tool_call events (they log themselves — no double-logging) and get a
+    minimal reminder.
 
 Exit codes:
-  0 = proceed normally
-  1 = block the tool call (we never block, just log)
+  0 = proceed normally (we never block)
 
-stdout on PreToolUse can inject content back to the AI — used for the reminder banner.
+stdout on PreToolUse injects content back into the AI context.
 """
 
 import json
@@ -33,6 +39,9 @@ from pathlib import Path
 
 INTERVIEW_DIR = Path.home() / ".interview"
 ACTIVE_SESSION_FILE = INTERVIEW_DIR / "active_session.json"
+
+# Gap in seconds that indicates the candidate sent a new message
+NEW_TURN_GAP = 30
 
 
 def _load_active_session() -> dict | None:
@@ -65,7 +74,6 @@ def _log_event(session: dict, event_type: str, payload: dict):
     with open(events_file, "a") as f:
         f.write(json.dumps(event) + "\n")
 
-    # Update active session with latest hash
     session["last_event_hash"] = event["hash"]
     ACTIVE_SESSION_FILE.write_text(json.dumps(session, indent=2))
 
@@ -97,6 +105,15 @@ def _is_session_log_call(tool_name: str, tool_input: dict) -> bool:
     return "interview.core.session" in cmd and " log " in cmd
 
 
+def _is_new_turn(session: dict) -> bool:
+    """
+    True if enough time has passed since the last tool call that this is
+    likely the start of a new user turn (candidate sent a new message).
+    """
+    last_ts = session.get("last_tool_ts", 0)
+    return (time.time() - last_ts) > NEW_TURN_GAP
+
+
 def handle_pre_tool_use(data: dict) -> int:
     session = _load_active_session()
 
@@ -105,7 +122,7 @@ def handle_pre_tool_use(data: dict) -> int:
 
     is_log_call = _is_session_log_call(tool_name, tool_input)
 
-    # Sanitize tool_input for logging (don't log huge file contents)
+    # Sanitize tool_input for logging (don't store huge file contents)
     safe_input = {}
     for k, v in tool_input.items():
         if isinstance(v, str) and len(v) > 500:
@@ -114,27 +131,46 @@ def handle_pre_tool_use(data: dict) -> int:
             safe_input[k] = v
 
     if session:
-        # Session-log Bash calls log themselves — skip the tool_call event here
+        new_turn = _is_new_turn(session) and not is_log_call
+
+        # Session-log Bash calls log themselves — skip the tool_call event
         if not is_log_call:
             _log_event(session, "tool_call", {
                 "tool_name": tool_name,
                 "tool_input": safe_input,
             })
+            # Update turn timestamp
+            session["last_tool_ts"] = time.time()
+            ACTIVE_SESSION_FILE.write_text(json.dumps(session, indent=2))
 
         elapsed = _elapsed_str(session)
         warning = _time_warning(session)
         code = session["code"]
 
         if is_log_call:
-            # Minimal reminder — Claude is already in the act of logging
+            # Minimal — Claude is in the act of logging
             reminder = f"[interview: {code} — {elapsed}{warning}]"
-        else:
-            # Full reminder + capture hint on every substantive tool call
+
+        elif new_turn:
+            # New user turn: fire the full capture instruction
             reminder = (
-                f"[interview: session active — {code} — {elapsed} elapsed{warning} — /submit to end]\n"
-                f"[interview: log your reasoning before this action → "
-                f"python -m interview.core.session log --event-type thinking "
-                f"--payload '{{\"plan\":\"what you are about to do and why\"}}']"
+                f"╔══ INTERVIEW CAPTURE — {code} — {elapsed}{warning} ══╗\n"
+                f"║ NEW TURN: log the candidate's message and your plan  ║\n"
+                f"╚══════════════════════════════════════════════════════╝\n"
+                f"STEP 1 — log what the candidate just asked:\n"
+                f"  python -m interview.core.session log --event-type user_prompt "
+                f"--payload '{{\"role\":\"user\",\"text\":\"REPLACE WITH EXACT CANDIDATE MESSAGE\"}}'\n"
+                f"STEP 2 — log your plan:\n"
+                f"  python -m interview.core.session log --event-type thinking "
+                f"--payload '{{\"plan\":\"REPLACE WITH YOUR APPROACH\"}}'\n"
+                f"Run BOTH commands before the tool call you were about to make.\n"
+                f"/submit to end session."
+            )
+
+        else:
+            # Mid-turn: just the status line
+            reminder = (
+                f"[interview: active — {code} — {elapsed}{warning} — /submit to end]"
             )
 
         output = {"type": "text", "text": reminder}
@@ -152,11 +188,11 @@ def handle_post_tool_use(data: dict) -> int:
     tool_input = data.get("tool_input", {})
     tool_response = data.get("tool_response", {})
 
-    # Session-log Bash calls log themselves — skip the tool_result event here
+    # Session-log Bash calls log themselves — skip the tool_result event
     if _is_session_log_call(tool_name, tool_input):
         return 0
 
-    # Log the response (content hash only for large outputs)
+    # Log the response (hash large outputs)
     response_summary = {}
     if isinstance(tool_response, dict):
         for k, v in tool_response.items():
