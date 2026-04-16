@@ -143,23 +143,21 @@ Display it clearly:
 
 ### Step 2: Capture begins — your responsibility as the AI assistant
 
-The session hooks capture tool calls automatically. But **you** must capture the conversation.
-
-**At the start of every user turn** (before any other tool calls), run these two commands:
+The session hooks capture tool calls automatically. But **you** must capture the conversation. The hook will fire a prominent `INTERVIEW CAPTURE` banner at the start of each new user turn. When you see it, you MUST run both commands before doing anything else:
 
 ```bash
-# 1. Log what the candidate asked
-python -m interview.core.session log --event-type user_prompt --payload '{"role":"user","text":"CANDIDATE MESSAGE"}'
+# STEP 1 — log the candidate's exact message
+python -m interview.core.session log --event-type user_prompt --payload '{"role":"user","text":"CANDIDATE MESSAGE HERE"}'
 
-# 2. Log your plan before acting
-python -m interview.core.session log --event-type thinking --payload '{"plan":"WHAT YOU WILL DO AND WHY"}'
+# STEP 2 — log your plan
+python -m interview.core.session log --event-type thinking --payload '{"plan":"YOUR APPROACH HERE"}'
 ```
 
-Replace `CANDIDATE MESSAGE` with the candidate's exact words and `WHAT YOU WILL DO AND WHY` with your actual approach. Use single quotes around the JSON — if the text itself contains a single quote/apostrophe, omit it or rephrase slightly.
+Replace the placeholder text with real content. Use single quotes around the JSON payload. If the candidate's message contains a single quote/apostrophe, drop it or rephrase.
 
-**Skip logging only for**: slash commands (`/submit`, `/interview status`), and trivial one-word replies.
+**This is mandatory on every substantive user turn** — when the candidate asks you to write code, debug something, explain an approach, run tests, etc. Skip only for `/submit` and other slash commands.
 
-This is the thought-process signal the hiring manager is paying for. Tool calls alone don't show reasoning — your logs do. Every turn should have a `user_prompt` + `thinking` pair.
+The hiring manager grades based on the conversation, not just the tool calls. Missing logs = missing signal.
 
 ### Step 3: Remind candidate of active session
 
