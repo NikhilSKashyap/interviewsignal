@@ -558,6 +558,17 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
       <div class="section-title">Audit Trail <a href="/audit?code={code}" style="font-size:10px;color:#444;font-weight:400;float:right">full log ↗</a></div>
       {audit_rows if audit_rows else '<div style="color:#555;font-size:12px">No HM actions recorded yet.</div>'}
     </div>
+
+    <!-- Session integrity -->
+    <div class="panel">
+      <div class="section-title">Session Integrity</div>
+      <div style="font-size:12px;color:#555;margin-bottom:10px">
+        Verify the candidate's session log hasn't been tampered with.
+        Each event is SHA-256 hash-chained — any edit breaks the chain.
+      </div>
+      <button class="btn btn-sm" id="btn-verify" data-code="{code}" {cid_attr}>Verify Chain</button>
+      <div id="verify-result" style="margin-top:12px;font-size:12px;display:none"></div>
+    </div>
   </div>
 </div>
 
@@ -596,6 +607,56 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
     fetch('/reveal', {{method:'POST', headers:{{'Content-Type':'application/json'}},
       body: JSON.stringify({{code: _code, cid: _cid}})}})
       .then(r => r.json()).then(d => {{ location.reload(); }});
+  }});
+
+  document.getElementById('btn-verify')?.addEventListener('click', function() {{
+    const btn = this;
+    const out = document.getElementById('verify-result');
+    btn.disabled = true;
+    btn.textContent = 'Verifying...';
+    out.style.display = 'none';
+    const qs = _cid ? `?code=${{_code}}&cid=${{_cid}}` : `?code=${{_code}}`;
+    fetch('/verify' + qs)
+      .then(r => r.json())
+      .then(d => {{
+        btn.disabled = false;
+        btn.textContent = 'Verify Chain';
+        out.style.display = 'block';
+
+        const ok = d.ok;
+        const color = ok ? '#22c55e' : '#ef4444';
+        const icon  = ok ? '✓' : '✗';
+
+        const fmt = ts => {{
+          if (!ts) return '—';
+          if (typeof ts === 'string') return ts.replace('T',' ').replace('Z','');
+          return new Date(ts * 1000).toISOString().replace('T',' ').replace('Z','').slice(0,19);
+        }};
+
+        let rows = `
+          <div style="color:${{color}};font-weight:600;margin-bottom:8px">${{icon}} ${{d.details}}</div>
+          <div style="display:grid;grid-template-columns:120px 1fr;gap:4px;color:#888">
+            <span>Events</span><span style="color:#ccc">${{d.event_count}}</span>
+            <span>Chain</span><span style="color:${{d.chain_intact ? '#22c55e' : '#ef4444'}}">${{d.chain_intact ? 'intact' : 'BROKEN'}}</span>
+            <span>Manifest</span><span style="color:${{d.manifest_ok ? '#22c55e' : '#ef4444'}}">${{d.manifest_ok ? 'ok' : 'MISMATCH'}}</span>
+            <span>Started</span><span style="color:#ccc">${{fmt(d.session_start)}}</span>
+            <span>Ended</span><span style="color:#ccc">${{fmt(d.session_end)}}</span>
+            <span>Duration</span><span style="color:#ccc">${{d.elapsed_minutes != null ? d.elapsed_minutes + ' min' : '—'}}</span>`;
+        if (d.submitted_at) {{
+          rows += `<span>Submitted</span><span style="color:#ccc">${{fmt(d.submitted_at)}}</span>`;
+        }}
+        rows += `
+            <span>Final hash</span><span style="color:#444;font-family:monospace;font-size:10px">${{d.final_hash}}</span>
+            <span>Verified at</span><span style="color:#444">${{d.verified_at}}</span>
+          </div>`;
+        out.innerHTML = rows;
+      }})
+      .catch(e => {{
+        btn.disabled = false;
+        btn.textContent = 'Verify Chain';
+        out.style.display = 'block';
+        out.innerHTML = '<span style="color:#ef4444">Request failed: ' + e + '</span>';
+      }});
   }});
 </script>
 </body>
@@ -741,6 +802,25 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
                     "<p style='color:#555;padding:32px;font-family:sans-serif'>"
                     "Report not yet generated. Run /submit to generate it.</p>"
                 )
+
+        elif path == "/verify":
+            code = params.get("code", [""])[0]
+            cid  = params.get("cid", [""])[0]
+            if not code:
+                self._send_json({"error": "Missing code"}, 400)
+                return
+            # Ensure events.jsonl is cached locally before verifying
+            _ensure_local_cache(code, cid)
+            from interview.core.integrity import verify_session
+            result = verify_session(code)
+            # Attach relay submission timestamp if available
+            if get_relay_url() and cid:
+                transport = get_transport()
+                relay_session = transport.get_session(code, cid)
+                if relay_session:
+                    result["submitted_at"] = relay_session.get("submitted_at")
+                    result["graded_at"]    = relay_session.get("graded_at")
+            self._send_json(result)
 
         elif path == "/audit":
             code = params.get("code", [""])[0] or None
