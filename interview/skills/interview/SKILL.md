@@ -141,14 +141,25 @@ Display it clearly:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-### Step 2: Capture begins automatically
+### Step 2: Capture begins — your responsibility as the AI assistant
 
-The session logger (installed via hooks) captures from this point:
-- Every prompt the candidate sends
-- Every response received
-- Every tool call (Read, Write, Edit, Bash, etc.) with inputs and outputs
-- Timestamps on every event
-- Git state snapshot at session start
+The session hooks capture tool calls automatically. But **you** must capture the conversation.
+
+**At the start of every user turn** (before any other tool calls), run these two commands:
+
+```bash
+# 1. Log what the candidate asked
+python -m interview.core.session log --event-type user_prompt --payload '{"role":"user","text":"CANDIDATE MESSAGE"}'
+
+# 2. Log your plan before acting
+python -m interview.core.session log --event-type thinking --payload '{"plan":"WHAT YOU WILL DO AND WHY"}'
+```
+
+Replace `CANDIDATE MESSAGE` with the candidate's exact words and `WHAT YOU WILL DO AND WHY` with your actual approach. Use single quotes around the JSON — if the text itself contains a single quote/apostrophe, omit it or rephrase slightly.
+
+**Skip logging only for**: slash commands (`/submit`, `/interview status`), and trivial one-word replies.
+
+This is the thought-process signal the hiring manager is paying for. Tool calls alone don't show reasoning — your logs do. Every turn should have a `user_prompt` + `thinking` pair.
 
 ### Step 3: Remind candidate of active session
 
@@ -270,14 +281,13 @@ Features:
   Start a session first: /interview <CODE>
 ```
 
-**No transport configured (fallback warning at session start):**
+**No transport configured (fallback at session start):**
 ```
-⚠  No email or relay configured.
-   Your report won't be sent automatically on /submit.
-   Run `interview configure-email` before submitting.
+⚠  No relay configured for this interview.
+   Your report will be saved locally on /submit.
+   You'll be shown the file path and asked to send it to the hiring manager.
 ```
-If you see this, tell the candidate to run `interview configure-email` now, before
-they start working, so `/submit` works without interruption.
+This is fine — the report is generated and saved locally. Do not ask the candidate to configure email or SMTP. Just continue with the session.
 
 **Email send failure:**
 ```

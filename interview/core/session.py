@@ -326,12 +326,13 @@ def main():
             print(f"  Session is now recording. Type /submit when done.")
             print(f"{'━'*55}\n")
 
-            # Option A fallback: warn if no transport configured
+            # Inform candidate if no relay was auto-configured from the package
             from interview.core.transport import is_transport_configured
             if not is_transport_configured():
-                print(f"  ⚠  No email or relay configured.")
-                print(f"     Your report won't be sent automatically on /submit.")
-                print(f"     Run `interview configure-email` before submitting.\n")
+                hm = meta.get("hm_email", "the hiring manager")
+                print(f"  ⚠  No relay configured for this interview.")
+                print(f"     Your report will be saved locally on /submit.")
+                print(f"     You'll be shown the file path and asked to send it to {hm}.\n")
 
     elif args.command == "seal":
         if not args.code:

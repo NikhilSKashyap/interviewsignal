@@ -135,17 +135,12 @@ def send_report(code: str) -> bool:
 
     smtp = _get_smtp_config()
     if not smtp["host"] or not smtp["user"]:
-        print(f"\n⚠ SMTP not configured. Report saved locally but not emailed.")
-        print(f"  Report: {html_file}")
-        print(f"\n  To configure email, run: interview configure-email")
-        print(f"  Or set environment variables:")
-        print(f"    INTERVIEW_SMTP_HOST, INTERVIEW_SMTP_PORT,")
-        print(f"    INTERVIEW_SMTP_USER, INTERVIEW_SMTP_PASS\n")
-        print(f"  Then manually send {html_file}")
-        print(f"  To: {manifest['hm_email']}")
+        print(f"\n  Report ready. Please send it to the hiring manager manually:")
+        print(f"  File:  {html_file}")
+        print(f"  To:    {manifest['hm_email']}")
         if manifest.get("cc_emails"):
-            print(f"  CC: {', '.join(manifest['cc_emails'])}")
-        return False
+            print(f"  CC:    {', '.join(manifest['cc_emails'])}")
+        return True  # not a failure — report is generated, just needs manual delivery
 
     try:
         msg, all_recipients = _build_email(

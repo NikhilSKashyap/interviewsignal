@@ -72,6 +72,33 @@ def _event_to_html_row(event: dict) -> str:
           <div class="event-detail small">{summary}</div>
         </div>"""
 
+    elif etype == "user_prompt":
+        text = payload.get("text", "")
+        return f"""
+        <div class="event event-user-prompt">
+          <span class="event-time">{ts}</span>
+          <span class="event-type">candidate</span>
+          <div class="event-detail">{text}</div>
+        </div>"""
+
+    elif etype == "thinking":
+        plan = payload.get("plan", payload.get("text", payload.get("reasoning", "")))
+        return f"""
+        <div class="event event-thinking">
+          <span class="event-time">{ts}</span>
+          <span class="event-type">thinking</span>
+          <div class="event-detail">{plan}</div>
+        </div>"""
+
+    elif etype == "assistant_message":
+        text = payload.get("text", "")
+        return f"""
+        <div class="event event-assistant">
+          <span class="event-time">{ts}</span>
+          <span class="event-type">assistant</span>
+          <div class="event-detail">{text}</div>
+        </div>"""
+
     elif etype == "session_end":
         elapsed = payload.get("elapsed_minutes", 0)
         return f"""
@@ -191,10 +218,16 @@ def generate_html_report(code: str) -> str:
   .event-end {{ background: #0d2137; }}
   .event-tool {{ background: #161616; }}
   .event-result {{ background: #111; }}
+  .event-user-prompt {{ background: #1a1a0d; border-left: 3px solid #a3a300; }}
+  .event-thinking {{ background: #0d1a0d; border-left: 3px solid #22c55e; }}
+  .event-assistant {{ background: #0d0d1a; border-left: 3px solid #818cf8; }}
   .event-time {{ color: #666; font-family: monospace; }}
   .event-type {{ font-weight: 600; color: #a0a0a0; }}
   .event-tool .event-type {{ color: #60a5fa; }}
   .event-result .event-type {{ color: #888; }}
+  .event-user-prompt .event-type {{ color: #d4d400; }}
+  .event-thinking .event-type {{ color: #4ade80; }}
+  .event-assistant .event-type {{ color: #a5b4fc; }}
   .event-detail {{ color: #bbb; white-space: pre-wrap; font-size: 11px; }}
   .event-detail.small {{ font-size: 10px; color: #666; }}
   pre.event-detail {{ font-family: monospace; }}

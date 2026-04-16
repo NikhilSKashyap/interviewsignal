@@ -14,6 +14,11 @@ The hook:
   2. On PreToolUse: injects a session reminder into the tool context
   3. On PostToolUse: captures tool output content hash
 
+Special handling:
+  - Bash calls to `python -m interview.core.session log` are NOT logged as tool_call
+    events (they log themselves — no double-logging)
+  - These log calls get a minimal reminder, not the full capture hint
+
 Exit codes:
   0 = proceed normally
   1 = block the tool call (we never block, just log)
@@ -83,11 +88,22 @@ def _time_warning(session: dict) -> str:
     return ""
 
 
+def _is_session_log_call(tool_name: str, tool_input: dict) -> bool:
+    """True if this Bash call is a `python -m interview.core.session log` command.
+    These log themselves — don't double-log as a tool_call event."""
+    if tool_name not in ("Bash", "bash"):
+        return False
+    cmd = tool_input.get("command", "")
+    return "interview.core.session" in cmd and " log " in cmd
+
+
 def handle_pre_tool_use(data: dict) -> int:
     session = _load_active_session()
 
     tool_name = data.get("tool_name", "")
     tool_input = data.get("tool_input", {})
+
+    is_log_call = _is_session_log_call(tool_name, tool_input)
 
     # Sanitize tool_input for logging (don't log huge file contents)
     safe_input = {}
@@ -98,21 +114,30 @@ def handle_pre_tool_use(data: dict) -> int:
             safe_input[k] = v
 
     if session:
-        _log_event(session, "tool_call", {
-            "tool_name": tool_name,
-            "tool_input": safe_input,
-        })
+        # Session-log Bash calls log themselves — skip the tool_call event here
+        if not is_log_call:
+            _log_event(session, "tool_call", {
+                "tool_name": tool_name,
+                "tool_input": safe_input,
+            })
 
-        # Inject session reminder into stdout (Claude Code reads this)
         elapsed = _elapsed_str(session)
         warning = _time_warning(session)
-        reminder = f"[interview: session active — {session['code']} — {elapsed} elapsed{warning} — /submit to end]"
+        code = session["code"]
 
-        # Output as hook injection (Claude Code appends this to tool context)
-        output = {
-            "type": "text",
-            "text": reminder,
-        }
+        if is_log_call:
+            # Minimal reminder — Claude is already in the act of logging
+            reminder = f"[interview: {code} — {elapsed}{warning}]"
+        else:
+            # Full reminder + capture hint on every substantive tool call
+            reminder = (
+                f"[interview: session active — {code} — {elapsed} elapsed{warning} — /submit to end]\n"
+                f"[interview: log your reasoning before this action → "
+                f"python -m interview.core.session log --event-type thinking "
+                f"--payload '{{\"plan\":\"what you are about to do and why\"}}']"
+            )
+
+        output = {"type": "text", "text": reminder}
         print(json.dumps(output))
 
     return 0
@@ -124,7 +149,12 @@ def handle_post_tool_use(data: dict) -> int:
         return 0
 
     tool_name = data.get("tool_name", "")
+    tool_input = data.get("tool_input", {})
     tool_response = data.get("tool_response", {})
+
+    # Session-log Bash calls log themselves — skip the tool_result event here
+    if _is_session_log_call(tool_name, tool_input):
+        return 0
 
     # Log the response (content hash only for large outputs)
     response_summary = {}
