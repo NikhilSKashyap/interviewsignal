@@ -28,8 +28,8 @@ Meanwhile, every one of those candidates uses AI coding assistants every day. Yo
 **For hiring managers:**
 - A timestamped audit of everything the candidate did — every prompt, every tool call, every file written
 - AI grading against your own rubric (not a canned scoring system)
-- Anonymous-first dashboard: you see scores before names, eliminating identity bias
-- Grade-before-Reveal enforcement with a tamper-evident audit trail — defensible in a DEI audit
+- Anonymous-first dashboard: you see scores before names, every time
+- Grade-before-Reveal enforcement with a tamper-evident audit trail — provable merit-first hiring
 - Comment threads, hire/reject decisions, all hash-chained and email-anchored
 
 **For candidates:**
@@ -75,7 +75,7 @@ You'll be asked for:
 - Problem statement
 - Grading rubric (plain language — "weight decomposition 40%, code quality 30%, tests 30%")
 - Your email + CC list (HR, co-interviewer, etc.)
-- Audit recipient (for DEI compliance)
+- Audit recipient (HR or a neutral third party — receives a silent email on each key action)
 - Time limit (optional)
 - Anonymize candidates? (yes / no)
 
@@ -152,7 +152,7 @@ Every HM action — grading, revealing identity, adding a comment, recording a d
 [2026-04-13T10:52:09Z] identity_revealed    INT-4829-XK  hash=2370be19
 ```
 
-*"Identity revealed 4.8 minutes after grade was recorded."* That one line is your DEI proof.
+*"Identity revealed 4.8 minutes after grade was recorded."* That one line proves merit came first.
 
 ---
 
