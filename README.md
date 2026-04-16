@@ -108,13 +108,13 @@ interview dashboard
 # → http://localhost:7832
 ```
 
-Candidates appear as "Candidate A", "Candidate B" — scores first, names second. Click into any candidate to see the full transcript, dimension scores, and diff. Add comments. Record your decision. Click Reveal when you're ready to unmask.
+Candidates appear as "Candidate A", "Candidate B" — scores first, names second. Click into any candidate to see the full transcript (prompts + AI reasoning + tool calls), dimension scores, and diff. Add comments. Record your decision. Click Reveal when you're ready to unmask. Use **Verify Chain** to confirm the session log is tamper-evident.
 
 ---
 
 ## How it works
 
-interviewsignal installs as a skill into your AI coding assistant. It hooks into every tool call — reads, writes, bash commands — and builds an append-only, hash-chained session log. On `/submit`, the log is sealed and pushed to the relay. The HM grades from their dashboard using their own AI key.
+interviewsignal installs as a skill into your AI coding assistant. It captures the full conversation — the candidate's prompts, the AI's reasoning before each action, every tool call (reads, writes, bash commands) — and builds an append-only, hash-chained session log. On `/submit`, the log is sealed and pushed to the relay. The HM grades from their dashboard using their own AI key.
 
 ```
 Candidate side                          HM side
@@ -286,6 +286,8 @@ That one line is the whole argument. You hired the person with the best score. Y
 
 | Event | Captured |
 |---|---|
+| Candidate prompts | Exact message to the AI assistant |
+| AI reasoning | Plan before each action ("I'll use a hash map because...") |
 | File reads | Path |
 | File writes | Path + content hash |
 | Bash commands | Command + exit code |
@@ -294,9 +296,9 @@ That one line is the whole argument. You hired the person with the best score. Y
 | Git diff | Full diff (start → submit) |
 | Timestamps | Millisecond precision on every event |
 
-The session log is append-only and hash-chained. Any tampering breaks the chain.
+The session log is append-only and hash-chained. Any tampering breaks the chain. The HM dashboard includes a **Verify Chain** button that re-derives every SHA-256 hash and flags any mismatch, along with the relay's server-side submission timestamp.
 
-What is **not** captured: file contents (only hashes and paths, for privacy). The grader evaluates the timeline and diff, not raw file contents.
+What is **not** captured: raw file contents (only paths and hashes, for privacy). The grader evaluates the conversation, timeline, and diff — not file contents.
 
 ---
 
