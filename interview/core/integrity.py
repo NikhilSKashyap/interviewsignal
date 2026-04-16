@@ -20,12 +20,15 @@ SESSIONS_DIR  = INTERVIEW_DIR / "sessions"
 
 
 def _recompute_hash(event: dict) -> str:
-    """Recompute the hash of an event (excluding the hash field itself)."""
-    content = json.dumps(
-        {k: v for k, v in event.items() if k != "hash"},
-        sort_keys=True,
-    )
-    return hashlib.sha256(content.encode()).hexdigest()[:16]
+    """
+    Recompute event hash using the canonical chain construction:
+      hash[n] = SHA256(prev_hash_raw || json(body))
+    where body excludes both "hash" and "prev_hash" (prev_hash is prepended raw).
+    """
+    prev_hash = event.get("prev_hash", "")
+    body = {k: v for k, v in event.items() if k not in ("hash", "prev_hash")}
+    content = json.dumps(body, sort_keys=True)
+    return hashlib.sha256((prev_hash + content).encode()).hexdigest()[:16]
 
 
 def verify_session(code: str) -> dict:

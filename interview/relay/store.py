@@ -239,7 +239,18 @@ class SessionStore:
     def session_exists(self, hm_key: str, code: str, cid: str) -> bool:
         return (self._session_dir(hm_key, code, cid) / "meta.json").exists()
 
+    MAX_SESSION_BYTES = 100 * 1024 * 1024  # 100 MB per session
+    MAX_FILE_BYTES    = 20  * 1024 * 1024  # 20 MB per individual file
+
     def save_session(self, hm_key: str, code: str, cid: str, candidate_email: str, files: dict[str, bytes]):
+        # Enforce per-file and per-session size limits
+        total = sum(len(v) for v in files.values())
+        if total > self.MAX_SESSION_BYTES:
+            raise StoreError(f"Session payload too large: {total // 1024 // 1024}MB (limit 100MB)")
+        for fname, content in files.items():
+            if len(content) > self.MAX_FILE_BYTES:
+                raise StoreError(f"File {fname!r} too large: {len(content) // 1024 // 1024}MB (limit 20MB)")
+
         d = self._session_dir(hm_key, code, cid)
         d.mkdir(parents=True, exist_ok=True)
         for fname, content in files.items():

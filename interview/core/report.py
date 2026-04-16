@@ -159,8 +159,11 @@ def generate_html_report(code: str) -> str:
 
     # Syntax-highlight the git diff
     diff_lines = manifest.get("git_diff", "")
+    all_diff_lines = diff_lines.splitlines()
+    DIFF_CAP = 200
+    truncated = len(all_diff_lines) > DIFF_CAP
     diff_html = ""
-    for line in diff_lines.splitlines()[:200]:  # cap at 200 lines for readability
+    for line in all_diff_lines[:DIFF_CAP]:
         if line.startswith("+") and not line.startswith("+++"):
             diff_html += f'<div class="diff-add">{line}</div>'
         elif line.startswith("-") and not line.startswith("---"):
@@ -169,6 +172,12 @@ def generate_html_report(code: str) -> str:
             diff_html += f'<div class="diff-hunk">{line}</div>'
         else:
             diff_html += f'<div class="diff-ctx">{line}</div>'
+    if truncated:
+        remaining = len(all_diff_lines) - DIFF_CAP
+        diff_html += (
+            f'<div style="color:#f59e0b;padding:8px 0;font-style:italic">'
+            f'⚠ Diff truncated at {DIFF_CAP} lines — {remaining} more lines in the full session manifest.</div>'
+        )
 
     html = f"""<!DOCTYPE html>
 <html lang="en">

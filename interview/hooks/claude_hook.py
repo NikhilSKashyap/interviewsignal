@@ -62,14 +62,17 @@ def _log_event(session: dict, event_type: str, payload: dict):
     events_file.parent.mkdir(parents=True, exist_ok=True)
 
     prev_hash = session.get("last_event_hash", "")
+    # hash[n] = SHA256(prev_hash_raw || json(body)) — chain dep explicit, not in JSON
+    body = {"type": event_type, "timestamp": time.time(), "payload": payload}
+    body_json = json.dumps(body, sort_keys=True)
+    event_hash = hashlib.sha256((prev_hash + body_json).encode()).hexdigest()[:16]
     event = {
-        "type": event_type,
-        "timestamp": time.time(),
+        "type": body["type"],
+        "timestamp": body["timestamp"],
         "prev_hash": prev_hash,
         "payload": payload,
+        "hash": event_hash,
     }
-    content = json.dumps({k: v for k, v in event.items()}, sort_keys=True)
-    event["hash"] = hashlib.sha256(content.encode()).hexdigest()[:16]
 
     with open(events_file, "a") as f:
         f.write(json.dumps(event) + "\n")

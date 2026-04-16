@@ -129,6 +129,24 @@ When the user types `/interview` or `/submit`, invoke the Skill tool with `skill
     if verbose:
         print(f"  ✓ Hooks installed: {settings_json}")
 
+    # Verify the hook is actually reachable in this Python environment
+    import subprocess as _sp
+    try:
+        test = _sp.run(
+            [sys.executable, "-m", "interview.hooks.claude_hook", "pre"],
+            input='{"tool_name":"Bash","tool_input":{}}',
+            capture_output=True, text=True, timeout=5,
+        )
+        if test.returncode != 0:
+            raise RuntimeError(test.stderr.strip())
+        if verbose:
+            print(f"  ✓ Hook reachability check passed")
+    except Exception as e:
+        print(f"\n  ⚠  Hook reachability check FAILED: {e}")
+        print(f"     The hook command is: {hook_cmd} pre")
+        print(f"     If Claude Code uses a different Python, sessions won't be captured.")
+        print(f"     Fix: reinstall interviewsignal inside Claude Code's Python environment.")
+
 
 def _install_codex(verbose=True):
     """Install skill for Codex via AGENTS.md + hooks.json."""

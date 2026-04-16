@@ -53,8 +53,15 @@ def _write_relay_config(relay_url: str, hm_key: str = "", relay_api_key: str = "
     os.chmod(CONFIG_FILE, 0o600)
 
 
-def _hash(content: str) -> str:
-    return hashlib.sha256(content.encode()).hexdigest()[:16]
+def _chain_hash(prev_hash: str, body: dict) -> str:
+    """
+    hash[n] = SHA256(prev_hash_bytes || json(body_bytes))
+    prev_hash is prepended as raw bytes so the chain dependency is explicit
+    and canonical — not embedded as a JSON field (which is weaker).
+    body must NOT include "hash" or "prev_hash" keys.
+    """
+    content = json.dumps(body, sort_keys=True)
+    return hashlib.sha256((prev_hash + content).encode()).hexdigest()[:16]
 
 
 def _get_git_snapshot() -> dict:
@@ -114,15 +121,15 @@ def _append_event(code: str, event_type: str, payload: dict, prev_hash: str = ""
     event_dir = SESSIONS_DIR / code
     event_dir.mkdir(parents=True, exist_ok=True)
 
+    # body is everything except hash and prev_hash — prev_hash is prepended raw
+    body = {"type": event_type, "timestamp": time.time(), "payload": payload}
     event = {
-        "type": event_type,
-        "timestamp": time.time(),
+        "type": body["type"],
+        "timestamp": body["timestamp"],
         "prev_hash": prev_hash,
         "payload": payload,
+        "hash": _chain_hash(prev_hash, body),
     }
-    # Hash the event content for the chain
-    event_content = json.dumps({k: v for k, v in event.items() if k != "hash"}, sort_keys=True)
-    event["hash"] = _hash(event_content)
 
     with open(_events_file(code), "a") as f:
         f.write(json.dumps(event) + "\n")
@@ -246,8 +253,19 @@ def seal_session(code: str) -> dict:
     elapsed_minutes = round((ended_at - session["started_at"]) / 60, 1)
 
     # Final git diff
-    git_diff = _get_git_diff(session.get("git_base_commit"))
+    git_base = session.get("git_base_commit")
+    git_diff = _get_git_diff(git_base)
     final_git = _get_git_snapshot()
+
+    git_diff_note = ""
+    if not git_base:
+        git_diff_note = "no-git-repo"
+    elif git_diff == "" and final_git.get("dirty_files"):
+        # git diff ran but returned empty despite dirty state — something failed
+        git_diff_note = "diff-failed-dirty-tree"
+        print("  ⚠  git diff returned empty but working tree is dirty. Diff may be missing.")
+    elif git_diff == "":
+        git_diff_note = "no-changes"
 
     # Append end event
     prev_hash = session.get("last_event_hash", "")
@@ -256,6 +274,7 @@ def seal_session(code: str) -> dict:
         "elapsed_minutes": elapsed_minutes,
         "final_git_snapshot": final_git,
         "git_diff_summary": f"{len(git_diff.splitlines())} lines changed",
+        "git_diff_note": git_diff_note,
     }, prev_hash)
 
     # Build final manifest
