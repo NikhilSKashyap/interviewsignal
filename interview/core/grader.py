@@ -120,6 +120,8 @@ def build_transcript(code: str) -> str:
     Convert events.jsonl into a readable timeline for the grading prompt.
 
     Format:
+      [T+2min]  CANDIDATE:   write a rate limiter that handles bursts
+      [T+2min]  THINKING:    I'll implement token bucket — sliding window is overkill here
       [T+2min]  → Write      rate_limiter.py  (312 chars)
       [T+2min]  ← Write      ok
       [T+5min]  → Bash       python -m pytest
@@ -156,6 +158,26 @@ def build_transcript(code: str) -> str:
             git = payload.get("git_snapshot", {})
             commit = (git.get("commit") or "none")[:8]
             lines.append(f"{tag}  SESSION START  git={commit}")
+
+        elif etype == "user_prompt":
+            text = payload.get("text", "").strip()
+            if text:
+                lines.append(f"{tag}  CANDIDATE:    {text[:300]}")
+
+        elif etype == "thinking":
+            plan = (
+                payload.get("plan")
+                or payload.get("text")
+                or payload.get("reasoning")
+                or ""
+            ).strip()
+            if plan:
+                lines.append(f"{tag}  THINKING:     {plan[:300]}")
+
+        elif etype == "assistant_message":
+            text = payload.get("text", "").strip()
+            if text:
+                lines.append(f"{tag}  ASSISTANT:    {text[:300]}")
 
         elif etype == "tool_call":
             tool = payload.get("tool_name", "?")
@@ -224,6 +246,11 @@ def _build_grading_prompt(manifest: dict, transcript: str) -> str:
 The candidate used an AI coding assistant (Claude Code / Codex) to solve the problem.
 Your job is to evaluate the QUALITY OF THEIR THINKING — how they decomposed the problem,
 how they directed the AI, and how clean the final result is.
+
+The timeline below contains CANDIDATE lines (what the candidate asked),
+THINKING lines (the AI's reasoning before each action), and tool call lines.
+CANDIDATE and THINKING lines are the primary signal for evaluating thought process.
+Tool calls show what was actually done. The git diff shows the final result.
 
 ━━━ PROBLEM STATEMENT ━━━
 {problem}
