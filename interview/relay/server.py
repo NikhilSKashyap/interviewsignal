@@ -364,7 +364,7 @@ def start_relay(port: int = 8080, data_dir: Path = Path("/data")):
 def main():
     parser = argparse.ArgumentParser(description="interviewsignal relay server")
     parser.add_argument("--port", type=int,
-                        default=int(os.environ.get("RELAY_PORT", 8080)))
+                        default=int(os.environ.get("PORT", os.environ.get("RELAY_PORT", 8080))))
     parser.add_argument("--data", type=Path,
                         default=Path(os.environ.get("RELAY_DATA_DIR", "/data")))
     args = parser.parse_args()
