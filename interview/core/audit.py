@@ -74,19 +74,20 @@ def append(event_type: AuditEventType, code: str, payload: dict) -> dict:
     INTERVIEW_DIR.mkdir(parents=True, exist_ok=True)
 
     prev_hash = _last_audit_hash()
-    event = {
-        "type": event_type,
-        "code": code,
-        "timestamp_ms": int(time.time() * 1000),   # millisecond precision
+    # hash[n] = SHA256(prev_hash_raw || json(body)) — chain dep explicit, not in JSON
+    body = {
+        "type":          event_type,
+        "code":          code,
+        "timestamp_ms":  int(time.time() * 1000),
         "timestamp_iso": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()) + "Z",
-        "prev_hash": prev_hash,
-        "payload": payload,
+        "payload":       payload,
     }
-    raw = json.dumps(
-        {k: v for k, v in event.items() if k != "hash"},
-        sort_keys=True,
-    )
-    event["hash"] = hashlib.sha256(raw.encode()).hexdigest()[:20]
+    raw = json.dumps(body, sort_keys=True)
+    event = {
+        **body,
+        "prev_hash": prev_hash,
+        "hash": hashlib.sha256((prev_hash + raw).encode()).hexdigest()[:20],
+    }
 
     with open(AUDIT_FILE, "a") as f:
         f.write(json.dumps(event) + "\n")
@@ -136,12 +137,10 @@ def verify_chain() -> tuple[bool, str]:
                 f"Chain broken at event {i} ({event.get('type')} / {event.get('code')}) — "
                 f"expected prev_hash={expected_prev!r}, got {event.get('prev_hash')!r}"
             )
-        # Re-derive hash
-        raw = json.dumps(
-            {k: v for k, v in event.items() if k != "hash"},
-            sort_keys=True,
-        )
-        derived = hashlib.sha256(raw.encode()).hexdigest()[:20]
+        # Re-derive hash: SHA256(prev_hash_raw || json(body_without_hash_and_prev_hash))
+        body = {k: v for k, v in event.items() if k not in ("hash", "prev_hash")}
+        raw = json.dumps(body, sort_keys=True)
+        derived = hashlib.sha256((expected_prev + raw).encode()).hexdigest()[:20]
         if derived != event.get("hash"):
             return False, f"Hash mismatch at event {i} ({event.get('type')})"
 

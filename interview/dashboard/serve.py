@@ -200,6 +200,7 @@ def _build_candidate_row(r: dict) -> str:
             )
         else:
             reveal_btn = (
+                f'<span class="badge-pending">Pending Grade</span>'
                 f'<button class="btn btn-sm btn-reveal"'
                 f' data-code="{code}" data-cid="{cid}"'
                 f' disabled title="Grade this candidate first to unlock Reveal">Reveal 🔒</button>'
@@ -257,6 +258,9 @@ SHARED_CSS = """
   .btn-hire { border-color: #166534; color: #4ade80; }
   .btn-next { border-color: #1e40af; color: #60a5fa; }
   .btn-reject { border-color: #7f1d1d; color: #f87171; }
+  .badge-pending { background: #2d1a00; border: 1px solid #854d0e; color: #fbbf24;
+                   font-size: 10px; padding: 2px 7px; border-radius: 10px;
+                   margin-right: 6px; vertical-align: middle; }
   .score-badge { font-weight: 700; font-size: 15px; }
   .section-title { font-size: 12px; font-weight: 600; color: #666; text-transform: uppercase;
                    letter-spacing: 0.08em; margin-bottom: 12px; padding-bottom: 8px;
