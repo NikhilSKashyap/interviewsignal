@@ -361,7 +361,7 @@ def _build_dashboard_html(reports: list[dict]) -> str:
         body: JSON.stringify({{code: btn.dataset.code, cid: btn.dataset.cid || ''}})}})
         .then(r => r.json())
         .then(d => {{
-          label.textContent = d.code;
+          label.textContent = d.candidate_email || d.code;
           this.style.display = 'none';
           if (d.delta) {{
             const note = document.createElement('span');
@@ -790,9 +790,9 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
             try:
                 result = transport.post_action(code, "reveal", {}, cid=cid or None)
                 self._send_json({
-                    "code": code,
-                    "delta": result.get("delta", ""),
-                    "grade_score": result.get("grade_score", ""),
+                    "code":            code,
+                    "candidate_email": result.get("candidate_email", ""),
+                    "delta":           result.get("delta", ""),
                 })
             except Exception as e:
                 self._send_json({"error": str(e)}, 400)

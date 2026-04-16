@@ -177,6 +177,7 @@ class RelayHandler(BaseHTTPRequestHandler):
     # ── open POST handlers ────────────────────────────────────────────────────
 
     def _post_register(self):
+        self._read_body()  # drain request body (required for keep-alive correctness)
         hm_key = _store.register_hm()
         self._json({"hm_key": hm_key}, status=201)
 
@@ -298,6 +299,7 @@ class RelayHandler(BaseHTTPRequestHandler):
                 self._error(500, "store_error", str(e))
 
     def _post_reveal(self, hm_key: str, code: str, cid: str):
+        self._read_body()  # drain request body
         if not _store.session_exists(hm_key, code, cid):
             return self._error(404, "session_not_found", f"No session for {code}/{cid}.")
         try:

@@ -186,14 +186,18 @@ class SessionStore:
             meta = self._load_json(cid_dir / "meta.json")
             if not meta:
                 continue
-            report = self._load_json(cid_dir / "report.json") or {}
+            report   = self._load_json(cid_dir / "report.json") or {}
+            grading  = self._load_json(cid_dir / "grading.json") or {}
+            manifest = self._load_json(cid_dir / "manifest.json") or {}
             result.append({
-                "cid":           cid_dir.name,
-                "submitted_at":  meta.get("submitted_at"),
+                "cid":             cid_dir.name,
+                "submitted_at":    meta.get("submitted_at"),
                 "elapsed_minutes": report.get("elapsed_minutes"),
-                "overall_score": report.get("overall_score"),
-                "graded":        meta.get("graded", False),
-                "revealed":      meta.get("revealed", False),
+                # Grading result takes precedence over the pre-grading report stub
+                "overall_score":   grading.get("overall_score") or report.get("overall_score"),
+                "event_count":     manifest.get("event_count"),
+                "graded":          meta.get("graded", False),
+                "revealed":        meta.get("revealed", False),
             })
         return sorted(result, key=lambda x: x.get("submitted_at") or "", reverse=True)
 

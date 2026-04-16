@@ -26,7 +26,7 @@ SESSIONS_DIR = INTERVIEW_DIR / "sessions"
 CONFIG_FILE = INTERVIEW_DIR / "config.json"
 
 ANTHROPIC_API_VERSION  = "2023-06-01"
-DEFAULT_GRADING_MODEL  = "claude-3-5-haiku-20241022"   # fast + cheap, good enough for grading
+DEFAULT_GRADING_MODEL  = "claude-haiku-4-5-20251001"   # fast + cheap, good enough for grading
 DEFAULT_BASE_URL       = "https://api.anthropic.com"
 MAX_TOKENS             = 2048
 
