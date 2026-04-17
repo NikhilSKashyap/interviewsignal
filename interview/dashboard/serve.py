@@ -489,6 +489,54 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
     else:
         reveal_delta = escape(get_reveal_delta(code)) if audit_events else ""
 
+    # Sharing config (relay mode only)
+    sharing_panel_html = ""
+    if get_relay_url():
+        try:
+            from interview.core.transport import get_hm_key, get_relay_api_key
+            import urllib.request as _ureq
+            relay_url_val = get_relay_url()
+            token = get_hm_key() or get_relay_api_key()
+            sharing_req = _ureq.Request(
+                f"{relay_url_val}/sessions/{code}/{cid}/sharing",
+                headers={"Authorization": f"Bearer {token}"} if token else {},
+            )
+            with _ureq.urlopen(sharing_req, timeout=5) as resp:
+                sharing_data = json.loads(resp.read()).get("sharing", {})
+        except Exception:
+            sharing_data = {"score": "none", "debrief": False, "hm_notes": False}
+
+        score_level = escape(sharing_data.get("score", "none"))
+        debrief_checked = "checked" if sharing_data.get("debrief") else ""
+        hm_notes_checked = "checked" if sharing_data.get("hm_notes") else ""
+        sharing_panel_html = f"""
+    <div class="panel" id="sharing-panel">
+      <div class="section-title">Candidate Score Sharing
+        <span style="color:#555;font-size:10px;font-weight:400"> — what candidates see via <code>interview score {escape(code)}</code></span>
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="font-size:12px;color:#888;display:block;margin-bottom:6px">Score detail level</label>
+        <select id="sharing-score" style="background:#1a1a1a;border:1px solid #333;color:#ccc;padding:6px 10px;border-radius:6px;font-size:13px">
+          <option value="none" {'selected' if score_level == 'none' else ''}>None — candidates see nothing</option>
+          <option value="overall" {'selected' if score_level == 'overall' else ''}>Overall score only</option>
+          <option value="breakdown" {'selected' if score_level == 'breakdown' else ''}>Score breakdown by dimension</option>
+          <option value="breakdown_notes" {'selected' if score_level == 'breakdown_notes' else ''}>Breakdown + HM notes</option>
+        </select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">
+        <label style="font-size:13px;color:#ccc;cursor:pointer">
+          <input type="checkbox" id="sharing-debrief" {debrief_checked} style="margin-right:6px">
+          Share Claude's session debrief
+        </label>
+        <label style="font-size:13px;color:#ccc;cursor:pointer">
+          <input type="checkbox" id="sharing-hm-notes" {hm_notes_checked} style="margin-right:6px">
+          Share HM summary &amp; concerns
+        </label>
+      </div>
+      <button class="btn btn-sm" id="btn-save-sharing" data-code="{escape(code)}">Save sharing settings</button>
+      <span id="sharing-saved" style="display:none;font-size:12px;color:#4ade80;margin-left:10px">Saved.</span>
+    </div>"""
+
     safe_code = escape(code)
     safe_cid = escape(cid) if cid else ""
     # Use JSON encoding for JS string literals to prevent JS injection
@@ -589,6 +637,8 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
       <button class="btn btn-sm" id="btn-verify" data-code="{safe_code}" {cid_attr}>Verify Chain</button>
       <div id="verify-result" style="margin-top:12px;font-size:12px;display:none"></div>
     </div>
+
+    {sharing_panel_html}
   </div>
 </div>
 
@@ -627,6 +677,24 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
     fetch('/reveal', {{method:'POST', headers:{{'Content-Type':'application/json'}},
       body: JSON.stringify({{code: _code, cid: _cid}})}})
       .then(r => r.json()).then(d => {{ location.reload(); }});
+  }});
+
+  document.getElementById('btn-save-sharing')?.addEventListener('click', function() {{
+    const code = this.dataset.code;
+    const score    = document.getElementById('sharing-score').value;
+    const debrief  = document.getElementById('sharing-debrief').checked;
+    const hm_notes = document.getElementById('sharing-hm-notes').checked;
+    fetch('/update-sharing', {{method:'POST', headers:{{'Content-Type':'application/json'}},
+      body: JSON.stringify({{code, sharing: {{score, debrief, hm_notes}}}})
+    }}).then(r => r.json()).then(d => {{
+      if (d.ok) {{
+        const saved = document.getElementById('sharing-saved');
+        saved.style.display = 'inline';
+        setTimeout(() => {{ saved.style.display = 'none'; }}, 2000);
+      }} else {{
+        alert('Error saving sharing settings: ' + d.error);
+      }}
+    }});
   }});
 
   document.getElementById('btn-verify')?.addEventListener('click', function() {{
@@ -927,6 +995,35 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
                     cid=cid or None,
                 )
                 self._send_json({"ok": True, "record": record})
+            except Exception as e:
+                self._send_json({"ok": False, "error": str(e)}, 400)
+
+        elif path == "/update-sharing":
+            code    = body.get("code", "")
+            sharing = body.get("sharing", {})
+            if not code or not isinstance(sharing, dict):
+                self._send_json({"ok": False, "error": "Missing code or sharing config"}, 400)
+                return
+            if not get_relay_url():
+                self._send_json({"ok": False, "error": "Sharing controls require a relay."}, 400)
+                return
+            try:
+                from interview.core.transport import get_hm_key, get_relay_api_key
+                relay_url_val = get_relay_url()
+                token = get_hm_key() or get_relay_api_key()
+                req_body = json.dumps({"sharing": sharing}).encode()
+                req = urllib.request.Request(
+                    f"{relay_url_val}/sessions/{code}/sharing",
+                    data=req_body,
+                    headers={
+                        "Content-Type":  "application/json",
+                        "Authorization": f"Bearer {token}",
+                    },
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    json.loads(resp.read())
+                self._send_json({"ok": True})
             except Exception as e:
                 self._send_json({"ok": False, "error": str(e)}, 400)
 

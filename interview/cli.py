@@ -551,6 +551,104 @@ def cmd_status(args):
         print(f"\n  No active session.\n")
 
 
+def cmd_score(args):
+    """
+    Fetch the candidate's own score from the relay.
+
+    Reads the cid from the local session manifest (computed from github_id or email).
+    Calls GET /sessions/{code}/{cid}/score — open route, no HM auth needed.
+    """
+    code = args.code.strip().upper()
+    session_dir = Path.home() / ".interview" / "sessions" / code
+    manifest_file = session_dir / "manifest.json"
+
+    if not manifest_file.exists():
+        print(f"\n  ✗ No local session found for {code}.")
+        print(f"    Make sure you ran /submit for this interview.\n")
+        return
+
+    import hashlib
+    manifest = json.loads(manifest_file.read_text())
+
+    github_id = manifest.get("github_id")
+    candidate_email = manifest.get("candidate_email", "")
+    if github_id:
+        cid = hashlib.sha256(f"github:{github_id}".encode()).hexdigest()[:12]
+    elif candidate_email:
+        cid = hashlib.sha256(candidate_email.lower().strip().encode()).hexdigest()[:12]
+    else:
+        print(f"\n  ✗ Cannot determine candidate ID — no github_id or email in manifest.\n")
+        return
+
+    from interview.core.transport import get_relay_url, RelayTransport, TransportError
+    relay_url = get_relay_url()
+    if not relay_url:
+        relay_url_in_manifest = manifest.get("relay_url", "")
+        if relay_url_in_manifest:
+            relay_url = relay_url_in_manifest
+    if not relay_url:
+        print(f"\n  ✗ No relay configured.")
+        print(f"    Score sharing is only available when a relay is in use.")
+        print(f"    Run 'interview configure-relay' to set one up.\n")
+        return
+
+    transport = RelayTransport(relay_url)
+    try:
+        result = transport.get_score(code, cid)
+    except TransportError as e:
+        print(f"\n  ✗ Could not fetch score: {e}\n")
+        return
+
+    if result is None or not result.get("available"):
+        reason = (result or {}).get("reason", "Score is not available for this interview.")
+        print(f"\n  Score not available: {reason}\n")
+        return
+
+    print(f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    print(f"  SCORE — {code}")
+    print(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+    overall = result.get("overall_score")
+    if overall is not None:
+        print(f"\n  Overall: {overall}/10\n")
+
+    dimensions = result.get("dimensions", [])
+    if dimensions:
+        print(f"  Dimensions:")
+        for d in dimensions:
+            name = d.get("name", "")
+            score = d.get("score", "—")
+            just = d.get("justification", "")
+            print(f"    {name}: {score}/10")
+            if just:
+                print(f"      {just}")
+        print()
+
+    summary = result.get("summary", "")
+    if summary:
+        print(f"  Summary:\n    {summary}\n")
+
+    standouts = result.get("standout_moments", [])
+    if standouts:
+        print(f"  Standout moments:")
+        for s in standouts:
+            print(f"    • {s}")
+        print()
+
+    concerns = result.get("concerns", [])
+    if concerns:
+        print(f"  Concerns:")
+        for c in concerns:
+            print(f"    • {c}")
+        print()
+
+    debrief = result.get("debrief", "")
+    if debrief:
+        print(f"  Session debrief:\n{debrief}\n")
+
+    print(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="interview",
@@ -574,6 +672,9 @@ def main():
     sub.add_parser("dashboard", help="Open HM candidate dashboard")
     sub.add_parser("status", help="Show active session status")
 
+    p_score = sub.add_parser("score", help="Fetch your score for a submitted interview")
+    p_score.add_argument("code", help="Interview code (e.g. INT-4829-XK)")
+
     args = parser.parse_args()
 
     if args.command == "install":
@@ -594,6 +695,8 @@ def main():
         cmd_dashboard(args)
     elif args.command == "status":
         cmd_status(args)
+    elif args.command == "score":
+        cmd_score(args)
     else:
         parser.print_help()
 

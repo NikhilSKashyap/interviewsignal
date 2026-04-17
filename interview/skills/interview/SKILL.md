@@ -72,6 +72,30 @@ Ask the following, one field at a time (don't dump a form — ask conversational
      and already know who submitted what.
    → Default: yes. Strongly recommended.
    → Store as boolean.
+
+9. Candidate score sharing — what can candidates see after submission?
+   "After you grade, candidates can optionally run 'interview score <CODE>' to see their results.
+    What would you like to share? Options:
+      1. Nothing (default) — candidates see no score
+      2. Overall score only — they see a single number (e.g. 7.5/10)
+      3. Score breakdown — overall + per-dimension scores
+      4. Full breakdown + notes — scores, HM summary, standout moments, concerns"
+   → Default: 1 (nothing). Recommend 3 or 4 for transparent hiring loops.
+   → Map to: none | overall | breakdown | breakdown_notes
+   → Store as sharing.score.
+
+10. Share Claude's session debrief?
+    "After /submit, Claude generates a session reflection — what the candidate did well,
+     missed, and could improve. Share this with the candidate?"
+    → Only shown if sharing.score is not 'none'.
+    → Default: no.
+    → Store as sharing.debrief (boolean).
+
+11. Share HM notes?
+    "Should candidates see the HM summary and concerns from the grading rubric?"
+    → Only relevant if sharing.score == 'breakdown_notes'.
+    → Default: no.
+    → Store as sharing.hm_notes (boolean).
 ```
 
 ### Step 2: Generate the interview code
@@ -88,6 +112,9 @@ python -m interview.core.setup create \
   --audit-email "..."  \
   --time-limit 90 \
   --anonymize          # or --no-anonymize if HM said no
+  --sharing-score breakdown_notes   # or: none | overall | breakdown
+  --sharing-debrief    # omit if no
+  --sharing-hm-notes   # omit if no
 ```
 
 This writes the encoded interview package and prints the interview code.
@@ -239,7 +266,48 @@ address so the candidate can send it manually. Do not treat this as a failure.
 
 ---
 
-### Step 4: Confirm to candidate
+### Step 4: Generate session debrief
+
+Tell the user: "Generating session debrief..."
+
+Read `~/.interview/sessions/<CODE>/events.jsonl` and write an honest, specific debrief
+of the candidate's session. Save it to `~/.interview/sessions/<CODE>/debrief.txt`.
+
+Frame the debrief as a direct reflection addressed to the candidate. Cover:
+1. What they did well — specific moments where their thinking was strong
+2. What they missed or underexplored — gaps in the solution, tests not written, etc.
+3. How they used the AI — were their prompts high-leverage or did they just ask it to write code?
+4. One concrete thing they could do differently next time
+
+Keep it under 300 words. Be honest but constructive. Do not score or rank — just observe.
+
+Write the debrief to the file using the Write tool:
+`~/.interview/sessions/<CODE>/debrief.txt`
+
+After writing the debrief, re-send the session to include it:
+```bash
+python -m interview.core.transport send --code <CODE>
+```
+(The transport layer will now include `debrief.txt` in the relay submission automatically.)
+
+Show the debrief to the candidate with a SESSION DEBRIEF header block so they can read it:
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SESSION DEBRIEF — <CODE>
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+<debrief text>
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  To check your score (once graded): interview score <CODE>
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+**Note:** The debrief is always shown to the candidate. Whether it is _also_ shared via
+`interview score` is the HM's choice (controlled in the dashboard sharing settings).
+
+---
+
+### Step 5: Confirm to candidate
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -276,6 +344,11 @@ Features:
 - Click candidate → full transcript view + diff view + dimension scores
 - **Reveal identity** button (per candidate, explicit click to unmask)
 - **Schedule next round** — opens email compose with candidate
+- **Score sharing controls** — per-interview toggle on candidate detail page:
+  - Score detail level: none / overall / breakdown / breakdown + notes
+  - Toggle: share Claude's session debrief with candidate
+  - Toggle: share HM summary and concerns with candidate
+  - Changes take effect immediately; candidates run `interview score <CODE>` to see results
 
 ---
 

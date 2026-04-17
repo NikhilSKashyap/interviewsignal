@@ -102,6 +102,10 @@ class Transport(ABC):
         """Candidate: fetch interview package by code. None if not found."""
         return None
 
+    def get_score(self, code: str, cid: str) -> dict | None:
+        """Candidate: fetch their own score. None if not available."""
+        return None
+
 
 class TransportError(Exception):
     """Raised by transport methods when an operation fails unrecoverably."""
@@ -156,6 +160,9 @@ class EmailTransport(Transport):
             from interview.core.decisions import record_decision
             return record_decision(code, payload.get("decision"), payload.get("reason", ""))
         raise TransportError(f"Unknown action: {action}")
+
+    def get_score(self, code: str, cid: str) -> dict | None:
+        return None
 
 
 # ─── Relay transport ──────────────────────────────────────────────────────────
@@ -283,6 +290,7 @@ class RelayTransport(Transport):
             "events_jsonl":  "events.jsonl",
             "report_html":   "report.html",
             "report_json":   "report.json",
+            "debrief_txt":   "debrief.txt",
         }
         for key, fname in file_map.items():
             f = session_dir / fname
@@ -355,6 +363,20 @@ class RelayTransport(Transport):
             return result if isinstance(result, dict) else {}
         except TransportError as e:
             raise TransportError(f"Action '{action}' failed: {e}")
+
+    def get_score(self, code: str, cid: str) -> dict | None:
+        """Candidate: fetch their own score. Open route — no auth header needed."""
+        url = f"{self.relay_url}/sessions/{code}/{cid}/score"
+        req = urllib.request.Request(url, method="GET")
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                return json.loads(resp.read())
+        except urllib.error.HTTPError as e:
+            if e.code in (404, 403):
+                return None
+            raise TransportError(f"GET /sessions/{code}/{cid}/score → {e.code}")
+        except Exception as e:
+            raise TransportError(f"GET score failed: {e}")
 
 
 # ─── Factory ──────────────────────────────────────────────────────────────────
