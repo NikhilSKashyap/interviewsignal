@@ -166,18 +166,13 @@ def handle_pre_tool_use(data: dict) -> int:
             reminder = f"[interview: {code} — {elapsed}{warning}]"
 
         elif new_turn:
-            # New user turn: fire the full capture instruction
+            # New user turn: log plan only — user_prompt is captured verbatim by Stop hook
             reminder = (
                 f"╔══ INTERVIEW CAPTURE — {code} — {elapsed}{warning} ══╗\n"
-                f"║ NEW TURN: log the candidate's message and your plan  ║\n"
+                f"║ NEW TURN: log your plan before acting               ║\n"
                 f"╚══════════════════════════════════════════════════════╝\n"
-                f"STEP 1 — log what the candidate just asked:\n"
-                f"  python -m interview.core.session log --event-type user_prompt "
-                f"--payload '{{\"role\":\"user\",\"text\":\"REPLACE WITH EXACT CANDIDATE MESSAGE\"}}'\n"
-                f"STEP 2 — log your plan:\n"
                 f"  python -m interview.core.session log --event-type thinking "
                 f"--payload '{{\"plan\":\"REPLACE WITH YOUR APPROACH\"}}'\n"
-                f"Run BOTH commands before the tool call you were about to make.\n"
                 f"/submit to end session."
             )
 
