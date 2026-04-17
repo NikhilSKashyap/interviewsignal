@@ -175,6 +175,7 @@ class SessionStore:
                 "title": title,
                 "created_at": payload.get("created_at"),
                 "time_limit_minutes": payload.get("time_limit_minutes"),
+                "anonymize": payload.get("anonymize", False),
                 "candidate_count": len(candidates),
                 "candidates": candidates,
             })
@@ -203,6 +204,10 @@ class SessionStore:
                 "event_count":     manifest.get("event_count"),
                 "graded":          meta.get("graded", False),
                 "revealed":        meta.get("revealed", False),
+                "github_username": meta.get("github_username"),
+                "github_repo_url": meta.get("github_repo_url"),
+                "candidate_name":  meta.get("candidate_name"),
+                "avatar_url":      meta.get("avatar_url"),
             })
         return sorted(result, key=lambda x: x.get("submitted_at") or "", reverse=True)
 
@@ -247,7 +252,8 @@ class SessionStore:
     MAX_SESSION_BYTES = 100 * 1024 * 1024  # 100 MB per session
     MAX_FILE_BYTES    = 20  * 1024 * 1024  # 20 MB per individual file
 
-    def save_session(self, hm_key: str, code: str, cid: str, candidate_email: str, files: dict[str, bytes], github_identity: dict | None = None):
+    def save_session(self, hm_key: str, code: str, cid: str, candidate_email: str, files: dict[str, bytes], github_identity: dict | None = None,
+                     github_repo_url: str | None = None, candidate_name: str | None = None):
         # Enforce per-file and per-session size limits
         total = sum(len(v) for v in files.values())
         if total > self.MAX_SESSION_BYTES:
@@ -283,6 +289,10 @@ class SessionStore:
             meta["github_username"] = github_identity.get("github_username")
             meta["avatar_url"]      = github_identity.get("avatar_url")
             self.record_github_submission(code, github_identity["github_id"], cid)
+        if github_repo_url:
+            meta["github_repo_url"] = github_repo_url
+        if candidate_name:
+            meta["candidate_name"] = candidate_name
         self._save_meta(hm_key, code, cid, meta)
         self.append_audit(hm_key, code, cid, "session_submitted")
 
@@ -291,12 +301,13 @@ class SessionStore:
         meta = self._load_json(d / "meta.json")
         if not meta:
             return None
-        manifest = self._load_json(d / "manifest.json") or {}
-        report   = self._load_json(d / "report.json") or {}
-        grading  = self._load_json(d / "grading.json")
-        comments = self._load_jsonl(d / "comments.jsonl")
-        decision = self._load_json(d / "decision.json")
-        audit    = self._load_jsonl(d / "audit.jsonl")
+        manifest        = self._load_json(d / "manifest.json") or {}
+        report          = self._load_json(d / "report.json") or {}
+        grading         = self._load_json(d / "grading.json")
+        grading_history = self._load_jsonl(d / "grading_history.jsonl")
+        comments        = self._load_jsonl(d / "comments.jsonl")
+        decision        = self._load_json(d / "decision.json")
+        audit           = self._load_jsonl(d / "audit.jsonl")
         revealed = meta.get("revealed", False)
         return {
             "code":            code,
@@ -306,10 +317,15 @@ class SessionStore:
             "graded_at":       meta.get("graded_at"),
             "revealed_at":     meta.get("revealed_at"),
             "elapsed_minutes": meta.get("elapsed_minutes"),
-            "candidate_email": meta.get("candidate_email") if revealed else None,
+            "candidate_email":  meta.get("candidate_email") if revealed else None,
+            "candidate_name":   meta.get("candidate_name")  if revealed else None,
+            "github_username":  meta.get("github_username") if revealed else None,
+            "github_repo_url":  meta.get("github_repo_url") if revealed else None,
+            "avatar_url":       meta.get("avatar_url")       if revealed else None,
             "manifest":        manifest,
             "report":          report,
             "grading":         grading,
+            "grading_history": grading_history,
             "comments":        comments,
             "decision":        decision,
             "audit_entries":   audit,
@@ -348,6 +364,45 @@ class SessionStore:
         self.append_audit(hm_key, code, cid, "grade_recorded",
                           {"overall_score": grading.get("overall_score")})
         return {"code": code, "cid": cid, "graded_at": graded_at}
+
+    def revise_grade(self, hm_key: str, code: str, cid: str, grading: dict, reason: str) -> dict:
+        """
+        Revise an existing grade. Moves the current grade to grading_history.jsonl
+        before overwriting grading.json. Audit-logged as grade_revised.
+        """
+        if not self.is_graded(hm_key, code, cid):
+            raise StoreError("not_graded")
+        d = self._session_dir(hm_key, code, cid)
+
+        # Archive current grade into history
+        current = self._load_json(d / "grading.json") or {}
+        superseded_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        historical = {**current, "superseded_at": superseded_at, "revision_reason": reason}
+        self._append_jsonl(d / "grading_history.jsonl", historical)
+
+        # Overwrite with new grade
+        graded_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        grading = {k: v for k, v in grading.items() if k not in ("reason",)}
+        grading["graded_at"] = graded_at
+        self._write_atomic(d / "grading.json", json.dumps(grading, indent=2))
+        self._save_meta(hm_key, code, cid, {"graded_at": graded_at})
+
+        # Audit — record whether identity was known at the time of revision
+        meta = self._load_meta(hm_key, code, cid)
+        self.append_audit(hm_key, code, cid, "grade_revised", {
+            "previous_score": current.get("overall_score"),
+            "new_score":      grading.get("overall_score"),
+            "reason":         reason,
+            "revealed":       meta.get("revealed", False),
+        })
+        return {
+            "code":           code,
+            "cid":            cid,
+            "graded_at":      graded_at,
+            "revision":       True,
+            "previous_score": current.get("overall_score"),
+            "new_score":      grading.get("overall_score"),
+        }
 
     def record_reveal(self, hm_key: str, code: str, cid: str) -> dict:
         if not self.is_graded(hm_key, code, cid):
@@ -424,7 +479,7 @@ class SessionStore:
             sharing = interview.get("sharing")
             if sharing and isinstance(sharing, dict):
                 return sharing
-        return {"score": "none", "debrief": False, "hm_notes": False}
+        return {"score": "none"}
 
     def save_sharing_config(self, hm_key: str, code: str, config: dict) -> dict:
         """Persist an HM sharing override for this code. Audit-logged globally."""
@@ -470,12 +525,13 @@ class SessionStore:
             result["summary"]          = grading.get("summary", "")
             result["standout_moments"] = grading.get("standout_moments", [])
             result["concerns"]         = grading.get("concerns", [])
-            if sharing.get("debrief"):
-                debrief_bytes = self.get_file(hm_key, code, cid, "debrief.txt")
-                if debrief_bytes:
-                    result["debrief"] = debrief_bytes.decode()
-            if sharing.get("hm_notes"):
-                result["hm_notes"] = grading.get("summary", "")
+
+        # Debrief is always included when available — it's Claude's analysis,
+        # not the HM's evaluation, so it's not an HM toggle.
+        debrief_bytes = self.get_file(hm_key, code, cid, "debrief.txt")
+        if debrief_bytes:
+            result["debrief"] = debrief_bytes.decode()
+
         return result
 
     # ─── audit verification ───────────────────────────────────────────────────

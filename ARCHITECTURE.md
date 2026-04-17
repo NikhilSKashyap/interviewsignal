@@ -30,6 +30,8 @@ Manages candidate sessions.
 
 - `start_session(code)` — reads the interview payload, opens `events.jsonl`, logs `session_start`,
   records `~/.interview/active_session.json` (single active session per machine).
+- Creates a GitHub repo `interview-{code}` via the GitHub API after OAuth. Initialises a
+  `interview` git remote in the working directory with an initial commit.
 - `log_event(type, payload)` — appends to `events.jsonl` with a SHA-256 hash chain.
   Each event includes `prev_hash`, so any tampered event breaks the chain.
 - `seal_session()` — finalises the session: captures git diff (start commit → HEAD), writes
@@ -130,6 +132,9 @@ The `interview` command.
 /interview INT-4829-XK
   → session.start_session("INT-4829-XK")
     → reads ~/.interview/created/INT-4829-XK.json
+    → GitHub OAuth → creates interview-INT-4829-XK GitHub repo
+    → git init + git remote add interview <repo_url>
+    → git commit --allow-empty -m "session start"
     → writes ~/.interview/active_session.json
     → appends session_start to events.jsonl
 
@@ -139,8 +144,10 @@ The `interview` command.
 
 /submit
   → session.seal_session()
+    → git add -A && git commit -m "session end"
+    → git push interview HEAD:main (clears credentials after push)
     → captures git diff
-    → writes manifest.json
+    → writes manifest.json (with github_repo_url)
   → grader.grade_session(code)
     → build_transcript()  → calls Anthropic API
     → saves grading.json

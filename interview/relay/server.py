@@ -403,7 +403,9 @@ class RelayHandler(BaseHTTPRequestHandler):
             "status":          "complete",
             "github_id":       github_id,
             "github_username": github_username,
+            "github_name":     profile.get("name") or github_username,
             "avatar_url":      avatar_url,
+            "access_token":    access_token,
         })
         return self._text(_oauth_success_html(github_username), "text/html")
 
@@ -434,9 +436,11 @@ class RelayHandler(BaseHTTPRequestHandler):
                 "status":          "complete",
                 "github_id":       state_data.get("github_id"),
                 "github_username": state_data.get("github_username"),
+                "github_name":     state_data.get("github_name", state_data.get("github_username")),
                 "avatar_url":      state_data.get("avatar_url"),
                 # state UUID doubles as the session_token — relay looks it up by state
                 "session_token":   state,
+                "github_token":    state_data.get("access_token"),
             })
 
         if status == "duplicate":
@@ -613,7 +617,12 @@ class RelayHandler(BaseHTTPRequestHandler):
                     return self._error(400, "invalid_payload",
                                        f"Could not base64-decode '{key}'.")
 
-        _store.save_session(hm_key, code, cid, candidate_email, files, github_identity=github_identity)
+        github_repo_url = body.get("github_repo_url") or None
+        candidate_name  = body.get("candidate_name") or None
+        _store.save_session(hm_key, code, cid, candidate_email, files,
+                            github_identity=github_identity,
+                            github_repo_url=github_repo_url,
+                            candidate_name=candidate_name)
         import time
         self._json({
             "code":         code,
@@ -631,13 +640,19 @@ class RelayHandler(BaseHTTPRequestHandler):
             return self._error(400, "invalid_payload",
                                "Grading payload must include 'overall_score' and 'dimensions'.")
         try:
-            result = _store.save_grade(hm_key, code, cid, body)
-            self._json(result)
-        except StoreError as e:
-            if str(e) == "already_graded":
-                return self._error(409, "already_graded", "Grade already recorded.")
+            if _store.is_graded(hm_key, code, cid):
+                # Revision — requires a reason explaining the change
+                reason = (body.get("reason") or "").strip()
+                if not reason:
+                    return self._error(400, "revision_requires_reason",
+                                       "Grade revision requires a 'reason' field explaining the change.")
+                result = _store.revise_grade(hm_key, code, cid, body, reason)
+                self._json(result)
             else:
-                return self._error(500, "store_error", str(e))
+                result = _store.save_grade(hm_key, code, cid, body)
+                self._json(result)
+        except StoreError as e:
+            return self._error(500, "store_error", str(e))
 
     def _post_reveal(self, hm_key: str, code: str, cid: str):
         self._read_body()  # drain request body
@@ -687,11 +702,7 @@ class RelayHandler(BaseHTTPRequestHandler):
         if score not in ("none", "overall", "breakdown", "breakdown_notes"):
             return self._error(400, "invalid_payload",
                                "sharing.score must be: none | overall | breakdown | breakdown_notes")
-        config = {
-            "score":    score,
-            "debrief":  bool(sharing.get("debrief", False)),
-            "hm_notes": bool(sharing.get("hm_notes", False)),
-        }
+        config = {"score": score}
         _store.save_sharing_config(hm_key, code, config)
         self._json({"code": code, "sharing": config})
 
