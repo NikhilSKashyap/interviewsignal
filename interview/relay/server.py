@@ -231,7 +231,20 @@ class RelayHandler(BaseHTTPRequestHandler):
         import time
         self._json({"code": code, "registered_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}, status=201)
 
+    # Base64 adds ~33% overhead; 200 MB gives headroom above the 100 MB session limit.
+    _MAX_SESSION_BODY = 200 * 1024 * 1024
+
     def _post_session(self, hm_key: str):
+        # Check Content-Length BEFORE reading the body to prevent OOM on huge requests.
+        try:
+            body_len = int(self.headers.get("Content-Length", 0))
+        except (ValueError, TypeError):
+            body_len = 0
+        if body_len > self._MAX_SESSION_BODY:
+            return self._error(
+                413, "payload_too_large",
+                f"Request body too large ({body_len // 1024 // 1024} MB). Limit: 200 MB.",
+            )
         body = self._read_body()
         if body is None:
             return self._error(400, "invalid_payload", "Could not parse JSON body.")
@@ -296,9 +309,9 @@ class RelayHandler(BaseHTTPRequestHandler):
             self._json(result)
         except StoreError as e:
             if str(e) == "already_graded":
-                self._error(409, "already_graded", "Grade already recorded.")
+                return self._error(409, "already_graded", "Grade already recorded.")
             else:
-                self._error(500, "store_error", str(e))
+                return self._error(500, "store_error", str(e))
 
     def _post_reveal(self, hm_key: str, code: str, cid: str):
         self._read_body()  # drain request body
@@ -308,9 +321,9 @@ class RelayHandler(BaseHTTPRequestHandler):
             self._json(_store.record_reveal(hm_key, code, cid))
         except StoreError as e:
             if str(e) == "not_graded":
-                self._error(403, "not_graded", "Cannot reveal before grade is recorded.")
+                return self._error(403, "not_graded", "Cannot reveal before grade is recorded.")
             else:
-                self._error(500, "store_error", str(e))
+                return self._error(500, "store_error", str(e))
 
     def _post_comment(self, hm_key: str, code: str, cid: str):
         if not _store.session_exists(hm_key, code, cid):
@@ -332,9 +345,9 @@ class RelayHandler(BaseHTTPRequestHandler):
             self._json(_store.save_decision(hm_key, code, cid, decision, body.get("reason", "")))
         except StoreError as e:
             if str(e) == "already_decided":
-                self._error(409, "already_decided", "Decision already recorded.")
+                return self._error(409, "already_decided", "Decision already recorded.")
             else:
-                self._error(500, "store_error", str(e))
+                return self._error(500, "store_error", str(e))
 
 
 # ─── Entry point ──────────────────────────────────────────────────────────────

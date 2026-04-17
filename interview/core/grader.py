@@ -407,6 +407,20 @@ def grade_session(code: str) -> dict:
         )
     manifest = json.loads(manifest_file.read_text())
 
+    # Validate required fields before burning an API call
+    problem = manifest.get("problem", "").strip()
+    rubric  = manifest.get("rubric", "").strip()
+    if not problem:
+        raise GradingError(
+            f"Session {code} has no problem statement in its manifest. "
+            f"The session may have started before the interview was fully configured."
+        )
+    if not rubric:
+        raise GradingError(
+            f"Session {code} has no grading rubric in its manifest. "
+            f"The rubric is required for meaningful grading."
+        )
+
     # Check grading is configured (API key OR enterprise proxy URL)
     if _get_api_key() is None:
         raise GradingError(
