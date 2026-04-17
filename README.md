@@ -36,6 +36,7 @@ Meanwhile, every one of those candidates uses AI coding assistants every day. Yo
 - Work the way you actually work — with AI assistance, in your own environment
 - Get evaluated on your thinking, not your ability to memorise algorithms
 - No file transfers, no email attachments — just a short code
+- GitHub OAuth: one account, one submission — no re-takes under a different name
 
 **For teams:**
 - Close the interview loop in half the time
@@ -91,7 +92,7 @@ pip install interviewsignal && interview install
 /interview INT-4829-XK
 ```
 
-The problem appears. Relay is auto-configured — no API keys or file transfers required. Work normally — ask the AI questions, write code, run tests. The session records everything automatically.
+If the relay has GitHub OAuth configured, a browser tab opens for GitHub login — one account, one submission. The problem appears once auth completes. Relay is auto-configured — no API keys or file transfers required. Work normally — ask the AI questions, write code, run tests. The session records everything automatically.
 
 When done:
 
@@ -181,6 +182,26 @@ After deploying:
 3. Copy your Railway URL (e.g. `https://myrelay.up.railway.app`)
 4. Run `interview configure-relay` → option 1 → paste URL
 
+#### GitHub OAuth (recommended)
+
+Prevent candidates from submitting multiple times under different names. One GitHub account = one submission per interview code.
+
+```bash
+interview configure-github-app   # walks you through GitHub OAuth app setup
+```
+
+Then add to your relay's environment variables:
+```
+GITHUB_CLIENT_ID=<your_client_id>
+GITHUB_CLIENT_SECRET=<your_client_secret>
+RELAY_BASE_URL=https://myrelay.up.railway.app
+```
+
+Create the GitHub OAuth App at `github.com/settings/developers`:
+- **Callback URL:** `https://myrelay.up.railway.app/auth/github/callback`
+
+When configured, candidates see a browser auth step before their session starts. The relay enforces uniqueness server-side — no workarounds. On Reveal, the HM sees the candidate's GitHub username and avatar alongside their email.
+
 Your data stays in your own Railway account. Cost is ~$5/month (Railway Hobby plan).
 
 Or run it anywhere with Docker:
@@ -255,6 +276,8 @@ When you know who someone is before you evaluate them, bias isn't a failure of c
 
 **You can't prevent a candidate from having a second screen. Neither can a Leetcode proctoring tool.** The difference is that with interviewsignal, gaming it well requires understanding the problem — and that's the signal.
 
+**One identity, one submission.** GitHub OAuth ties each submission to a verified GitHub account. Re-taking under a different name or email is blocked at the relay — not by policy, but by technical enforcement. The candidate's GitHub username is sealed into the session and only revealed after the grade is locked.
+
 **Score before name, always.** Grades are locked in before identity is revealed — not as a policy, but as a technical constraint. You cannot click Reveal until a score is saved. The order of events is cryptographically provable.
 
 **A tamper-evident record.** Every action — grading, revealing identity, adding a comment, recording a decision — is hash-chained and email-anchored to a timestamp outside your control. The audit trail doesn't just log what happened. It proves it.
@@ -310,8 +333,9 @@ interview configure-api-key    # Anthropic API key (direct access)
 interview configure-llm        # Enterprise: custom endpoint, proxy, format, extra headers
 
 # Delivery
-interview configure-relay      # Relay URL + auto-register HM account
-interview configure-email      # SMTP fallback (no relay)
+interview configure-relay         # Relay URL + auto-register HM account
+interview configure-email         # SMTP fallback (no relay)
+interview configure-github-app    # GitHub OAuth for relay (relay operators only)
 
 # Runtime
 interview dashboard            # Local HM dashboard at localhost:7832
