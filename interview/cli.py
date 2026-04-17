@@ -262,7 +262,6 @@ def cmd_configure_relay(args):
     print("\nHow do you want to deliver interview sessions?")
     print("─" * 50)
     print("  1. Your own relay  Railway / Render / self-hosted — private, ~$5/mo")
-    print("                     Deploy: github.com/NikhilSKashyap/interviewsignal")
     print("  2. Email only      SMTP — no server, reports arrive by email")
     print()
 
@@ -273,8 +272,6 @@ def cmd_configure_relay(args):
         # ── Self-hosted / own relay ───────────────────────────────────────────
         print()
         print("  Enter your relay URL (Railway / Render / your own server).")
-        print("  Don't have one? Deploy in one click:")
-        print("  https://railway.com/new/template?template=https://github.com/NikhilSKashyap/interviewsignal")
         print()
         prompt = f"Relay URL [{current_url}]: " if current_url else "Relay URL: "
         relay_url = input(prompt).strip().rstrip("/") or current_url
