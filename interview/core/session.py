@@ -20,6 +20,9 @@ import json
 import os
 import subprocess
 import time
+import urllib.error
+import urllib.request
+import webbrowser
 from pathlib import Path
 
 from interview.core.setup import load_interview
@@ -148,6 +151,79 @@ def _read_events(code: str) -> list[dict]:
     return [json.loads(line) for line in ef.read_text().splitlines() if line.strip()]
 
 
+def _authenticate_github(relay_url: str, code: str) -> dict | None:
+    """
+    Run the GitHub OAuth flow via the relay.
+
+    Returns one of:
+      {"github_id": ..., "github_username": ..., "avatar_url": ..., "session_token": ...}
+      {"duplicate": True}   — already submitted, caller should abort
+      None                  — OAuth not configured or timed out, proceed with email-only
+    """
+    start_url = f"{relay_url.rstrip('/')}/auth/github/start?code={code}"
+    try:
+        req = urllib.request.Request(start_url)
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        if e.code == 501:
+            # Relay has no GitHub app configured — skip OAuth silently
+            return None
+        print(f"  ⚠  Could not reach relay for GitHub auth (HTTP {e.code}). Continuing without it.")
+        return None
+    except Exception as e:
+        print(f"  ⚠  Could not reach relay for GitHub auth: {e}. Continuing without it.")
+        return None
+
+    if not data.get("github_configured", True) is False and not data.get("url"):
+        return None
+    if data.get("github_configured") is False:
+        return None
+
+    auth_url = data.get("url", "")
+    state    = data.get("state", "")
+    if not auth_url or not state:
+        return None
+
+    print(f"\n  GitHub authentication required.")
+    print(f"  Opening your browser for GitHub OAuth...")
+    print(f"  If the browser doesn't open, visit:\n  {auth_url}\n")
+    try:
+        webbrowser.open(auth_url)
+    except Exception:
+        pass  # Non-fatal — URL already printed above
+
+    poll_url = f"{relay_url.rstrip('/')}/auth/github/poll?state={state}"
+    print(f"  Waiting for GitHub authentication", end="", flush=True)
+
+    deadline = time.time() + 300  # 5-minute window
+    while time.time() < deadline:
+        time.sleep(2)
+        print(".", end="", flush=True)
+        try:
+            req = urllib.request.Request(poll_url)
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                result = json.loads(resp.read())
+        except Exception:
+            continue
+
+        status = result.get("status")
+        if status == "complete":
+            print(f"\n  ✓ Authenticated as @{result['github_username']}\n")
+            return result
+        if status == "duplicate":
+            print(f"\n")
+            print(f"  ✗ @{result.get('github_username', 'This account')} has already submitted for {code}.")
+            print(f"    Each GitHub account can only submit once per interview.\n")
+            return {"duplicate": True}
+        if status in ("error", "expired"):
+            print(f"\n  ✗ GitHub authentication failed ({status}). Please try again.\n")
+            return None
+
+    print(f"\n  ✗ Authentication timed out after 5 minutes. Run /interview {code} to try again.\n")
+    return None
+
+
 def start_session(code: str, candidate_email: str | None = None) -> dict:
     """
     Start a new interview session for the given code.
@@ -177,6 +253,14 @@ def start_session(code: str, candidate_email: str | None = None) -> dict:
             relay_api_key=interview.get("relay_api_key", ""),
         )
 
+    # GitHub OAuth — one GitHub account = one submission per interview code.
+    # Falls back gracefully if the relay has no GitHub app configured.
+    github_auth: dict | None = None
+    if relay_url:
+        github_auth = _authenticate_github(relay_url, code)
+        if github_auth and github_auth.get("duplicate"):
+            return {}  # Already submitted — abort cleanly
+
     # Resolve candidate email
     resolved_candidate_email = candidate_email or interview.get("candidate_email")
 
@@ -184,18 +268,23 @@ def start_session(code: str, candidate_email: str | None = None) -> dict:
     started_at = time.time()
 
     session_meta = {
-        "code": code,
-        "started_at": started_at,
-        "candidate_email": resolved_candidate_email,
-        "hm_email": interview["hm_email"],
-        "cc_emails": interview.get("cc_emails", []),
-        "audit_email": interview.get("audit_email"),
+        "code":               code,
+        "started_at":         started_at,
+        "candidate_email":    resolved_candidate_email,
+        "hm_email":           interview["hm_email"],
+        "cc_emails":          interview.get("cc_emails", []),
+        "audit_email":        interview.get("audit_email"),
         "time_limit_minutes": interview.get("time_limit_minutes"),
-        "anonymize": interview.get("anonymize", True),
-        "rubric": interview["rubric"],
-        "problem": interview["problem"],
-        "git_base_commit": git_snapshot.get("commit"),
-        "last_event_hash": "",
+        "anonymize":          interview.get("anonymize", True),
+        "rubric":             interview["rubric"],
+        "problem":            interview["problem"],
+        "git_base_commit":    git_snapshot.get("commit"),
+        "last_event_hash":    "",
+        # GitHub identity (None if relay has no GitHub app configured)
+        "github_id":          github_auth.get("github_id")       if github_auth else None,
+        "github_username":    github_auth.get("github_username") if github_auth else None,
+        "avatar_url":         github_auth.get("avatar_url")      if github_auth else None,
+        "session_token":      github_auth.get("session_token")   if github_auth else None,
     }
 
     _save_active_session(session_meta)
@@ -284,20 +373,25 @@ def seal_session(code: str) -> dict:
     # Build final manifest
     events = _read_events(code)
     manifest = {
-        "code": code,
-        "started_at": session["started_at"],
-        "ended_at": ended_at,
-        "elapsed_minutes": elapsed_minutes,
-        "candidate_email": session.get("candidate_email"),
-        "hm_email": session.get("hm_email"),
-        "cc_emails": session.get("cc_emails", []),
-        "rubric": session.get("rubric", ""),
-        "problem": session.get("problem", ""),
-        "git_base_commit": session.get("git_base_commit"),
-        "git_diff": git_diff,
-        "event_count": len(events),
-        "final_hash": events[-1]["hash"] if events else "",
-        "sealed": True,
+        "code":             code,
+        "started_at":       session["started_at"],
+        "ended_at":         ended_at,
+        "elapsed_minutes":  elapsed_minutes,
+        "candidate_email":  session.get("candidate_email"),
+        "hm_email":         session.get("hm_email"),
+        "cc_emails":        session.get("cc_emails", []),
+        "rubric":           session.get("rubric", ""),
+        "problem":          session.get("problem", ""),
+        "git_base_commit":  session.get("git_base_commit"),
+        "git_diff":         git_diff,
+        "event_count":      len(events),
+        "final_hash":       events[-1]["hash"] if events else "",
+        "sealed":           True,
+        # GitHub identity — None if relay has no GitHub app configured
+        "github_id":        session.get("github_id"),
+        "github_username":  session.get("github_username"),
+        "avatar_url":       session.get("avatar_url"),
+        "session_token":    session.get("session_token"),
     }
 
     manifest_file = SESSIONS_DIR / code / "manifest.json"
