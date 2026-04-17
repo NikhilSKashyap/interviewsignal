@@ -7,7 +7,7 @@
 
 **An AI-native interview platform.** Type `/interview` in Claude Code, Codex, Cursor, or any AI coding assistant — it captures your entire thought process as you solve a problem and sends a structured, tamper-evident audit to the hiring manager.
 
-No contrived puzzles. No whiteboard anxiety. No bias. Just signal.
+No contrived puzzles. No whiteboard anxiety. Just signal.
 
 ---
 
@@ -23,35 +23,6 @@ Meanwhile, every one of those candidates uses AI coding assistants every day. Yo
 
 ---
 
-## What you get
-
-**For hiring managers:**
-- A timestamped audit of everything the candidate did — every prompt, every tool call, every file written
-- AI grading against your own rubric (not a canned scoring system)
-- Optional blind grading: enable anonymization to see scores before names — candidates appear as "Candidate A", "B", "C" until you click Reveal
-- Grade-before-Reveal enforcement with a tamper-evident audit trail — provable merit-first hiring
-- Mutable grades with revision tracking: revise a score after the fact with a required reason; the audit records whether identity was known at revision time
-- After Reveal: candidate name, GitHub username, avatar, and a link to their session repo
-- Automated session flags — suspiciously fast completions, low interaction counts, uniform prompt timing, and no iteration patterns are flagged at a glance so you skip bot submissions in seconds
-- Comment threads, hire/reject decisions, all hash-chained
-
-**For candidates:**
-- Work the way you actually work — with AI assistance, in your own environment
-- Get evaluated on your thinking, not your ability to memorise algorithms
-- No file transfers, no email attachments — just a short code
-- GitHub OAuth: one account, one submission — no re-takes under a different name
-- A public GitHub repo (`interview-{code}`) is automatically created at session start; your final code is pushed on submit — the HM sees the repo link only after grading
-- Session debrief on submit — Claude tells you what you did well and what you missed, immediately (always shown — it's Claude's analysis, not the HM's evaluation)
-- Score access — run `interview score <CODE>` once the HM grades (if sharing is enabled); debrief is always included
-
-**For teams:**
-- Close the interview loop in half the time
-- A written record of the hiring decision from problem to offer
-- Works inside your existing toolchain — no new platform to log into
-- Granular score sharing controls — decide per-interview what candidates see: nothing, a number, a breakdown, or full notes
-
----
-
 ## Install
 
 ```bash
@@ -59,8 +30,6 @@ pip install interviewsignal && interview install
 ```
 
 Requires Python 3.10+ and one of: [Claude Code](https://claude.ai/code), [Codex](https://openai.com/codex), [Cursor](https://cursor.com), [Gemini CLI](https://github.com/google-gemini/gemini-cli), [Aider](https://aider.chat).
-
-Then configure grading and (optionally) the relay:
 
 ```bash
 interview configure-api-key    # Anthropic API key — for grading
@@ -95,13 +64,10 @@ You get back a code like `INT-4829-XK`. Share it with your candidate — that's 
 
 ```bash
 pip install interviewsignal && interview install
-```
-
-```
 /interview INT-4829-XK
 ```
 
-If the relay has GitHub OAuth configured, a browser tab opens for GitHub login — one account, one submission. The problem appears once auth completes. A public GitHub repo (`interview-{code}`) is created automatically and a git remote named `interview` is wired up in your working directory. Relay is auto-configured — no API keys or file transfers required. Work normally — ask the AI questions, write code, run tests. The session records everything automatically.
+If the relay has GitHub OAuth configured, a browser tab opens for GitHub login — one account, one submission. The problem appears once auth completes. A public GitHub repo (`interview-{code}`) is created automatically and a git remote named `interview` is wired up in your working directory. Work normally — ask the AI questions, write code, run tests. The session records everything automatically.
 
 When done:
 
@@ -109,36 +75,35 @@ When done:
 /submit
 ```
 
-The session is sealed, sent to the relay, and Claude generates a session debrief — an honest reflection on what the candidate did well, what they missed, and how they used the AI. It's shown immediately in the terminal. Once the HM grades, the candidate can also run:
+The session is sealed, pushed to the relay, and Claude writes a session debrief — an honest reflection on what you did well, what you missed, and how you used the AI. It's shown in the terminal immediately. Once the HM grades, you can also run:
 
 ```bash
 interview score INT-4829-XK
 ```
 
-to see their score (if the HM has enabled sharing).
+to see your score (if the HM has enabled sharing).
 
 ### Hiring manager — review
 
 ```bash
-interview dashboard
-# → http://localhost:7832
+interview dashboard   # → http://localhost:7832
 ```
 
-Candidates appear as "Candidate A", "Candidate B" — scores first, names second. Click into any candidate to see the full transcript (prompts + AI reasoning + tool calls), dimension scores, and diff. Add comments. Record your decision. Click Reveal when you're ready to unmask. Use **Verify Chain** to confirm the session log is tamper-evident.
+Click into any candidate to see the full transcript (prompts + AI reasoning + tool calls), dimension scores, and diff. Add comments. Record your decision. If anonymization is enabled, candidates appear as "Candidate A", "Candidate B" — click Reveal when you're ready to unmask. Reveal is disabled until a grade is saved.
 
-Control what candidates can see after grading with the **Score Sharing** panel on each candidate's page — choose between no sharing, overall score only, full dimension breakdown, or breakdown with HM notes. Claude's session debrief is always shared automatically and is not an HM toggle.
+Use **Verify Chain** to confirm the session log is tamper-evident. Control what candidates see after grading with the **Score Sharing** panel — nothing, overall score, full breakdown, or breakdown with notes. Claude's session debrief is always shared automatically regardless of this setting.
 
 ---
 
 ## How it works
 
-interviewsignal installs as a skill into your AI coding assistant. It captures the full conversation — the candidate's prompts, the AI's reasoning before each action, every tool call (reads, writes, bash commands) — and builds an append-only, hash-chained session log. On `/submit`, the log is sealed and pushed to the relay. The HM grades from their dashboard using their own AI key.
+interviewsignal installs as a skill into your AI coding assistant. It captures the full conversation — prompts, AI reasoning before each action, every tool call (reads, writes, bash commands) — and builds an append-only, hash-chained session log. On `/submit`, the log is sealed and pushed to the relay. The HM grades from their dashboard using their own AI key.
 
 ```
 Candidate side                          HM side
 ─────────────────────────               ───────────────────────
-interview configure-relay               interview configure-relay
-  ↓ auto-registered via relay             ↓ gets unique hm_key
+                                        interview configure-relay
+                                          ↓ gets unique hm_key
 
 /interview hm                           ← share code INT-4829-XK
   ↓ creates interview
@@ -147,45 +112,46 @@ interview configure-relay               interview configure-relay
 /interview INT-4829-XK                  interview dashboard
   ↓ fetches problem from relay            ↓ localhost:7832
   ↓ relay auto-configured locally         ↓ candidates arrive
-Session starts                            ↓ anonymous by default
-  ↓ hooks capture every tool call         ↓ Grade All / Grade Selected
-  ↓ append-only events.jsonl              ↓ score before name
-  ↓ hash chain (tamper-evident)           ↓ Reveal unlocks after grading
-/submit                                   ↓ comment thread
-  ↓ session sealed                        ↓ hire / next round / reject
-  ↓ pushed to relay                       ↓ full audit trail
+Session starts                            ↓ Grade All / Grade Selected
+  ↓ hooks capture every tool call         ↓ Reveal unlocks after grading
+  ↓ append-only events.jsonl              ↓ comment thread
+  ↓ hash chain (tamper-evident)           ↓ hire / next round / reject
+/submit                                   ↓ full audit trail
+  ↓ session sealed
+  ↓ git push → interview-{code} repo
+  ↓ pushed to relay
+  ↓ Claude debrief written + shown
 ```
 
 **On submit:**
 1. `session seal` — finalises hash chain, captures git diff (start → end)
-2. Git push — commits all changes and pushes to the candidate's `interview-{code}` repo (non-blocking; session continues on failure)
-3. Push to relay — sealed session (events + manifest + report + debrief + repo URL) stored server-side; automated flags computed immediately
-4. Claude debrief — reads the event log and writes a focused session reflection; shown to candidate immediately
-
-**On the HM side:**
-5. HM grades from dashboard — sends timeline + rubric + diff to their AI key, returns structured JSON scores
+2. Git push — commits all changes to the candidate's `interview-{code}` repo (non-blocking)
+3. Push to relay — sealed session (events + manifest + report + debrief + repo URL) stored server-side
+4. Claude debrief — reads the event log, writes `debrief.txt`, shown to candidate immediately
 
 **The integrity model:**
 
-Every HM action — grading, revealing identity, adding a comment, recording a decision, revising a grade — is logged with a SHA-256 hash chain. In relay mode, the relay's server-side timestamp is outside the HM's control — that's the integrity anchor. In email mode, key events are silently emailed to a designated audit recipient (typically HR) with the mail server's timestamp as the anchor. Reveal is physically disabled until a grade is saved, ensuring blind evaluation is provable.
+Every HM action — grading, revealing identity, adding a comment, recording a decision, revising a grade — is appended to a SHA-256 hash chain. In relay mode, the relay's server-side timestamp is the integrity anchor. In email mode, key events are silently emailed to a designated audit recipient with the mail server's timestamp as the anchor. Reveal is physically disabled until a grade is saved.
 
-Grade revisions require an explicit reason and record whether the candidate's identity was revealed at the time of revision — the key data point for proving merit-first evaluation even when scores are adjusted.
+Grade revisions require an explicit reason. The audit records whether identity was revealed at revision time:
 
 ```
-[2026-04-13T10:47:22Z] grade_recorded       INT-4829-XK  hash=d4abe5e6  score=7.7
-[2026-04-13T10:52:09Z] identity_revealed    INT-4829-XK  hash=2370be19
-[2026-04-13T11:30:00Z] grade_revised        INT-4829-XK  hash=9f2c1a3b  7.7→8.2  revealed=true
+[2026-04-13T10:47:22Z] grade_recorded    INT-4829-XK  hash=d4abe5e6  score=7.7
+[2026-04-13T10:52:09Z] identity_revealed INT-4829-XK  hash=2370be19
+[2026-04-13T11:30:00Z] grade_revised     INT-4829-XK  hash=9f2c1a3b  7.7→8.2  revealed=true
 ```
 
-*"Identity revealed 4.8 minutes after grade was recorded."* That one line proves merit came first. And if the score was later revised, the audit shows whether identity was already known — so even post-reveal adjustments are traceable.
+Use `GET /audit/verify` to walk the full chain and confirm integrity.
 
 ---
 
 ## Relay
 
-The relay stores interview packages and candidate sessions so hiring managers and candidates only need to share a short code — no file transfers, no email attachments.
+The relay stores interview packages and candidate sessions so HMs and candidates only need to share a short code — no file transfers, no email attachments.
 
-Run `interview configure-relay` to choose:
+```bash
+interview configure-relay
+```
 
 ```
 How do you want to deliver interview sessions?
@@ -196,23 +162,28 @@ How do you want to deliver interview sessions?
 
 ### Option 1 — Your own relay (~$5/mo, fully private)
 
-Deploy in one click:
-
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/new/template?template=https://github.com/NikhilSKashyap/interviewsignal)
 
 After deploying:
-1. Set environment variable `RELAY_API_KEY` (any random string) in Railway → Variables
-2. Add a `/data` volume when prompted — this is where sessions are stored
+1. Set `RELAY_API_KEY` (any random string) in Railway → Variables
+2. Add a `/data` volume — this is where sessions are stored
 3. Copy your Railway URL (e.g. `https://myrelay.up.railway.app`)
 4. Run `interview configure-relay` → option 1 → paste URL
 
-#### GitHub OAuth (recommended)
+Or with Docker:
+
+```bash
+docker run -e RELAY_API_KEY=secret -v /data:/data -p 8080:8080 \
+  ghcr.io/nikhilskashyap/interviewsignal:latest
+```
+
+#### GitHub OAuth
 
 Prevent candidates from submitting multiple times under different names. One GitHub account = one submission per interview code.
 
-This is a **relay operator** step — done once when you deploy the relay, not something HMs configure per-interview.
+This is a **relay operator** step — done once at deploy time, not something HMs configure per-interview.
 
-Add these to your relay's environment variables (Railway → Variables tab):
+Add to your relay's environment variables:
 ```
 GITHUB_CLIENT_ID=<your_client_id>
 GITHUB_CLIENT_SECRET=<your_client_secret>
@@ -223,20 +194,11 @@ Create the GitHub OAuth App at `github.com/settings/developers`:
 - **Application name:** your company or team name
 - **Callback URL:** `https://myrelay.up.railway.app/auth/github/callback`
 
-When configured, candidates see a browser auth step before their session starts — they log in with any GitHub account (personal or org member). The relay enforces uniqueness server-side. On Reveal, the HM sees the candidate's GitHub username and avatar alongside their email.
+When configured, candidates see a browser auth step at session start. The relay enforces uniqueness server-side. On Reveal, the HM sees the candidate's GitHub username, avatar, and a link to their session repo.
 
-Without GitHub OAuth configured, candidates are identified by email only (no browser pop-up).
+Without GitHub OAuth, candidates are identified by email only.
 
-Your data stays in your own Railway account. Cost is ~$5/month (Railway Hobby plan).
-
-Or run it anywhere with Docker:
-
-```bash
-docker run -e RELAY_API_KEY=secret -v /data:/data -p 8080:8080 \
-  ghcr.io/nikhilskashyap/interviewsignal:latest
-```
-
-See [docs/relay-api.md](docs/relay-api.md) for the full relay API contract, data layout, and deployment details.
+See [docs/relay-api.md](docs/relay-api.md) for the full API contract and data layout.
 
 ### Option 2 — Email only (free, no server)
 
@@ -245,19 +207,15 @@ interview configure-relay   # choose 2
 interview configure-email   # set up SMTP credentials
 ```
 
-Candidates run `/submit` → report is emailed directly to the HM. The HM saves the JSON attachment to `~/.interview/received/` and it appears in the dashboard. No server needed, no ongoing cost. Trade-off: manual file handling and the dashboard can't re-grade from raw events.
+Reports are emailed directly to the HM on `/submit`. The HM saves the JSON attachment to `~/.interview/received/` and it appears in the dashboard.
 
 ---
 
 ## Enterprise configuration
 
-Companies that don't issue personal API keys — or that route all AI traffic through an internal gateway — can configure a custom LLM endpoint:
-
 ```bash
 interview configure-llm
 ```
-
-This covers three patterns:
 
 | Pattern | What to set |
 |---|---|
@@ -265,7 +223,7 @@ This covers three patterns:
 | Internal proxy (Floodgate, corporate gateway) | Base URL + optional key; proxy handles auth |
 | OpenAI-compatible endpoint | Base URL + key + `format=openai` |
 
-**What gets configured (`~/.interview/config.json`):**
+Config stored in `~/.interview/config.json`:
 
 ```json
 {
@@ -277,44 +235,13 @@ This covers three patterns:
 }
 ```
 
-The API key is optional — leave it blank if your proxy handles auth at the network or SSO level. Extra headers let you pass team/project routing headers required by some gateways.
-
-Environment variable overrides (useful for CI or shared machines):
+Environment variable overrides:
 
 ```bash
 ANTHROPIC_API_KEY=...           # API key
 ANTHROPIC_BASE_URL=...          # base URL override
 INTERVIEW_GRADING_MODEL=...     # model name override
 ```
-
----
-
-## True meritocracy
-
-Most companies say they hire on merit. Almost none of them do — because the process doesn't allow it.
-
-When you know who someone is before you evaluate them, bias isn't a failure of character. It's a failure of process. The name on the resume, the university on the screen share, the face on the Zoom — they all get into your head before the first line of code is written.
-
-`interviewsignal` makes meritocracy structurally possible:
-
-**Same tools, same environment.** Every candidate works with the same AI assistant they use on the job. The person who drilled Leetcode for six months has no advantage over the person who just builds things. The only variable is how well they think.
-
-**You can't prevent a candidate from having a second screen. Neither can a Leetcode proctoring tool.** The difference is that with interviewsignal, gaming it well requires understanding the problem — and that's the signal. And if someone tries to automate the whole thing, the dashboard flags it: suspiciously fast sessions, zero iteration, metronomic prompt timing. The HM sees the flag before they open the transcript.
-
-**One identity, one submission.** GitHub OAuth ties each submission to a verified GitHub account. Re-taking under a different name or email is blocked at the relay — not by policy, but by technical enforcement. The candidate's GitHub username and a link to their session repo are sealed into the session and only revealed after the grade is locked.
-
-**Score before name, always.** Grades are locked in before identity is revealed — not as a policy, but as a technical constraint. You cannot click Reveal until a score is saved. The order of events is cryptographically provable. No resume, no university, no previous employer — just the work and how they think.
-
-**A tamper-evident record.** Every action — grading, revealing identity, adding a comment, recording a decision — is hash-chained with a timestamp outside the HM's control. The audit trail doesn't just log what happened. It proves it.
-
-```
-[2026-04-13T10:47:22Z] grade_recorded     INT-4829-XK  hash=d4abe5e6
-[2026-04-13T10:52:09Z] identity_revealed  INT-4829-XK  hash=2370be19
-```
-
-*"Identity revealed 4.8 minutes after grade was recorded."*
-
-That one line is the whole argument. You hired the person with the best score. You can prove it. Not because you were careful, but because the system made any other sequence impossible.
 
 ---
 
@@ -346,11 +273,9 @@ That one line is the whole argument. You hired the person with the best score. Y
 | Timestamps | Millisecond precision on every event |
 | Session debrief | Claude's post-session reflection (written on /submit, stored as debrief.txt) |
 
-The session log is append-only and hash-chained. Any tampering breaks the chain. The HM dashboard includes a **Verify Chain** button that re-derives every SHA-256 hash and flags any mismatch, along with the relay's server-side submission timestamp.
+The session log is append-only and hash-chained. Any tampering breaks the chain. The dashboard includes a **Verify Chain** button.
 
-**Automated flags** are computed on submission: unusually fast sessions, low tool-call counts, no edit-after-error patterns, and suspiciously uniform prompt timing. Flags appear as colored indicators (green / yellow / red) in the dashboard candidate list — the HM sees them before opening any transcript.
-
-What is **not** captured: raw file contents (only paths and hashes, for privacy). The grader evaluates the conversation, timeline, and diff — not file contents.
+Raw file contents are never stored — only paths, hashes, and command summaries.
 
 ---
 
@@ -362,9 +287,8 @@ interview configure-api-key    # Anthropic API key (direct access)
 interview configure-llm        # Enterprise: custom endpoint, proxy, format, extra headers
 
 # Delivery
-interview configure-relay         # Relay URL + auto-register HM account
-interview configure-email         # SMTP fallback (no relay)
-interview configure-github-app    # GitHub OAuth for relay (relay operators only)
+interview configure-relay      # Relay URL + auto-register HM account
+interview configure-email      # SMTP fallback (no relay)
 
 # Runtime
 interview dashboard            # Local HM dashboard at localhost:7832
@@ -379,11 +303,11 @@ All config stored in `~/.interview/config.json` (permissions: 600).
 
 ## Privacy
 
-**Candidate sessions** are stored on the relay (or locally, in email mode). The relay stores: `events.jsonl`, `manifest.json`, `report.html`, `report.json`, and `debrief.txt`. Raw file contents are never stored — only paths, hashes, and command summaries.
+Candidate sessions stored on relay: `events.jsonl`, `manifest.json`, `report.html`, `report.json`, `debrief.txt`. Raw file contents are never stored.
 
-**Grading** sends the session timeline and git diff to the configured AI endpoint (Anthropic API by default, or your enterprise proxy). No raw file contents. The grading call uses your own API key — interviewsignal never sees it.
+Grading sends the session timeline and git diff to the configured AI endpoint using your own API key — interviewsignal never sees it.
 
-**Self-hosted relay:** Run the relay inside your own infrastructure and nothing leaves your network. See [docs/relay-api.md](docs/relay-api.md) for the full API contract and data layout.
+Self-hosted relay: nothing leaves your network. See [docs/relay-api.md](docs/relay-api.md).
 
 No telemetry. No analytics. No tracking.
 
@@ -397,13 +321,13 @@ Python stdlib only (no external dependencies for core or relay). Grading via [An
 
 ## Contributing
 
-**Prompts** — the prompts candidates experience (session debrief, grading instructions) are open and community-editable. See [`prompts/debrief.md`](prompts/debrief.md) for the debrief generation instructions and contribution guidelines. Good prompts improve what every candidate sees after every interview.
+**Prompts** — the debrief and grading instructions are open and community-editable. See [`prompts/debrief.md`](prompts/debrief.md) for contribution guidelines. Good prompts improve what every candidate sees after every interview.
 
-**Worked examples** are the most valuable contribution. Run a real interview session, save the output to `worked/{slug}/`, write an honest `review.md` evaluating what the grading got right and wrong, open a PR.
+**Worked examples** — run a real session, save output to `worked/{slug}/`, write an honest `review.md`, open a PR.
 
-**Platform support** — each new platform is a ~30 line adapter in `cli.py`. If you use an AI coding tool not listed above, adding support is straightforward.
+**Platform support** — each new platform is a ~30 line adapter in `cli.py`.
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for module responsibilities and [docs/relay-api.md](docs/relay-api.md) for the full relay API contract.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for module responsibilities and [docs/relay-api.md](docs/relay-api.md) for the relay API contract.
 
 ---
 
