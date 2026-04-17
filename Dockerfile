@@ -2,7 +2,7 @@ FROM python:3.11-slim
 
 WORKDIR /app
 COPY . .
-RUN pip install -e . --no-deps --quiet
+RUN pip install . --no-deps --quiet
 
 EXPOSE 8080
 
