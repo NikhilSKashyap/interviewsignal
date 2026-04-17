@@ -116,11 +116,11 @@ When the user types `/interview` or `/submit`, invoke the Skill tool with `skill
         }]
     }]
 
-    # Stop hook — seal session if one is active
+    # Stop hook — reads conversation log, logs user_prompt + assistant_message
     hooks["Stop"] = [{
         "hooks": [{
             "type": "command",
-            "command": f"{sys.executable} -m interview.core.session status",
+            "command": f"{hook_cmd} stop",
         }]
     }]
 

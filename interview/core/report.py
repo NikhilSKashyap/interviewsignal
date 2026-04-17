@@ -8,6 +8,7 @@ from a sealed session. The HTML is the email attachment HMs open.
 import argparse
 import json
 import time
+from html import escape
 from pathlib import Path
 
 INTERVIEW_DIR = Path.home() / ".interview"
@@ -45,16 +46,17 @@ def _event_to_html_row(event: dict) -> str:
     payload = event.get("payload", {})
 
     if etype == "session_start":
+        commit = ((payload.get('git_snapshot') or {}).get('commit') or 'N/A')[:8]
         return f"""
         <div class="event event-start">
           <span class="event-time">{ts}</span>
           <span class="event-type">Session Started</span>
-          <div class="event-detail">Git: {((payload.get('git_snapshot') or {}).get('commit') or 'N/A')[:8]}</div>
+          <div class="event-detail">Git: {escape(commit)}</div>
         </div>"""
 
     elif etype == "tool_call":
-        tool = payload.get("tool_name", "")
-        inputs = json.dumps(payload.get("tool_input", {}), indent=2)[:400]
+        tool = escape(payload.get("tool_name", ""))
+        inputs = escape(json.dumps(payload.get("tool_input", {}), indent=2)[:400])
         return f"""
         <div class="event event-tool">
           <span class="event-time">{ts}</span>
@@ -63,8 +65,8 @@ def _event_to_html_row(event: dict) -> str:
         </div>"""
 
     elif etype == "tool_result":
-        tool = payload.get("tool_name", "")
-        summary = json.dumps(payload.get("response_summary", {}))[:200]
+        tool = escape(payload.get("tool_name", ""))
+        summary = escape(json.dumps(payload.get("response_summary", {}))[:200])
         return f"""
         <div class="event event-result">
           <span class="event-time">{ts}</span>
@@ -73,7 +75,7 @@ def _event_to_html_row(event: dict) -> str:
         </div>"""
 
     elif etype == "user_prompt":
-        text = payload.get("text", "")
+        text = escape(payload.get("text", ""))
         return f"""
         <div class="event event-user-prompt">
           <span class="event-time">{ts}</span>
@@ -82,7 +84,7 @@ def _event_to_html_row(event: dict) -> str:
         </div>"""
 
     elif etype == "thinking":
-        plan = payload.get("plan", payload.get("text", payload.get("reasoning", "")))
+        plan = escape(payload.get("plan", payload.get("text", payload.get("reasoning", ""))))
         return f"""
         <div class="event event-thinking">
           <span class="event-time">{ts}</span>
@@ -91,7 +93,7 @@ def _event_to_html_row(event: dict) -> str:
         </div>"""
 
     elif etype == "assistant_message":
-        text = payload.get("text", "")
+        text = escape(payload.get("text", ""))
         return f"""
         <div class="event event-assistant">
           <span class="event-time">{ts}</span>
@@ -100,7 +102,7 @@ def _event_to_html_row(event: dict) -> str:
         </div>"""
 
     elif etype == "session_end":
-        elapsed = payload.get("elapsed_minutes", 0)
+        elapsed = escape(str(payload.get("elapsed_minutes", 0)))
         return f"""
         <div class="event event-end">
           <span class="event-time">{ts}</span>
@@ -122,21 +124,21 @@ def _grading_html(grading: dict | None) -> str:
         color = "#22c55e" if score >= 7 else "#f59e0b" if score >= 5 else "#ef4444"
         dims_html += f"""
         <div class="dim-row">
-          <div class="dim-name">{d['name']}</div>
+          <div class="dim-name">{escape(str(d['name']))}</div>
           <div class="dim-bar-wrap">
             <div class="dim-bar" style="width:{bar_width}%;background:{color}"></div>
           </div>
-          <div class="dim-score">{score}/10</div>
-          <div class="dim-just">{d.get('justification','')}</div>
+          <div class="dim-score">{escape(str(score))}/10</div>
+          <div class="dim-just">{escape(str(d.get('justification','')))}</div>
         </div>"""
 
     overall = grading.get("overall_score", 0)
-    summary = grading.get("summary", "")
-    standouts = "".join(f"<li>{s}</li>" for s in grading.get("standout_moments", []))
-    concerns = "".join(f"<li>{c}</li>" for c in grading.get("concerns", []))
+    summary = escape(grading.get("summary", ""))
+    standouts = "".join(f"<li>{escape(str(s))}</li>" for s in grading.get("standout_moments", []))
+    concerns = "".join(f"<li>{escape(str(c))}</li>" for c in grading.get("concerns", []))
 
     return f"""
-    <div class="overall-score">Overall: <strong>{overall}/10</strong></div>
+    <div class="overall-score">Overall: <strong>{escape(str(overall))}/10</strong></div>
     <p class="summary">{summary}</p>
     <div class="dims">{dims_html}</div>
     {"<div class='standouts'><h4>Standout Moments</h4><ul>" + standouts + "</ul></div>" if standouts else ""}
@@ -164,14 +166,15 @@ def generate_html_report(code: str) -> str:
     truncated = len(all_diff_lines) > DIFF_CAP
     diff_html = ""
     for line in all_diff_lines[:DIFF_CAP]:
+        safe_line = escape(line)
         if line.startswith("+") and not line.startswith("+++"):
-            diff_html += f'<div class="diff-add">{line}</div>'
+            diff_html += f'<div class="diff-add">{safe_line}</div>'
         elif line.startswith("-") and not line.startswith("---"):
-            diff_html += f'<div class="diff-del">{line}</div>'
+            diff_html += f'<div class="diff-del">{safe_line}</div>'
         elif line.startswith("@@"):
-            diff_html += f'<div class="diff-hunk">{line}</div>'
+            diff_html += f'<div class="diff-hunk">{safe_line}</div>'
         else:
-            diff_html += f'<div class="diff-ctx">{line}</div>'
+            diff_html += f'<div class="diff-ctx">{safe_line}</div>'
     if truncated:
         remaining = len(all_diff_lines) - DIFF_CAP
         diff_html += (
@@ -184,7 +187,7 @@ def generate_html_report(code: str) -> str:
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Interview Report — {code}</title>
+<title>Interview Report — {escape(code)}</title>
 <style>
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
   body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -260,16 +263,16 @@ def generate_html_report(code: str) -> str:
   <div class="header">
     <h1>Interview Report</h1>
     <div class="meta">
-      <span class="badge">{code}</span>
-      <span class="badge">{started} → {ended}</span>
-      <span class="badge">{elapsed} min</span>
-      <span class="badge score-badge">⭐ {overall} / 10</span>
+      <span class="badge">{escape(code)}</span>
+      <span class="badge">{escape(started)} → {escape(ended)}</span>
+      <span class="badge">{escape(str(elapsed))} min</span>
+      <span class="badge score-badge">⭐ {escape(str(overall))} / 10</span>
     </div>
   </div>
 
   <section>
     <h2>Problem Statement</h2>
-    <div class="problem-box">{manifest.get('problem', '')}</div>
+    <div class="problem-box">{escape(manifest.get('problem', ''))}</div>
   </section>
 
   <section>
@@ -291,8 +294,8 @@ def generate_html_report(code: str) -> str:
     <h2>Integrity</h2>
     <div class="integrity">
       <div class="label">✓ Hash-chained session log — tamper-evident</div>
-      <div class="hash">Final hash: {manifest.get('final_hash', 'N/A')}</div>
-      <div class="hash">Events: {manifest.get('event_count', 0)} | Sealed: {str(manifest.get('sealed', False))}</div>
+      <div class="hash">Final hash: {escape(str(manifest.get('final_hash', 'N/A')))}</div>
+      <div class="hash">Events: {escape(str(manifest.get('event_count', 0)))} | Sealed: {escape(str(manifest.get('sealed', False)))}</div>
     </div>
   </section>
 

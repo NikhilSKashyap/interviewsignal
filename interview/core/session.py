@@ -101,7 +101,11 @@ def _load_active_session() -> dict | None:
 
 
 def _save_active_session(session_meta: dict):
-    ACTIVE_SESSION_FILE.write_text(json.dumps(session_meta, indent=2))
+    # Atomic write: concurrent tool calls from Claude Code can race here.
+    # Write to .tmp then rename — same pattern used throughout the codebase.
+    tmp = ACTIVE_SESSION_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(session_meta, indent=2))
+    tmp.replace(ACTIVE_SESSION_FILE)
 
 
 def _clear_active_session():

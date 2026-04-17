@@ -20,8 +20,9 @@ import time
 import urllib.error
 import urllib.request
 import webbrowser
+from html import escape
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlparse, quote
 
 from interview.core.transport import get_relay_url, get_transport
 
@@ -421,9 +422,9 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
     # Comments section
     comments_html = ""
     for c in raw_comments:
-        ts = c.get("created_at") or c.get("timestamp_iso", "")
-        author = c.get("author", "HM")
-        text = c.get("text", "")
+        ts = escape(c.get("created_at") or c.get("timestamp_iso", ""))
+        author = escape(c.get("author", "HM"))
+        text = escape(c.get("text", ""))
         comments_html += f"""
         <div class="comment">
           <div class="comment-meta">{author} · {ts}</div>
@@ -436,22 +437,24 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
     decision_html = ""
     if decision_obj:
         d = decision_obj.get("decision", "")
-        recorded = decision_obj.get("recorded_at") or decision_obj.get("timestamp_iso", "")
+        recorded = escape(decision_obj.get("recorded_at") or decision_obj.get("timestamp_iso", ""))
         colors = {"hire": "#22c55e", "next_round": "#60a5fa", "reject": "#ef4444"}
         labels_map = {"hire": "✓ Hired", "next_round": "→ Next Round", "reject": "✗ Rejected"}
+        decision_label = escape(labels_map.get(d, d))
+        decision_reason = escape(decision_obj.get("reason", "—"))
         decision_html = f"""
         <div class="current-decision" style="color:{colors.get(d,'#888')}">
-          Current decision: <strong>{labels_map.get(d, d)}</strong>
+          Current decision: <strong>{decision_label}</strong>
           <span style="color:#555;font-size:12px;margin-left:12px">{recorded}</span>
         </div>
-        <div style="color:#888;font-size:13px;margin-top:8px">Reason: {decision_obj.get('reason','—')}</div>"""
+        <div style="color:#888;font-size:13px;margin-top:8px">Reason: {decision_reason}</div>"""
 
     # Audit trail
     audit_rows = ""
     for e in audit_events:
         etype = e.get("type", "")
-        ts = e.get("ts") or e.get("timestamp_iso", "")
-        h = e.get("hash", "")[:8]
+        ts = escape(e.get("ts") or e.get("timestamp_iso", ""))
+        h = escape(e.get("hash", "")[:8])
         color_map = {
             "grade_recorded": "#fbbf24",
             "identity_revealed": "#60a5fa",
@@ -462,7 +465,7 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
         color = color_map.get(etype, "#555")
         audit_rows += (
             f'<div class="audit-row">'
-            f'<span style="color:{color}">{etype}</span>'
+            f'<span style="color:{color}">{escape(etype)}</span>'
             f'<span class="audit-ts">{ts}</span>'
             f'<span class="audit-hash">{h}</span>'
             f'</div>'
@@ -473,18 +476,23 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
         reveal_delta = ""
         for e in audit_events:
             if e.get("type") == "identity_revealed":
-                reveal_delta = e.get("delta", "")
+                reveal_delta = escape(e.get("delta", ""))
                 break
     else:
-        reveal_delta = get_reveal_delta(code) if audit_events else ""
+        reveal_delta = escape(get_reveal_delta(code)) if audit_events else ""
 
-    cid_attr = f'data-cid="{cid}"' if cid else ""
+    safe_code = escape(code)
+    safe_cid = escape(cid) if cid else ""
+    # Use JSON encoding for JS string literals to prevent JS injection
+    js_code = json.dumps(code)
+    js_cid  = json.dumps(cid)
+    cid_attr = f'data-cid="{safe_cid}"' if cid else ""
 
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Candidate — {code}</title>
+<title>Candidate — {safe_code}</title>
 <style>
   {SHARED_CSS}
   .layout {{ display: grid; grid-template-columns: 1fr 340px; gap: 24px; }}
@@ -514,7 +522,7 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
 <body>
 <div class="topbar">
   <h1>interviewsignal</h1>
-  <span class="tagline">{code}</span>
+  <span class="tagline">{safe_code}</span>
   <a href="/">← Dashboard</a>
 </div>
 <div class="main">
@@ -534,7 +542,7 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
       <div class="section-title">Comments <span style="color:#555;font-size:10px">(append-only · audited)</span></div>
       <div id="comments-list">{comments_html}</div>
       <textarea id="comment-input" placeholder="Add a note... (cannot be edited or deleted)"></textarea>
-      <button class="btn btn-sm" style="margin-top:8px" id="btn-add-comment" data-code="{code}" {cid_attr}>Add Comment</button>
+      <button class="btn btn-sm" style="margin-top:8px" id="btn-add-comment" data-code="{safe_code}" {cid_attr}>Add Comment</button>
     </div>
 
     <!-- Decision -->
@@ -544,22 +552,22 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
       <div id="decision-display">{decision_html}</div>
       <input class="reason-input" id="decision-reason" placeholder="Reason (optional but recommended)">
       <div class="decision-btns">
-        <button class="btn btn-sm btn-hire" id="btn-hire" data-code="{code}" {cid_attr} {'disabled' if not graded else ''}>✓ Hire</button>
-        <button class="btn btn-sm btn-next" id="btn-next" data-code="{code}" {cid_attr} {'disabled' if not graded else ''}>→ Next Round</button>
-        <button class="btn btn-sm btn-reject" id="btn-reject" data-code="{code}" {cid_attr} {'disabled' if not graded else ''}>✗ Reject</button>
+        <button class="btn btn-sm btn-hire" id="btn-hire" data-code="{safe_code}" {cid_attr} {'disabled' if not graded else ''}>✓ Hire</button>
+        <button class="btn btn-sm btn-next" id="btn-next" data-code="{safe_code}" {cid_attr} {'disabled' if not graded else ''}>→ Next Round</button>
+        <button class="btn btn-sm btn-reject" id="btn-reject" data-code="{safe_code}" {cid_attr} {'disabled' if not graded else ''}>✗ Reject</button>
       </div>
     </div>
 
     <!-- Reveal -->
     {'<div class="panel"><div class="section-title">Identity</div>' +
      ('<div class="reveal-note">✓ Blind grading confirmed — ' + reveal_delta + '</div>' if revealed else
-      ('<button class="btn btn-sm" id="btn-reveal-detail" data-code="' + code + '" ' + (f'data-cid="{cid}"' if cid else '') + ' ' + ('disabled title="Grade first to unlock Reveal"' if not graded else '') + '>Reveal Identity' + (' 🔒' if not graded else '') + '</button>' +
+      ('<button class="btn btn-sm" id="btn-reveal-detail" data-code="' + safe_code + '" ' + (f'data-cid="{safe_cid}"' if cid else '') + ' ' + ('disabled title="Grade first to unlock Reveal"' if not graded else '') + '>Reveal Identity' + (' 🔒' if not graded else '') + '</button>' +
        ('<div style="font-size:11px;color:#555;margin-top:8px">Reveal is locked until a grade is saved. This ensures blind evaluation is preserved in the audit trail.</div>' if not graded else ''))) +
      '</div>'}
 
     <!-- Audit trail -->
     <div class="panel">
-      <div class="section-title">Audit Trail <a href="/audit?code={code}" style="font-size:10px;color:#444;font-weight:400;float:right">full log ↗</a></div>
+      <div class="section-title">Audit Trail <a href="/audit?code={quote(code, safe='')}" style="font-size:10px;color:#444;font-weight:400;float:right">full log ↗</a></div>
       {audit_rows if audit_rows else '<div style="color:#555;font-size:12px">No HM actions recorded yet.</div>'}
     </div>
 
@@ -570,7 +578,7 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
         Verify the candidate's session log hasn't been tampered with.
         Each event is SHA-256 hash-chained — any edit breaks the chain.
       </div>
-      <button class="btn btn-sm" id="btn-verify" data-code="{code}" {cid_attr}>Verify Chain</button>
+      <button class="btn btn-sm" id="btn-verify" data-code="{safe_code}" {cid_attr}>Verify Chain</button>
       <div id="verify-result" style="margin-top:12px;font-size:12px;display:none"></div>
     </div>
   </div>
@@ -578,8 +586,8 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
 
 </div>
 <script>
-  const _code = "{code}";
-  const _cid  = "{cid}";
+  const _code = {js_code};
+  const _cid  = {js_cid};
 
   document.getElementById('btn-add-comment')?.addEventListener('click', function() {{
     const text = document.getElementById('comment-input').value.trim();
