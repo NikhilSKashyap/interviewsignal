@@ -32,7 +32,8 @@ Meanwhile, every one of those candidates uses AI coding assistants every day. Yo
 - Grade-before-Reveal enforcement with a tamper-evident audit trail — provable merit-first hiring
 - Mutable grades with revision tracking: revise a score after the fact with a required reason; the audit records whether identity was known at revision time
 - After Reveal: candidate name, GitHub username, avatar, and a link to their session repo
-- Comment threads, hire/reject decisions, all hash-chained and email-anchored
+- Automated session flags — suspiciously fast completions, low interaction counts, uniform prompt timing, and no iteration patterns are flagged at a glance so you skip bot submissions in seconds
+- Comment threads, hire/reject decisions, all hash-chained
 
 **For candidates:**
 - Work the way you actually work — with AI assistance, in your own environment
@@ -155,16 +156,18 @@ Session starts                            ↓ anonymous by default
   ↓ pushed to relay                       ↓ full audit trail
 ```
 
-**Four passes on submit:**
+**On submit:**
 1. `session seal` — finalises hash chain, captures git diff (start → end)
 2. Git push — commits all changes and pushes to the candidate's `interview-{code}` repo (non-blocking; session continues on failure)
-3. Push to relay — sealed session (events + manifest + report + debrief + repo URL) stored server-side
+3. Push to relay — sealed session (events + manifest + report + debrief + repo URL) stored server-side; automated flags computed immediately
 4. Claude debrief — reads the event log and writes a focused session reflection; shown to candidate immediately
+
+**On the HM side:**
 5. HM grades from dashboard — sends timeline + rubric + diff to their AI key, returns structured JSON scores
 
 **The integrity model:**
 
-Every HM action — grading, revealing identity, adding a comment, recording a decision, revising a grade — is logged with a SHA-256 hash chain. Key events are silently emailed to a designated audit recipient (typically HR). The mail server's timestamp is outside the HM's control. Reveal is physically disabled until a grade is saved, ensuring blind evaluation is provable.
+Every HM action — grading, revealing identity, adding a comment, recording a decision, revising a grade — is logged with a SHA-256 hash chain. In relay mode, the relay's server-side timestamp is outside the HM's control — that's the integrity anchor. In email mode, key events are silently emailed to a designated audit recipient (typically HR) with the mail server's timestamp as the anchor. Reveal is physically disabled until a grade is saved, ensuring blind evaluation is provable.
 
 Grade revisions require an explicit reason and record whether the candidate's identity was revealed at the time of revision — the key data point for proving merit-first evaluation even when scores are adjusted.
 
@@ -233,7 +236,7 @@ docker run -e RELAY_API_KEY=secret -v /data:/data -p 8080:8080 \
   ghcr.io/nikhilskashyap/interviewsignal:latest
 ```
 
-See [docs/self-hosting.md](docs/self-hosting.md) for data layout, backup, and key rotation.
+See [docs/relay-api.md](docs/relay-api.md) for the full relay API contract, data layout, and deployment details.
 
 ### Option 2 — Email only (free, no server)
 
@@ -296,13 +299,13 @@ When you know who someone is before you evaluate them, bias isn't a failure of c
 
 **Same tools, same environment.** Every candidate works with the same AI assistant they use on the job. The person who drilled Leetcode for six months has no advantage over the person who just builds things. The only variable is how well they think.
 
-**You can't prevent a candidate from having a second screen. Neither can a Leetcode proctoring tool.** The difference is that with interviewsignal, gaming it well requires understanding the problem — and that's the signal.
+**You can't prevent a candidate from having a second screen. Neither can a Leetcode proctoring tool.** The difference is that with interviewsignal, gaming it well requires understanding the problem — and that's the signal. And if someone tries to automate the whole thing, the dashboard flags it: suspiciously fast sessions, zero iteration, metronomic prompt timing. The HM sees the flag before they open the transcript.
 
 **One identity, one submission.** GitHub OAuth ties each submission to a verified GitHub account. Re-taking under a different name or email is blocked at the relay — not by policy, but by technical enforcement. The candidate's GitHub username and a link to their session repo are sealed into the session and only revealed after the grade is locked.
 
-**Score before name, always.** Grades are locked in before identity is revealed — not as a policy, but as a technical constraint. You cannot click Reveal until a score is saved. The order of events is cryptographically provable.
+**Score before name, always.** Grades are locked in before identity is revealed — not as a policy, but as a technical constraint. You cannot click Reveal until a score is saved. The order of events is cryptographically provable. No resume, no university, no previous employer — just the work and how they think.
 
-**A tamper-evident record.** Every action — grading, revealing identity, adding a comment, recording a decision — is hash-chained and email-anchored to a timestamp outside your control. The audit trail doesn't just log what happened. It proves it.
+**A tamper-evident record.** Every action — grading, revealing identity, adding a comment, recording a decision — is hash-chained with a timestamp outside the HM's control. The audit trail doesn't just log what happened. It proves it.
 
 ```
 [2026-04-13T10:47:22Z] grade_recorded     INT-4829-XK  hash=d4abe5e6
@@ -345,6 +348,8 @@ That one line is the whole argument. You hired the person with the best score. Y
 
 The session log is append-only and hash-chained. Any tampering breaks the chain. The HM dashboard includes a **Verify Chain** button that re-derives every SHA-256 hash and flags any mismatch, along with the relay's server-side submission timestamp.
 
+**Automated flags** are computed on submission: unusually fast sessions, low tool-call counts, no edit-after-error patterns, and suspiciously uniform prompt timing. Flags appear as colored indicators (green / yellow / red) in the dashboard candidate list — the HM sees them before opening any transcript.
+
 What is **not** captured: raw file contents (only paths and hashes, for privacy). The grader evaluates the conversation, timeline, and diff — not file contents.
 
 ---
@@ -378,7 +383,7 @@ All config stored in `~/.interview/config.json` (permissions: 600).
 
 **Grading** sends the session timeline and git diff to the configured AI endpoint (Anthropic API by default, or your enterprise proxy). No raw file contents. The grading call uses your own API key — interviewsignal never sees it.
 
-**Self-hosted relay:** Run the relay inside your own infrastructure and nothing leaves your network. See [docs/self-hosting.md](docs/self-hosting.md).
+**Self-hosted relay:** Run the relay inside your own infrastructure and nothing leaves your network. See [docs/relay-api.md](docs/relay-api.md) for the full API contract and data layout.
 
 No telemetry. No analytics. No tracking.
 
