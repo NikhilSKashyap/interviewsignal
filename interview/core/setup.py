@@ -45,7 +45,7 @@ def create_interview(
     cc_emails: list[str],
     candidate_email: str | None,
     time_limit_minutes: int | None,
-    anonymize: bool = True,
+    anonymize: bool = False,
     audit_email: str | None = None,
     sharing: dict | None = None,
 ) -> dict:
@@ -65,11 +65,11 @@ def create_interview(
         pass
 
     # Sharing config: what score information candidates can see after submission.
-    # Defaults to no sharing (null). HM can override per-code from dashboard.
+    # Defaults to no sharing. HM can override per-code from dashboard.
+    # Debrief is always shown to candidates at submit time and always included
+    # in interview score output — not an HM toggle.
     sharing_config = sharing or {
-        "score":   "none",    # none | overall | breakdown | breakdown_notes
-        "debrief": False,     # share Claude's session debrief with candidate
-        "hm_notes": False,    # share HM summary/concerns with candidate
+        "score": "none",    # none | overall | breakdown | breakdown_notes
     }
 
     payload = {
@@ -153,20 +153,16 @@ def main():
     parser.add_argument("command", choices=["create"])
     parser.add_argument("--problem-file", required=True)
     parser.add_argument("--rubric-file", required=True)
-    parser.add_argument("--hm-email", required=True)
+    parser.add_argument("--hm-email", default="")
     parser.add_argument("--cc-emails", default="")
     parser.add_argument("--candidate-email", default=None)
     parser.add_argument("--time-limit", type=int, default=None)
-    parser.add_argument("--anonymize", action="store_true", default=True)
+    parser.add_argument("--anonymize", action="store_true", default=False)
     parser.add_argument("--no-anonymize", dest="anonymize", action="store_false")
     parser.add_argument("--audit-email", default=None)
     parser.add_argument("--sharing-score", default="none",
                         choices=["none", "overall", "breakdown", "breakdown_notes"],
                         help="What score info candidates can see after submission")
-    parser.add_argument("--sharing-debrief", action="store_true", default=False,
-                        help="Share Claude's session debrief with candidate")
-    parser.add_argument("--sharing-hm-notes", action="store_true", default=False,
-                        help="Share HM summary and concerns with candidate")
     args = parser.parse_args()
 
     problem = Path(args.problem_file).read_text().strip()
@@ -174,9 +170,7 @@ def main():
     cc_emails = [e.strip() for e in args.cc_emails.split(",") if e.strip()]
 
     sharing = {
-        "score":    args.sharing_score,
-        "debrief":  args.sharing_debrief,
-        "hm_notes": args.sharing_hm_notes,
+        "score": args.sharing_score,
     }
 
     result = create_interview(
@@ -191,13 +185,18 @@ def main():
         sharing=sharing,
     )
 
+    relay_url = result["payload"].get("relay_url", "")
     print(f"\n✓ Interview created.\n")
     print(f"  Code: {result['code']}\n")
     print(f"Share this code with your candidate. They run:\n")
     print(f"  pip install interviewsignal && interview install")
     print(f"  /interview {result['code']}\n")
-    print(f"You'll receive the full session report by email when they submit.")
-    print(f"To review candidates: /interview dashboard\n")
+    if relay_url:
+        print(f"Candidates appear in your dashboard when they submit.")
+        print(f"  interview dashboard\n")
+    else:
+        print(f"You'll receive the full session report by email when they submit.")
+        print(f"To review candidates: interview dashboard\n")
 
 
 if __name__ == "__main__":

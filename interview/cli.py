@@ -641,7 +641,8 @@ def cmd_score(args):
 
     debrief = result.get("debrief", "")
     if debrief:
-        print(f"  Session debrief:\n{debrief}\n")
+        print(f"  Session debrief (Claude's analysis — not the hiring manager's evaluation):")
+        print(f"{debrief}\n")
 
     print(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
 
@@ -665,12 +666,14 @@ def main():
     sub.add_parser("configure-api-key", help="Store Anthropic API key (direct access)")
     sub.add_parser("configure-llm", help="Configure LLM endpoint for grading (enterprise proxies, custom base URL)")
     sub.add_parser("configure-relay", help="Set relay server URL and API key")
-    sub.add_parser("configure-github-app", help="Configure GitHub OAuth for the relay (relay operators only)")
     sub.add_parser("dashboard", help="Open HM candidate dashboard")
     sub.add_parser("status", help="Show active session status")
 
     p_score = sub.add_parser("score", help="Fetch your score for a submitted interview")
     p_score.add_argument("code", help="Interview code (e.g. INT-4829-XK)")
+
+    # Relay operator commands — hidden from main help (run once when deploying the relay)
+    sub.add_parser("configure-github-app", help=argparse.SUPPRESS)
 
     args = parser.parse_args()
 

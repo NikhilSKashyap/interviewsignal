@@ -51,7 +51,7 @@ def _load_all_reports() -> list[dict]:
         for s in sessions:
             r = dict(s)
             r.setdefault("_source", "relay")
-            r.setdefault("_anonymize", True)
+            r.setdefault("_anonymize", s.get("anonymize", False))
             reports.append(r)
         return reports
 
@@ -146,7 +146,11 @@ def _apply_labels(reports: list[dict]) -> list[dict]:
             labeled["_show_reveal"] = True
             anon_counter += 1
         else:
-            labeled["_display_label"] = r["code"]
+            github_username = r.get("github_username", "")
+            if github_username:
+                labeled["_display_label"] = f"@{github_username}"
+            else:
+                labeled["_display_label"] = r["code"]
             labeled["_show_reveal"] = False
         result.append(labeled)
     return result
@@ -404,17 +408,21 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
         relay_session = transport.get_session(code, cid)
 
     if relay_session:
-        raw_comments = relay_session.get("comments", [])
-        decision_obj = relay_session.get("decision")
-        graded = relay_session.get("grading") is not None
-        audit_events = relay_session.get("audit_entries", [])
-        revealed = relay_session.get("revealed", False)
+        raw_comments    = relay_session.get("comments", [])
+        decision_obj    = relay_session.get("decision")
+        graded          = relay_session.get("grading") is not None
+        audit_events    = relay_session.get("audit_entries", [])
+        revealed        = relay_session.get("revealed", False)
+        current_grading = relay_session.get("grading") or {}
+        grading_history = relay_session.get("grading_history", [])
     else:
-        raw_comments = get_comments(code)
-        decision_obj = get_decision(code)
-        graded = is_graded(code)
-        audit_events = read_audit_events(code)
-        revealed = any(e.get("type") == "identity_revealed" for e in audit_events)
+        raw_comments    = get_comments(code)
+        decision_obj    = get_decision(code)
+        graded          = is_graded(code)
+        audit_events    = read_audit_events(code)
+        revealed        = any(e.get("type") == "identity_revealed" for e in audit_events)
+        current_grading = {}
+        grading_history = []
 
     # Embed the report via iframe
     report_iframe_src = (
@@ -464,10 +472,11 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
         ts = escape(e.get("ts") or e.get("timestamp_iso", ""))
         h = escape(e.get("hash", "")[:8])
         color_map = {
-            "grade_recorded": "#fbbf24",
-            "identity_revealed": "#60a5fa",
-            "comment_added": "#a78bfa",
-            "decision_recorded": "#4ade80",
+            "grade_recorded":     "#fbbf24",
+            "grade_revised":      "#f97316",
+            "identity_revealed":  "#60a5fa",
+            "comment_added":      "#a78bfa",
+            "decision_recorded":  "#4ade80",
             "next_round_scheduled": "#60a5fa",
         }
         color = color_map.get(etype, "#555")
@@ -489,6 +498,92 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
     else:
         reveal_delta = escape(get_reveal_delta(code)) if audit_events else ""
 
+    # Grade panel (relay mode — when we have grading data)
+    grade_panel_html = ""
+    if graded and current_grading:
+        current_score   = current_grading.get("overall_score")
+        current_summary = escape(current_grading.get("summary", ""))
+        score_display   = f"{current_score} / 10" if current_score is not None else "—"
+
+        # Latest revision info (most recent history entry = previous grade)
+        revision_badge = ""
+        revision_reason_html = ""
+        if grading_history:
+            prev = grading_history[-1]
+            prev_score = prev.get("overall_score")
+            rev_reason = escape(prev.get("revision_reason", ""))
+            if prev_score is not None:
+                revision_badge = f' <span style="font-size:12px;color:#888">(revised from {prev_score})</span>'
+            if rev_reason:
+                revision_reason_html = (
+                    f'<div style="font-size:12px;color:#888;margin-top:4px">'
+                    f'Reason: <em>"{rev_reason}"</em></div>'
+                )
+
+        # Revision history entries (all but the latest are older revisions)
+        history_rows = ""
+        if len(grading_history) > 0:
+            for i, h in enumerate(reversed(grading_history)):
+                h_score  = h.get("overall_score", "—")
+                h_ts     = escape(h.get("superseded_at") or h.get("graded_at", ""))
+                h_reason = escape(h.get("revision_reason", ""))
+                label    = "Initial grade" if i == len(grading_history) - 1 else f"Revision {len(grading_history) - i - 1}"
+                history_rows += (
+                    f'<div style="display:grid;grid-template-columns:100px 60px 1fr;'
+                    f'gap:6px;font-size:11px;padding:4px 0;border-bottom:1px solid #1a1a1a">'
+                    f'<span style="color:#555">{label}</span>'
+                    f'<span style="color:#ccc">{h_score} / 10</span>'
+                    f'<span style="color:#555">{h_ts[:16].replace("T"," ")}</span>'
+                    f'</div>'
+                    + (f'<div style="font-size:11px;color:#555;padding-bottom:4px">'
+                       f'Reason: {h_reason}</div>' if h_reason else "")
+                )
+            history_section = (
+                f'<details style="margin-top:12px">'
+                f'<summary style="font-size:12px;color:#555;cursor:pointer">'
+                f'Revision history ({len(grading_history)})</summary>'
+                f'<div style="margin-top:8px">{history_rows}</div>'
+                f'</details>'
+            )
+        else:
+            history_section = ""
+
+        revise_score_val = current_score if current_score is not None else ""
+        grade_panel_html = f"""
+    <div class="panel" id="grade-panel">
+      <div class="section-title">Grade</div>
+      <div style="font-size:22px;font-weight:700;color:#fbbf24;margin-bottom:4px">
+        {score_display}{revision_badge}
+      </div>
+      {revision_reason_html}
+      {f'<div style="font-size:12px;color:#555;margin-top:8px">{current_summary}</div>' if current_summary else ''}
+      {history_section}
+      <div style="margin-top:14px">
+        <button class="btn btn-sm" id="btn-toggle-revise" style="border-color:#854d0e;color:#fbbf24">
+          Revise Grade
+        </button>
+      </div>
+      <div id="revise-form" style="display:none;margin-top:14px;border-top:1px solid #1a1a1a;padding-top:14px">
+        <label style="font-size:12px;color:#888;display:block;margin-bottom:4px">New overall score (0–10)</label>
+        <input type="number" id="revise-score" min="0" max="10" step="0.1" value="{revise_score_val}"
+               style="width:90px;background:#0a0a0a;border:1px solid #333;color:#e0e0e0;
+                      border-radius:6px;padding:6px 10px;font-size:14px;margin-bottom:10px">
+        <label style="font-size:12px;color:#888;display:block;margin-bottom:4px">
+          Reason for revision <span style="color:#ef4444">*</span>
+        </label>
+        <textarea id="revise-reason" placeholder="What changed in your evaluation?"
+                  style="width:100%;background:#0a0a0a;border:1px solid #333;color:#e0e0e0;
+                         border-radius:6px;padding:8px;font-size:12px;min-height:64px;resize:vertical"></textarea>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button class="btn btn-sm" id="btn-submit-revision"
+                  data-code="{escape(code)}" data-cid="{escape(cid)}"
+                  style="border-color:#854d0e;color:#fbbf24">Submit Revision</button>
+          <button class="btn btn-sm" id="btn-cancel-revision">Cancel</button>
+        </div>
+        <div id="revise-error" style="display:none;font-size:12px;color:#ef4444;margin-top:6px"></div>
+      </div>
+    </div>"""
+
     # Sharing config (relay mode only)
     sharing_panel_html = ""
     if get_relay_url():
@@ -504,11 +599,9 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
             with _ureq.urlopen(sharing_req, timeout=5) as resp:
                 sharing_data = json.loads(resp.read()).get("sharing", {})
         except Exception:
-            sharing_data = {"score": "none", "debrief": False, "hm_notes": False}
+            sharing_data = {"score": "none"}
 
         score_level = escape(sharing_data.get("score", "none"))
-        debrief_checked = "checked" if sharing_data.get("debrief") else ""
-        hm_notes_checked = "checked" if sharing_data.get("hm_notes") else ""
         sharing_panel_html = f"""
     <div class="panel" id="sharing-panel">
       <div class="section-title">Candidate Score Sharing
@@ -523,16 +616,7 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
           <option value="breakdown_notes" {'selected' if score_level == 'breakdown_notes' else ''}>Breakdown + HM notes</option>
         </select>
       </div>
-      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">
-        <label style="font-size:13px;color:#ccc;cursor:pointer">
-          <input type="checkbox" id="sharing-debrief" {debrief_checked} style="margin-right:6px">
-          Share Claude's session debrief
-        </label>
-        <label style="font-size:13px;color:#ccc;cursor:pointer">
-          <input type="checkbox" id="sharing-hm-notes" {hm_notes_checked} style="margin-right:6px">
-          Share HM summary &amp; concerns
-        </label>
-      </div>
+      <p style="font-size:12px;color:#555;margin-bottom:12px">Claude's session debrief is always shared with candidates automatically — it's Claude's analysis of the session, not the HM's evaluation.</p>
       <button class="btn btn-sm" id="btn-save-sharing" data-code="{escape(code)}">Save sharing settings</button>
       <span id="sharing-saved" style="display:none;font-size:12px;color:#4ade80;margin-left:10px">Saved.</span>
     </div>"""
@@ -543,6 +627,67 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
     js_code = json.dumps(code)
     js_cid  = json.dumps(cid)
     cid_attr = f'data-cid="{safe_cid}"' if cid else ""
+
+    # Extract identity fields from relay session (only populated after reveal)
+    revealed_email    = relay_session.get("candidate_email", "") if relay_session else ""
+    revealed_name     = relay_session.get("candidate_name", "")  if relay_session else ""
+    revealed_username = relay_session.get("github_username", "")  if relay_session else ""
+    revealed_repo_url = relay_session.get("github_repo_url", "")  if relay_session else ""
+    revealed_avatar   = relay_session.get("avatar_url", "")       if relay_session else ""
+
+    if revealed:
+        # Pre-build HTML fragments (no backslashes in f-string expressions — Python 3.10+)
+        onerror_attr = "onerror=\"this.style.display='none'\""
+        avatar_html = (
+            '<img src="' + escape(revealed_avatar) + '" style="width:48px;height:48px;'
+            'border-radius:50%;flex-shrink:0" ' + onerror_attr + '>'
+            if revealed_avatar else ''
+        )
+        name_html = (
+            '<div style="font-size:14px;font-weight:600;color:#e0e0e0;margin-bottom:2px">'
+            + escape(revealed_name) + '</div>'
+            if revealed_name else ''
+        )
+        email_html = (
+            '<div style="font-size:13px;color:#888;margin-bottom:4px">'
+            + escape(revealed_email) + '</div>'
+            if revealed_email else ''
+        )
+        gh_user_html = (
+            '<div style="font-size:12px;margin-bottom:4px"><a href="https://github.com/'
+            + escape(revealed_username) + '" target="_blank" style="color:#60a5fa;text-decoration:none">@'
+            + escape(revealed_username) + '</a></div>'
+            if revealed_username else ''
+        )
+        repo_html = (
+            '<div style="font-size:12px"><a href="' + escape(revealed_repo_url)
+            + '" target="_blank" style="color:#4ade80;text-decoration:none">View code repository →</a></div>'
+            if revealed_repo_url else ''
+        )
+        safe_reveal_delta = escape(reveal_delta)
+        identity_block = f"""
+      <div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:12px">
+        {avatar_html}
+        <div style="min-width:0">
+          {name_html}
+          {email_html}
+          {gh_user_html}
+          {repo_html}
+        </div>
+      </div>
+      <div class="reveal-note">✓ Blind grading confirmed — {safe_reveal_delta}</div>"""
+        identity_panel = f'<div class="panel"><div class="section-title">Identity</div>{identity_block}</div>'
+    else:
+        # Not yet revealed — show reveal button (locked until graded)
+        identity_panel = (
+            '<div class="panel"><div class="section-title">Identity</div>'
+            + ('<button class="btn btn-sm" id="btn-reveal-detail" data-code="' + safe_code + '" '
+               + (f'data-cid="{safe_cid}"' if cid else '')
+               + ' ' + ('disabled title="Grade first to unlock Reveal"' if not graded else '')
+               + '>Reveal Identity' + (' 🔒' if not graded else '') + '</button>'
+               + ('<div style="font-size:11px;color:#555;margin-top:8px">Reveal is locked until a grade is saved. This ensures blind evaluation is preserved in the audit trail.</div>' if not graded else ''))
+            + '</div>'
+        )
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -614,12 +759,8 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
       </div>
     </div>
 
-    <!-- Reveal -->
-    {'<div class="panel"><div class="section-title">Identity</div>' +
-     ('<div class="reveal-note">✓ Blind grading confirmed — ' + reveal_delta + '</div>' if revealed else
-      ('<button class="btn btn-sm" id="btn-reveal-detail" data-code="' + safe_code + '" ' + (f'data-cid="{safe_cid}"' if cid else '') + ' ' + ('disabled title="Grade first to unlock Reveal"' if not graded else '') + '>Reveal Identity' + (' 🔒' if not graded else '') + '</button>' +
-       ('<div style="font-size:11px;color:#555;margin-top:8px">Reveal is locked until a grade is saved. This ensures blind evaluation is preserved in the audit trail.</div>' if not graded else ''))) +
-     '</div>'}
+    <!-- Identity / Reveal -->
+    {identity_panel}
 
     <!-- Audit trail -->
     <div class="panel">
@@ -637,6 +778,8 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
       <button class="btn btn-sm" id="btn-verify" data-code="{safe_code}" {cid_attr}>Verify Chain</button>
       <div id="verify-result" style="margin-top:12px;font-size:12px;display:none"></div>
     </div>
+
+    {grade_panel_html}
 
     {sharing_panel_html}
   </div>
@@ -679,13 +822,55 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
       .then(r => r.json()).then(d => {{ location.reload(); }});
   }});
 
+  document.getElementById('btn-toggle-revise')?.addEventListener('click', function() {{
+    const form = document.getElementById('revise-form');
+    form.style.display = form.style.display === 'none' ? 'block' : 'none';
+  }});
+  document.getElementById('btn-cancel-revision')?.addEventListener('click', function() {{
+    document.getElementById('revise-form').style.display = 'none';
+    document.getElementById('revise-error').style.display = 'none';
+  }});
+  document.getElementById('btn-submit-revision')?.addEventListener('click', function() {{
+    const code   = this.dataset.code;
+    const cid    = this.dataset.cid;
+    const score  = parseFloat(document.getElementById('revise-score').value);
+    const reason = document.getElementById('revise-reason').value.trim();
+    const errDiv = document.getElementById('revise-error');
+    if (isNaN(score) || score < 0 || score > 10) {{
+      errDiv.textContent = 'Score must be a number between 0 and 10.';
+      errDiv.style.display = 'block'; return;
+    }}
+    if (!reason) {{
+      errDiv.textContent = 'Reason is required.';
+      errDiv.style.display = 'block'; return;
+    }}
+    errDiv.style.display = 'none';
+    this.disabled = true;
+    this.textContent = 'Submitting...';
+    const btn = this;
+    fetch('/revise-grade', {{method:'POST', headers:{{'Content-Type':'application/json'}},
+      body: JSON.stringify({{code, cid, overall_score: score, reason}})}})
+      .then(r => r.json()).then(d => {{
+        if (d.ok) {{ location.reload(); }}
+        else {{
+          errDiv.textContent = 'Error: ' + d.error;
+          errDiv.style.display = 'block';
+          btn.disabled = false;
+          btn.textContent = 'Submit Revision';
+        }}
+      }}).catch(e => {{
+        errDiv.textContent = 'Request failed: ' + e;
+        errDiv.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Submit Revision';
+      }});
+  }});
+
   document.getElementById('btn-save-sharing')?.addEventListener('click', function() {{
-    const code = this.dataset.code;
-    const score    = document.getElementById('sharing-score').value;
-    const debrief  = document.getElementById('sharing-debrief').checked;
-    const hm_notes = document.getElementById('sharing-hm-notes').checked;
+    const code  = this.dataset.code;
+    const score = document.getElementById('sharing-score').value;
     fetch('/update-sharing', {{method:'POST', headers:{{'Content-Type':'application/json'}},
-      body: JSON.stringify({{code, sharing: {{score, debrief, hm_notes}}}})
+      body: JSON.stringify({{code, sharing: {{score}}}})
     }}).then(r => r.json()).then(d => {{
       if (d.ok) {{
         const saved = document.getElementById('sharing-saved');
@@ -768,8 +953,9 @@ def _build_audit_log_html(code: str | None = None) -> str:
         prev = escape(e.get("prev_hash", "")[:8])
         payload_str = escape(json.dumps(e.get("payload", {}))[:120])
         color_map = {
-            "grade_recorded": "#fbbf24", "identity_revealed": "#60a5fa",
-            "comment_added": "#a78bfa", "decision_recorded": "#4ade80",
+            "grade_recorded":     "#fbbf24", "grade_revised": "#f97316",
+            "identity_revealed":  "#60a5fa",
+            "comment_added":      "#a78bfa", "decision_recorded": "#4ade80",
             "next_round_scheduled": "#60a5fa", "report_opened": "#555",
         }
         color = color_map.get(e["type"], "#555")
@@ -998,6 +1184,51 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
             except Exception as e:
                 self._send_json({"ok": False, "error": str(e)}, 400)
 
+        elif path == "/revise-grade":
+            code   = body.get("code", "")
+            cid    = body.get("cid", "")
+            reason = body.get("reason", "").strip()
+            new_overall = body.get("overall_score")
+            if not code or not cid or not reason or new_overall is None:
+                self._send_json({"ok": False, "error": "Missing code, cid, overall_score, or reason"}, 400)
+                return
+            if not get_relay_url():
+                self._send_json({"ok": False, "error": "Grade revision requires a relay."}, 400)
+                return
+            try:
+                from interview.core.transport import get_hm_key, get_relay_api_key
+                relay_url_val = get_relay_url()
+                token = get_hm_key() or get_relay_api_key()
+                # Fetch current grading to preserve dimensions etc.
+                transport = get_transport()
+                relay_session = transport.get_session(code, cid)
+                if not relay_session:
+                    self._send_json({"ok": False, "error": "Session not found."}, 404)
+                    return
+                current_grading = relay_session.get("grading") or {}
+                revised = {
+                    **current_grading,
+                    "overall_score": float(new_overall),
+                    "reason":        reason,
+                }
+                # Remove graded_at — relay will set a fresh one
+                revised.pop("graded_at", None)
+                req_body = json.dumps(revised).encode()
+                req = urllib.request.Request(
+                    f"{relay_url_val}/sessions/{code}/{cid}/grade",
+                    data=req_body,
+                    headers={
+                        "Content-Type":  "application/json",
+                        "Authorization": f"Bearer {token}",
+                    },
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    result = json.loads(resp.read())
+                self._send_json({"ok": True, "result": result})
+            except Exception as e:
+                self._send_json({"ok": False, "error": str(e)}, 400)
+
         elif path == "/update-sharing":
             code    = body.get("code", "")
             sharing = body.get("sharing", {})
@@ -1074,6 +1305,12 @@ def _run_grading(code: str, cid: str = ""):
         try:
             transport.post_action(code, "grade", grading, cid=cid or None)
         except Exception as e:
+            err_str = str(e)
+            if "revision_requires_reason" in err_str or "409" in err_str:
+                raise GradingError(
+                    "This candidate is already graded. Use 'Revise Grade' on their detail "
+                    "page to update the score with a reason."
+                )
             print(f"  ⚠ Grade saved locally but relay sync failed: {e}")
 
 

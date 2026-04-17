@@ -26,6 +26,17 @@ trigger: /interview
 
 When the user types `/interview hm`:
 
+### Step 0: Check transport mode
+
+Before asking any questions, check whether a relay is configured:
+
+```bash
+python -c "from interview.core.transport import get_relay_url; print(get_relay_url() or '')"
+```
+
+- If this prints a URL → **relay mode**. Skip all email questions (4–7). Candidates submit to the relay; the HM reviews from the dashboard. No email needed.
+- If empty → **email mode**. Ask questions 4–7 as normal.
+
 ### Step 1: Collect interview parameters
 
 Ask the following, one field at a time (don't dump a form — ask conversationally):
@@ -44,6 +55,8 @@ Ask the following, one field at a time (don't dump a form — ask conversational
    "Is there a time limit? (e.g. '90 minutes', or press Enter for none)"
    → Optional. Store as minutes integer or null.
 
+── Email mode only (skip if relay is configured) ──────────────────────────
+
 4. Your email
    "Your email address (reports will be sent here):"
    → Validate format.
@@ -57,20 +70,18 @@ Ask the following, one field at a time (don't dump a form — ask conversational
    → Optional. If not provided, candidate enters it at session start.
 
 7. Audit recipient
-   "Audit email address — all HM actions (grading, reveals, comments, decisions) are silently logged here. This is what makes the merit claim provable. Typically HR or a neutral party:"
-   → Required when anonymize=True. Strongly recommended in all cases.
-   → This address receives a silent email on each key action. The mail server's timestamp
-     is outside your control — the tamper-evident proof that score came before name.
-   → If left blank, audit events are logged locally only (weaker integrity guarantee).
+   "Audit email address — all HM actions (grading, reveals, comments, decisions) are silently
+    logged here. Typically HR or a neutral party. Press Enter to log locally only."
+   → Optional. If blank, audit events are logged locally only.
+
+── Always ask ──────────────────────────────────────────────────────────────
 
 8. Anonymize candidates in the dashboard?
    "Should candidates be anonymized in your dashboard? (yes / no)"
    → If yes: candidates appear as 'Candidate A', 'Candidate B', etc. until you explicitly
-     click 'Reveal' on each one. You see scores before you see names — the only way to
-     guarantee you're grading the work, not the person.
-   → If no: interview codes are shown directly. Useful if you're running a small loop
-     and already know who submitted what.
-   → Default: yes. Strongly recommended.
+     click 'Reveal' on each one. You see scores before you see names.
+   → Default: no.
+   → Recommended for high-volume hiring or roles where bias risk is a concern.
    → Store as boolean.
 
 9. Candidate score sharing — what can candidates see after submission?
@@ -84,18 +95,9 @@ Ask the following, one field at a time (don't dump a form — ask conversational
    → Map to: none | overall | breakdown | breakdown_notes
    → Store as sharing.score.
 
-10. Share Claude's session debrief?
-    "After /submit, Claude generates a session reflection — what the candidate did well,
-     missed, and could improve. Share this with the candidate?"
-    → Only shown if sharing.score is not 'none'.
-    → Default: no.
-    → Store as sharing.debrief (boolean).
-
-11. Share HM notes?
-    "Should candidates see the HM summary and concerns from the grading rubric?"
-    → Only relevant if sharing.score == 'breakdown_notes'.
-    → Default: no.
-    → Store as sharing.hm_notes (boolean).
+Note: Claude's session debrief is always shared with candidates automatically via
+'interview score' — it's Claude's analysis of the session, not the HM's evaluation.
+You don't need to configure it.
 ```
 
 ### Step 2: Generate the interview code
@@ -106,15 +108,11 @@ After collecting all inputs, call the Python backend to create the interview pac
 python -m interview.core.setup create \
   --problem-file /tmp/interview_problem.txt \
   --rubric-file /tmp/interview_rubric.txt \
-  --hm-email "..." \
-  --cc-emails "..." \
-  --candidate-email "..." \
-  --audit-email "..."  \
   --time-limit 90 \
   --anonymize          # or --no-anonymize if HM said no
   --sharing-score breakdown_notes   # or: none | overall | breakdown
-  --sharing-debrief    # omit if no
-  --sharing-hm-notes   # omit if no
+  # Email mode only — omit these in relay mode:
+  # --hm-email "..." --cc-emails "..." --candidate-email "..." --audit-email "..."
 ```
 
 This writes the encoded interview package and prints the interview code.
@@ -131,8 +129,9 @@ Share this code with your candidate. They run:
   pip install interviewsignal && interview install
   /interview INT-4829-XK
 
-You'll receive the full session report by email when they submit.
-To review candidates: /interview dashboard
+Candidates appear in your dashboard when they submit.   ← relay mode
+(or: You'll receive the full session report by email.)  ← email mode
+To review candidates: interview dashboard
 ```
 
 ---
@@ -153,7 +152,10 @@ This command:
    The candidate must authorize the app; the CLI polls until complete.
    One GitHub account = one submission. Duplicate attempts are blocked here.
 3. Prints the problem statement
-4. Begins session recording
+4. Creates a public GitHub repo `interview-{code}` in the candidate's GitHub account and
+   initialises a git remote named `interview` in the working directory. The initial commit
+   is made. If repo creation fails, the session continues — the repo is optional.
+5. Begins session recording
 
 If the relay has no GitHub app configured, step 2 is skipped (self-reported identity only).
 
@@ -164,6 +166,7 @@ Display the session header clearly:
   INTERVIEW SESSION — INT-4829-XK
   Started: 2026-04-13 10:32 AM
   GitHub:  @candidate-username
+  GitHub repo:  https://github.com/candidate-username/interview-INT-4829-XK
   Time limit: 90 minutes
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -295,6 +298,7 @@ Show the debrief to the candidate with a SESSION DEBRIEF header block so they ca
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   SESSION DEBRIEF — <CODE>
+  (Claude's analysis of your session — not the hiring manager's evaluation)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 <debrief text>
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -302,8 +306,9 @@ Show the debrief to the candidate with a SESSION DEBRIEF header block so they ca
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-**Note:** The debrief is always shown to the candidate. Whether it is _also_ shared via
-`interview score` is the HM's choice (controlled in the dashboard sharing settings).
+**Note:** The debrief is always shown to the candidate immediately on submit and is
+always accessible via `interview score` — it's Claude's analysis of the session,
+not the hiring manager's evaluation or decision.
 
 ---
 

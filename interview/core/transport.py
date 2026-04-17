@@ -285,6 +285,12 @@ class RelayTransport(Transport):
         body: dict = {"code": code, "candidate_email": candidate_email}
         if manifest.get("session_token"):
             body["session_token"] = manifest["session_token"]
+        if manifest.get("github_repo_url"):
+            body["github_repo_url"] = manifest["github_repo_url"]
+        if manifest.get("candidate_name"):
+            body["candidate_name"] = manifest["candidate_name"]
+        if manifest.get("github_username"):
+            body["github_username"] = manifest["github_username"]
         file_map = {
             "manifest_json": "manifest.json",
             "events_jsonl":  "events.jsonl",
@@ -330,7 +336,7 @@ class RelayTransport(Transport):
                     entry["code"]  = code
                     entry["title"] = title
                     entry.setdefault("_source", "relay")
-                    entry.setdefault("_anonymize", True)
+                    entry.setdefault("_anonymize", interview.get("anonymize", False))
                     flat.append(entry)
             return flat
         except TransportError:

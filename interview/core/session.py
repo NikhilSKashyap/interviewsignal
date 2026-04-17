@@ -97,6 +97,146 @@ def _get_git_diff(base_commit: str | None) -> str:
         return ""
 
 
+def _create_github_repo(github_token: str, code: str) -> str | None:
+    """
+    Create a public GitHub repo for this interview session via the GitHub API.
+    Returns the HTML repo URL on success, None on any failure (non-blocking).
+    Tries repo name suffixes on 422 (name conflict).
+    """
+    base_name = f"interview-{code}"
+    for attempt in range(1, 4):
+        repo_name = base_name if attempt == 1 else f"{base_name}-{attempt}"
+        data = json.dumps({
+            "name":        repo_name,
+            "private":     False,
+            "description": f"interviewsignal session — {code}",
+            "auto_init":   False,
+        }).encode()
+        req = urllib.request.Request(
+            "https://api.github.com/user/repos",
+            data=data,
+            headers={
+                "Authorization":        f"Bearer {github_token}",
+                "Accept":               "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+                "User-Agent":           "interviewsignal",
+                "Content-Type":         "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                result = json.loads(resp.read())
+                return result.get("html_url") or None
+        except urllib.error.HTTPError as e:
+            if e.code == 422:
+                continue  # Name conflict — try next suffix
+            # Rate limit, API down, etc.
+            return None
+        except Exception:
+            return None
+    return None
+
+
+def _git_init_with_remote(repo_url: str, code: str):
+    """
+    Initialize git in the working directory (if not already a repo),
+    add the 'interview' remote, and create an initial session-start commit.
+    Non-blocking — all failures are swallowed.
+    """
+    cwd = os.getcwd()
+    try:
+        # Check if already a git repo
+        is_git = subprocess.run(
+            ["git", "rev-parse", "--git-dir"],
+            cwd=cwd, capture_output=True,
+        ).returncode == 0
+
+        if not is_git:
+            subprocess.run(["git", "init"], cwd=cwd, capture_output=True)
+
+        # Remove existing 'interview' remote if present
+        subprocess.run(
+            ["git", "remote", "remove", "interview"],
+            cwd=cwd, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "remote", "add", "interview", repo_url],
+            cwd=cwd, capture_output=True,
+        )
+
+        # Initial commit (--allow-empty in case working tree is clean)
+        subprocess.run(["git", "add", "-A"], cwd=cwd, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "--allow-empty", "-m",
+             f"interview session start — {code}"],
+            cwd=cwd, capture_output=True,
+        )
+    except Exception:
+        pass  # Non-blocking — session continues regardless
+
+
+def _git_push_session(session_meta: dict) -> bool:
+    """
+    Stage and commit all session changes, then push to the GitHub remote.
+    Uses the stored github_token for authentication.
+    Clears the token from the remote URL after push.
+    Returns True on success, False on any failure.
+    """
+    repo_url    = session_meta.get("github_repo_url")
+    github_token = session_meta.get("github_token")
+    code        = session_meta.get("code", "")
+
+    if not repo_url or not github_token:
+        return False
+
+    cwd = os.getcwd()
+    try:
+        # Commit all session changes
+        subprocess.run(["git", "add", "-A"], cwd=cwd, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "--allow-empty", "-m",
+             f"interview session end — {code}"],
+            cwd=cwd, capture_output=True,
+        )
+
+        # Embed token in remote URL for authenticated push
+        token_url = repo_url.replace("https://", f"https://{github_token}@")
+        subprocess.run(
+            ["git", "remote", "set-url", "interview", token_url],
+            cwd=cwd, capture_output=True,
+        )
+
+        result = subprocess.run(
+            ["git", "push", "--force", "interview", "HEAD:main"],
+            cwd=cwd, capture_output=True, timeout=60,
+        )
+
+        # Always clear credentials from remote URL
+        subprocess.run(
+            ["git", "remote", "set-url", "interview", repo_url],
+            cwd=cwd, capture_output=True,
+        )
+
+        if result.returncode != 0:
+            stderr = result.stderr.decode()[:200] if result.stderr else ""
+            print(f"  ⚠  Git push failed — your code is still submitted but the repo "
+                  f"won't be browsable.\n     {stderr}")
+            return False
+        return True
+    except Exception as e:
+        # Ensure credentials are cleared even on exception
+        try:
+            subprocess.run(
+                ["git", "remote", "set-url", "interview", repo_url],
+                cwd=cwd, capture_output=True,
+            )
+        except Exception:
+            pass
+        print(f"  ⚠  Git push failed: {e}")
+        return False
+
+
 def _load_active_session() -> dict | None:
     if ACTIVE_SESSION_FILE.exists():
         return json.loads(ACTIVE_SESSION_FILE.read_text())
@@ -261,6 +401,19 @@ def start_session(code: str, candidate_email: str | None = None) -> dict:
         if github_auth and github_auth.get("duplicate"):
             return {}  # Already submitted — abort cleanly
 
+    # Create a GitHub repo for this session if OAuth succeeded
+    github_repo_url: str | None = None
+    if github_auth and not github_auth.get("duplicate"):
+        github_token_val = github_auth.get("github_token")
+        if github_token_val:
+            print(f"  Creating interview repository...", end="", flush=True)
+            github_repo_url = _create_github_repo(github_token_val, code)
+            if github_repo_url:
+                print(f" ✓")
+                _git_init_with_remote(github_repo_url, code)
+            else:
+                print(f" ⚠  (repo creation failed — session continues without git repo)")
+
     # Resolve candidate email
     resolved_candidate_email = candidate_email or interview.get("candidate_email")
 
@@ -271,11 +424,12 @@ def start_session(code: str, candidate_email: str | None = None) -> dict:
         "code":               code,
         "started_at":         started_at,
         "candidate_email":    resolved_candidate_email,
+        "candidate_name":     github_auth.get("github_name")     if github_auth else None,
         "hm_email":           interview["hm_email"],
         "cc_emails":          interview.get("cc_emails", []),
         "audit_email":        interview.get("audit_email"),
         "time_limit_minutes": interview.get("time_limit_minutes"),
-        "anonymize":          interview.get("anonymize", True),
+        "anonymize":          interview.get("anonymize", False),
         "rubric":             interview["rubric"],
         "problem":            interview["problem"],
         "git_base_commit":    git_snapshot.get("commit"),
@@ -283,8 +437,12 @@ def start_session(code: str, candidate_email: str | None = None) -> dict:
         # GitHub identity (None if relay has no GitHub app configured)
         "github_id":          github_auth.get("github_id")       if github_auth else None,
         "github_username":    github_auth.get("github_username") if github_auth else None,
+        "github_name":        github_auth.get("github_name")     if github_auth else None,
         "avatar_url":         github_auth.get("avatar_url")      if github_auth else None,
         "session_token":      github_auth.get("session_token")   if github_auth else None,
+        # GitHub repo (None if creation failed or OAuth not configured)
+        "github_repo_url":    github_repo_url,
+        "github_token":       github_auth.get("github_token")    if github_auth else None,
     }
 
     _save_active_session(session_meta)
@@ -345,6 +503,13 @@ def seal_session(code: str) -> dict:
     ended_at = time.time()
     elapsed_minutes = round((ended_at - session["started_at"]) / 60, 1)
 
+    # Push session code to GitHub repo (non-blocking)
+    push_ok = False
+    if session.get("github_repo_url") and session.get("github_token"):
+        push_ok = _git_push_session(session)
+        if not push_ok:
+            session["github_repo_url"] = None
+
     # Final git diff
     git_base = session.get("git_base_commit")
     git_diff = _get_git_diff(git_base)
@@ -373,25 +538,29 @@ def seal_session(code: str) -> dict:
     # Build final manifest
     events = _read_events(code)
     manifest = {
-        "code":             code,
-        "started_at":       session["started_at"],
-        "ended_at":         ended_at,
-        "elapsed_minutes":  elapsed_minutes,
-        "candidate_email":  session.get("candidate_email"),
-        "hm_email":         session.get("hm_email"),
-        "cc_emails":        session.get("cc_emails", []),
-        "rubric":           session.get("rubric", ""),
-        "problem":          session.get("problem", ""),
-        "git_base_commit":  session.get("git_base_commit"),
-        "git_diff":         git_diff,
-        "event_count":      len(events),
-        "final_hash":       events[-1]["hash"] if events else "",
-        "sealed":           True,
+        "code":              code,
+        "candidate_name":    session.get("candidate_name"),
+        "candidate_email":   session.get("candidate_email"),
+        "github_username":   session.get("github_username"),
+        "github_repo_url":   session.get("github_repo_url"),
+        "github_avatar_url": session.get("avatar_url"),
+        "hm_email":          session.get("hm_email"),
+        "cc_emails":         session.get("cc_emails", []),
+        "rubric":            session.get("rubric", ""),
+        "problem":           session.get("problem", ""),
+        "started_at":        session["started_at"],
+        "ended_at":          ended_at,
+        "elapsed_minutes":   elapsed_minutes,
+        "git_base_commit":   session.get("git_base_commit"),
+        "git_diff":          git_diff,
+        "event_count":       len(events),
+        "final_hash":        events[-1]["hash"] if events else "",
+        "sealed":            True,
         # GitHub identity — None if relay has no GitHub app configured
-        "github_id":        session.get("github_id"),
-        "github_username":  session.get("github_username"),
-        "avatar_url":       session.get("avatar_url"),
-        "session_token":    session.get("session_token"),
+        "github_id":         session.get("github_id"),
+        "avatar_url":        session.get("avatar_url"),
+        "session_token":     session.get("session_token"),
+        # NOTE: github_token intentionally NOT included — credentials stay local
     }
 
     manifest_file = SESSIONS_DIR / code / "manifest.json"

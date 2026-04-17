@@ -35,6 +35,10 @@ Request body (JSON):
 ```json
 {
   "code": "INT-4829-XK",
+  "candidate_email": "jane@example.com",
+  "candidate_name": "Jane Doe",
+  "github_username": "janedoe",
+  "github_repo_url": "https://github.com/janedoe/interview-INT-4829-XK",
   "manifest_json":  "<base64-encoded manifest.json>",
   "events_jsonl":   "<base64-encoded events.jsonl>",
   "report_html":    "<base64-encoded report.html>",
@@ -45,6 +49,9 @@ Request body (JSON):
 - `manifest_json` and `events_jsonl` are required. The relay rejects submissions without them.
 - `report_html` and `report_json` are optional — if absent, the HM can still grade and a report
   can be regenerated from the raw session data.
+- `candidate_name`, `github_username`, and `github_repo_url` are optional. They are populated
+  when GitHub OAuth is used and repo creation succeeds.
+- `github_repo_url` is `null` if git push failed or OAuth is not configured.
 - If a session with this code already exists, returns `409 Conflict`. Submissions are immutable.
 
 Response `201 Created`:
@@ -85,15 +92,23 @@ Response `200 OK`:
 {
   "code": "INT-4829-XK",
   "submitted_at": "2026-04-13T10:32:00Z",
+  "revealed": false,
+  "candidate_email": null,
+  "candidate_name": null,
+  "github_username": null,
+  "github_repo_url": null,
+  "avatar_url": null,
   "manifest": { "elapsed_minutes": 47, "event_count": 38, ... },
   "report": { "overall_score": null, "dimensions": [], ... },
   "grading": null,
   "comments": [],
   "decision": null,
-  "revealed": false,
   "audit_entries": []
 }
 ```
+
+`candidate_email`, `candidate_name`, `github_username`, `github_repo_url`, and `avatar_url`
+are only populated when `revealed: true` — until then they are `null` to enforce blind grading.
 
 `report_html` is not included here — fetch separately to avoid large payloads in the list view.
 
@@ -115,11 +130,11 @@ no transformation.
 ---
 
 ### `POST /sessions/{code}/grade`
-**Who:** HM dashboard (after clicking "Grade")
-**What:** Save a grading result. The dashboard runs grading locally using the HM's API key
-and posts the result here for persistence and audit logging.
+**Who:** HM dashboard (after clicking "Grade" or "Submit Revision")
+**What:** Save or revise a grading result. The dashboard runs grading locally using the
+HM's API key and posts the result here for persistence and audit logging.
 
-Request body (JSON) — same schema as `grading.json`:
+**First grade** — request body (JSON):
 ```json
 {
   "dimensions": [
@@ -134,11 +149,63 @@ Request body (JSON) — same schema as `grading.json`:
 
 Response `200 OK`:
 ```json
-{ "code": "INT-4829-XK", "graded_at": "2026-04-13T10:47:22Z" }
+{ "code": "INT-4829-XK", "cid": "abc123def456", "graded_at": "2026-04-13T10:47:22Z" }
 ```
 
-Once a grade is saved, the `revealed` field becomes unlockable. Grading is immutable after
-the first save — subsequent POSTs return `409 Conflict`.
+**Grade revision** — include a `reason` field in the request body:
+```json
+{
+  "dimensions": [...],
+  "overall_score": 8.2,
+  "summary": "...",
+  "reason": "Undervalued the store abstraction — the session showed clearer separation of concerns than initially assessed."
+}
+```
+
+If the session is already graded and `reason` is missing or empty, returns `400`:
+```json
+{ "error": "revision_requires_reason", "message": "Grade revision requires a 'reason' field explaining the change." }
+```
+
+Response `200 OK` for a revision:
+```json
+{
+  "code": "INT-4829-XK",
+  "cid": "abc123def456",
+  "graded_at": "2026-04-13T11:30:00Z",
+  "revision": true,
+  "previous_score": 7.7,
+  "new_score": 8.2
+}
+```
+
+The previous grade is moved to `grading_history.jsonl` before overwriting `grading.json`.
+The audit trail records a `grade_revised` event:
+```json
+{
+  "type": "grade_revised",
+  "code": "INT-4829-XK",
+  "previous_score": 7.7,
+  "new_score": 8.2,
+  "reason": "Undervalued the store abstraction...",
+  "revealed": true,
+  "ts": "2026-04-13T11:30:00Z",
+  "prev_hash": "d4abe5e6",
+  "hash": "9f2c1a3b"
+}
+```
+
+The `revealed` field records whether the candidate's identity was known at the time of
+revision — the key data point for proving merit-first evaluation.
+
+`grading_history.jsonl` schema (one line per superseded grade):
+```json
+{ ...full_grading_payload, "superseded_at": "ISO timestamp", "revision_reason": "..." }
+```
+
+Once the first grade is saved, the `reveal` endpoint becomes unlockable.
+The candidate score endpoint (`GET /sessions/{code}/{cid}/score`) always serves the
+latest grade — revision history is not exposed to candidates.
 
 ---
 
@@ -238,7 +305,10 @@ Fields present depend on the sharing config:
 | `none` | `{"available": false, "reason": "..."}` |
 | `overall` | `available`, `overall_score` |
 | `breakdown` | + `dimensions` |
-| `breakdown_notes` | + `summary`, `standout_moments`, `concerns` (+ `debrief` / `hm_notes` if enabled) |
+| `breakdown_notes` | + `summary`, `standout_moments`, `concerns` |
+
+`debrief` is always included in the response when available — it's Claude's analysis
+of the session, not the HM's evaluation, so it's not an HM toggle.
 
 Returns `404` if the interview code or cid is not found.
 
@@ -254,9 +324,7 @@ Response `200 OK`:
 {
   "code": "INT-4829-XK",
   "sharing": {
-    "score": "breakdown_notes",
-    "debrief": true,
-    "hm_notes": false
+    "score": "breakdown_notes"
   }
 }
 ```
@@ -274,21 +342,18 @@ Request body:
 ```json
 {
   "sharing": {
-    "score": "breakdown",
-    "debrief": true,
-    "hm_notes": false
+    "score": "breakdown"
   }
 }
 ```
 
 `score` must be one of: `none`, `overall`, `breakdown`, `breakdown_notes`.
-`debrief` and `hm_notes` are booleans (default `false`).
 
 Response `200 OK`:
 ```json
 {
   "code": "INT-4829-XK",
-  "sharing": { "score": "breakdown", "debrief": true, "hm_notes": false }
+  "sharing": { "score": "breakdown" }
 }
 ```
 
