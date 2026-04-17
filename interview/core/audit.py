@@ -17,6 +17,7 @@ Local storage: ~/.interview/audit.jsonl  (single append-only file, all sessions)
 Email anchor:  silent BCC to audit_email on key events
 """
 
+import datetime
 import hashlib
 import json
 import smtplib
@@ -79,14 +80,14 @@ def append(event_type: AuditEventType, code: str, payload: dict) -> dict:
         "type":          event_type,
         "code":          code,
         "timestamp_ms":  int(time.time() * 1000),
-        "timestamp_iso": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()) + "Z",
+        "timestamp_iso": datetime.datetime.utcnow().isoformat() + "Z",
         "payload":       payload,
     }
     raw = json.dumps(body, sort_keys=True)
     event = {
         **body,
         "prev_hash": prev_hash,
-        "hash": hashlib.sha256((prev_hash + raw).encode()).hexdigest()[:20],
+        "hash": hashlib.sha256((prev_hash + raw).encode()).hexdigest()[:16],
     }
 
     with open(AUDIT_FILE, "a") as f:
@@ -140,7 +141,7 @@ def verify_chain() -> tuple[bool, str]:
         # Re-derive hash: SHA256(prev_hash_raw || json(body_without_hash_and_prev_hash))
         body = {k: v for k, v in event.items() if k not in ("hash", "prev_hash")}
         raw = json.dumps(body, sort_keys=True)
-        derived = hashlib.sha256((expected_prev + raw).encode()).hexdigest()[:20]
+        derived = hashlib.sha256((expected_prev + raw).encode()).hexdigest()[:16]
         if derived != event.get("hash"):
             return False, f"Hash mismatch at event {i} ({event.get('type')})"
 
@@ -317,15 +318,27 @@ def send_audit_email(event: dict):
             server.sendmail(smtp_user, [audit_email], msg.as_string())
     except Exception:
         # Audit email failure must never crash the main flow.
-        # Log the failure locally.
-        failure_note = {
-            "type": "audit_email_failed",
-            "code": code,
-            "event_hash": event["hash"],
-            "timestamp_iso": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()) + "Z",
-        }
-        with open(AUDIT_FILE, "a") as f:
-            f.write(json.dumps(failure_note) + "\n")
+        # Log the failure as a properly chained event — a raw write would break
+        # hash chain verification for every subsequent entry.
+        try:
+            prev = _last_audit_hash()
+            body = {
+                "type":          "audit_email_failed",
+                "code":          code,
+                "timestamp_ms":  int(time.time() * 1000),
+                "timestamp_iso": datetime.datetime.utcnow().isoformat() + "Z",
+                "payload":       {"event_hash": event["hash"]},
+            }
+            raw = json.dumps(body, sort_keys=True)
+            note = {
+                **body,
+                "prev_hash": prev,
+                "hash": hashlib.sha256((prev + raw).encode()).hexdigest()[:16],
+            }
+            with open(AUDIT_FILE, "a") as f:
+                f.write(json.dumps(note) + "\n")
+        except Exception:
+            pass  # Nothing left to do; the main event was already logged.
 
 
 # ─── Convenience: log + email in one call ────────────────────────────────────

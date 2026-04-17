@@ -217,7 +217,11 @@ def _build_candidate_row(r: dict) -> str:
         d_label = {"hire": "✓ Hired", "next_round": "→ Next Round", "reject": "✗ Rejected"}.get(d, d)
         decision_badge = f' <span style="color:{d_color};font-size:11px;font-weight:600">{d_label}</span>'
 
-    view_url = f"/candidate?code={code}&cid={cid}" if cid else f"/candidate?code={code}"
+    view_url = (
+        f"/candidate?code={quote(code, safe='')}&cid={quote(cid, safe='')}"
+        if cid else
+        f"/candidate?code={quote(code, safe='')}"
+    )
 
     return f"""
     <tr data-code="{code}" data-cid="{cid}">
@@ -413,7 +417,11 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
         revealed = any(e.get("type") == "identity_revealed" for e in audit_events)
 
     # Embed the report via iframe
-    report_iframe_src = f"/report-raw?code={code}&cid={cid}" if cid else f"/report-raw?code={code}"
+    report_iframe_src = (
+        f"/report-raw?code={quote(code, safe='')}&cid={quote(cid, safe='')}"
+        if cid else
+        f"/report-raw?code={quote(code, safe='')}"
+    )
     report_iframe = (
         f'<iframe src="{report_iframe_src}"'
         f' style="width:100%;height:600px;border:none;border-radius:8px;background:#111"></iframe>'
@@ -684,21 +692,22 @@ def _build_audit_log_html(code: str | None = None) -> str:
 
     rows = ""
     for e in events:
-        etype = e["type"]
-        ts = e.get("timestamp_iso", "")
-        ecode = e.get("code", "")
-        h = e.get("hash", "")
-        prev = e.get("prev_hash", "")[:8]
-        payload_str = json.dumps(e.get("payload", {}))[:120]
+        etype = escape(e["type"])
+        ts = escape(e.get("timestamp_iso", ""))
+        ecode_raw = e.get("code", "")
+        ecode = escape(ecode_raw)
+        h = escape(e.get("hash", ""))
+        prev = escape(e.get("prev_hash", "")[:8])
+        payload_str = escape(json.dumps(e.get("payload", {}))[:120])
         color_map = {
             "grade_recorded": "#fbbf24", "identity_revealed": "#60a5fa",
             "comment_added": "#a78bfa", "decision_recorded": "#4ade80",
             "next_round_scheduled": "#60a5fa", "report_opened": "#555",
         }
-        color = color_map.get(etype, "#555")
+        color = color_map.get(e["type"], "#555")
         rows += f"""<tr>
           <td style="color:{color};font-weight:600">{etype}</td>
-          <td><a href="/candidate?code={ecode}" style="color:#60a5fa;text-decoration:none">{ecode}</a></td>
+          <td><a href="/candidate?code={quote(ecode_raw, safe='')}" style="color:#60a5fa;text-decoration:none">{ecode}</a></td>
           <td style="color:#888">{ts}</td>
           <td style="color:#444;font-size:11px">{prev}…→{h[:8]}</td>
           <td style="color:#555;font-size:11px;font-family:monospace">{payload_str}</td>

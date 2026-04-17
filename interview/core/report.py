@@ -331,7 +331,7 @@ def generate_report(code: str):
         "concerns": grading.get("concerns", []) if grading else [],
         "event_count": manifest.get("event_count", 0),
         "final_hash": manifest.get("final_hash"),
-        "html_report": str(html_file),
+        "html_report": html_file.name,
     }
     json_file = report_dir / "report.json"
     json_file.write_text(json.dumps(json_report, indent=2))
