@@ -61,39 +61,49 @@ def _event_to_html_row(event: dict) -> str:
 
         if tool == "Edit":
             file_path = escape(tool_input.get("file_path", ""))
+            fname = escape(Path(tool_input.get("file_path", "")).name)
             old = tool_input.get("old_string", "")
             new = tool_input.get("new_string", "")
-            diff_lines = [f'<div class="diff-del">-{escape(ln)}</div>' for ln in old.splitlines()]
-            diff_lines += [f'<div class="diff-add">+{escape(ln)}</div>' for ln in new.splitlines()]
-            diff_body = "\n".join(diff_lines) or '<span class="diff-ctx">— no changes —</span>'
+            diff_lines = [f'<div class="diff-del"><span class="diff-gutter">-</span>{escape(ln)}</div>' for ln in old.splitlines()]
+            diff_lines += [f'<div class="diff-add"><span class="diff-gutter">+</span>{escape(ln)}</div>' for ln in new.splitlines()]
+            diff_body = "\n".join(diff_lines) or '<div class="diff-ctx">— no changes —</div>'
             return f"""
-        <div class="event event-tool">
-          <span class="event-time">{ts}</span>
-          <span class="event-type">→ Edit</span>
-          <div class="event-diff"><div class="diff-file">{file_path}</div>{diff_body}</div>
+        <div class="event-code-block">
+          <div class="code-block-header">
+            <span class="event-time">{ts}</span>
+            <span class="event-type code-op">→ Edit</span>
+            <span class="code-filename" title="{file_path}">{fname}</span>
+          </div>
+          <pre class="code-diff">{diff_body}</pre>
         </div>"""
 
         elif tool == "Write":
             file_path = escape(tool_input.get("file_path", ""))
+            fname = escape(Path(tool_input.get("file_path", "")).name)
             content_lines = tool_input.get("content", "").splitlines()
-            diff_lines = [f'<div class="diff-add">+{escape(ln)}</div>' for ln in content_lines[:80]]
+            diff_lines = [f'<div class="diff-add"><span class="diff-gutter">+</span>{escape(ln)}</div>' for ln in content_lines[:80]]
             if len(content_lines) > 80:
                 diff_lines.append(f'<div class="diff-ctx">… +{len(content_lines) - 80} more lines</div>')
-            diff_body = "\n".join(diff_lines) or '<span class="diff-ctx">— empty file —</span>'
+            diff_body = "\n".join(diff_lines) or '<div class="diff-ctx">— empty file —</div>'
             return f"""
-        <div class="event event-tool">
-          <span class="event-time">{ts}</span>
-          <span class="event-type">→ Write</span>
-          <div class="event-diff"><div class="diff-file">{file_path}</div>{diff_body}</div>
+        <div class="event-code-block">
+          <div class="code-block-header">
+            <span class="event-time">{ts}</span>
+            <span class="event-type code-op">→ Write</span>
+            <span class="code-filename" title="{file_path}">{fname}</span>
+          </div>
+          <pre class="code-diff">{diff_body}</pre>
         </div>"""
 
         elif tool == "Bash":
             cmd = escape(tool_input.get("command", ""))
             return f"""
-        <div class="event event-tool">
-          <span class="event-time">{ts}</span>
-          <span class="event-type">→ Bash</span>
-          <pre class="event-detail event-cmd">$ {cmd}</pre>
+        <div class="event-code-block">
+          <div class="code-block-header">
+            <span class="event-time">{ts}</span>
+            <span class="event-type code-op">→ Bash</span>
+          </div>
+          <pre class="code-diff"><div class="diff-ctx"><span class="diff-gutter">$</span>{cmd}</div></pre>
         </div>"""
 
         else:
@@ -286,11 +296,22 @@ def generate_html_report(code: str) -> str:
   .event-detail {{ color: #888; white-space: pre-wrap; font-size: 10px; word-break: break-word; }}
   .event-detail.small {{ font-size: 10px; color: #555; }}
   pre.event-detail {{ font-family: monospace; }}
-  .event-cmd {{ color: #d4a800; }}
-
-  /* ── Inline diff for Edit / Write tool calls ── */
-  .event-diff {{ font-family: monospace; font-size: 11px; line-height: 1.5; }}
-  .diff-file {{ color: #60a5fa; font-size: 10px; margin-bottom: 4px; word-break: break-all; }}
+  /* ── Full-width code blocks for Edit / Write / Bash ── */
+  .event-code-block {{ margin: 6px 0; border-radius: 6px; overflow: hidden;
+                       border: 1px solid #252525; background: #101010; }}
+  .code-block-header {{ display: flex; align-items: center; gap: 10px;
+                        padding: 5px 12px; background: #1a1a1a;
+                        border-bottom: 1px solid #252525; font-size: 11px; }}
+  .code-op {{ color: #4a90d9; font-weight: 600; }}
+  .code-filename {{ color: #60a5fa; font-size: 11px; font-family: monospace;
+                    margin-left: auto; overflow: hidden; text-overflow: ellipsis;
+                    white-space: nowrap; max-width: 60%; direction: rtl; }}
+  .code-diff {{ margin: 0; padding: 10px 0; font-family: 'SF Mono', 'Fira Code', monospace;
+                font-size: 12px; line-height: 1.65; overflow-x: auto; }}
+  .code-diff .diff-add {{ color: #4ade80; background: #0d1f0d; display: block; padding: 0 12px; }}
+  .code-diff .diff-del {{ color: #f87171; background: #1f0d0d; display: block; padding: 0 12px; }}
+  .code-diff .diff-ctx {{ color: #6b7280; display: block; padding: 0 12px; }}
+  .diff-gutter {{ display: inline-block; width: 14px; opacity: 0.6; user-select: none; }}
   .diff-wrap {{ font-family: monospace; font-size: 12px; background: #0a0a0a;
                 border: 1px solid #222; border-radius: 8px; padding: 16px; overflow-x: auto; }}
   .diff-add {{ color: #4ade80; }}
