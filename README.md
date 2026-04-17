@@ -37,11 +37,14 @@ Meanwhile, every one of those candidates uses AI coding assistants every day. Yo
 - Get evaluated on your thinking, not your ability to memorise algorithms
 - No file transfers, no email attachments — just a short code
 - GitHub OAuth: one account, one submission — no re-takes under a different name
+- Session debrief on submit — Claude tells you what you did well and what you missed, immediately
+- Score access — run `interview score <CODE>` once the HM grades (if sharing is enabled)
 
 **For teams:**
 - Close the interview loop in half the time
 - A written record of the hiring decision from problem to offer
 - Works inside your existing toolchain — no new platform to log into
+- Granular score sharing controls — decide per-interview what candidates see: nothing, a number, a breakdown, or full notes
 
 ---
 
@@ -100,7 +103,13 @@ When done:
 /submit
 ```
 
-The session is sealed and sent to the relay. The hiring manager's dashboard updates automatically.
+The session is sealed, sent to the relay, and Claude generates a session debrief — an honest reflection on what the candidate did well, what they missed, and how they used the AI. It's shown immediately in the terminal. Once the HM grades, the candidate can also run:
+
+```bash
+interview score INT-4829-XK
+```
+
+to see their score (if the HM has enabled sharing).
 
 ### Hiring manager — review
 
@@ -110,6 +119,8 @@ interview dashboard
 ```
 
 Candidates appear as "Candidate A", "Candidate B" — scores first, names second. Click into any candidate to see the full transcript (prompts + AI reasoning + tool calls), dimension scores, and diff. Add comments. Record your decision. Click Reveal when you're ready to unmask. Use **Verify Chain** to confirm the session log is tamper-evident.
+
+Control what candidates can see after grading with the **Score Sharing** panel on each candidate's page — choose between no sharing, overall score only, full dimension breakdown, or breakdown with HM notes.
 
 ---
 
@@ -139,10 +150,11 @@ Session starts                            ↓ anonymous by default
   ↓ pushed to relay                       ↓ full audit trail
 ```
 
-**Three passes on submit:**
+**Four passes on submit:**
 1. `session seal` — finalises hash chain, captures git diff (start → end)
-2. Push to relay — sealed session (events + manifest + report) stored server-side
-3. HM grades from dashboard — sends timeline + rubric + diff to their AI key, returns structured JSON scores
+2. Push to relay — sealed session (events + manifest + report + debrief) stored server-side
+3. Claude debrief — reads the event log and writes a focused session reflection; shown to candidate immediately
+4. HM grades from dashboard — sends timeline + rubric + diff to their AI key, returns structured JSON scores
 
 **The integrity model:**
 
@@ -318,6 +330,7 @@ That one line is the whole argument. You hired the person with the best score. Y
 | Git state | Branch + commit at start and end |
 | Git diff | Full diff (start → submit) |
 | Timestamps | Millisecond precision on every event |
+| Session debrief | Claude's post-session reflection (written on /submit, stored as debrief.txt) |
 
 The session log is append-only and hash-chained. Any tampering breaks the chain. The HM dashboard includes a **Verify Chain** button that re-derives every SHA-256 hash and flags any mismatch, along with the relay's server-side submission timestamp.
 
@@ -340,6 +353,7 @@ interview configure-github-app    # GitHub OAuth for relay (relay operators only
 # Runtime
 interview dashboard            # Local HM dashboard at localhost:7832
 interview status               # Check active session
+interview score <CODE>         # Candidate: fetch your score from relay
 interview install --help       # Platform install options
 ```
 
@@ -349,7 +363,7 @@ All config stored in `~/.interview/config.json` (permissions: 600).
 
 ## Privacy
 
-**Candidate sessions** are stored on the relay (or locally, in email mode). The relay stores: `events.jsonl`, `manifest.json`, `report.html`, and `report.json`. Raw file contents are never stored — only paths, hashes, and command summaries.
+**Candidate sessions** are stored on the relay (or locally, in email mode). The relay stores: `events.jsonl`, `manifest.json`, `report.html`, `report.json`, and `debrief.txt`. Raw file contents are never stored — only paths, hashes, and command summaries.
 
 **Grading** sends the session timeline and git diff to the configured AI endpoint (Anthropic API by default, or your enterprise proxy). No raw file contents. The grading call uses your own API key — interviewsignal never sees it.
 
