@@ -228,6 +228,10 @@ class RelayHandler(BaseHTTPRequestHandler):
         if len(parts) == 2 and parts[0] == "interviews":
             return self._get_interview(parts[1])
 
+        # Score endpoint — open (candidate fetches own score by knowing their cid)
+        if len(parts) == 4 and parts[0] == "sessions" and parts[3] == "score":
+            return self._get_score_open(parts[1], parts[2])
+
         # Auth-gated routes
         hm_key = self._auth_hm()
         if hm_key is None:
@@ -248,6 +252,8 @@ class RelayHandler(BaseHTTPRequestHandler):
                 return self._get_file(hm_key, parts[1], parts[2], "events.jsonl", "text/plain")
             if action == "report.html":
                 return self._get_file(hm_key, parts[1], parts[2], "report.html", "text/html")
+            if action == "sharing":
+                return self._get_sharing(hm_key, parts[1])
 
         if parts == ["audit", "verify"]:
             return self._get_audit_verify(hm_key)
@@ -283,6 +289,10 @@ class RelayHandler(BaseHTTPRequestHandler):
                 return self._post_comment(hm_key, code, cid)
             if action == "decision":
                 return self._post_decision(hm_key, code, cid)
+
+        # Sharing config update — parts[2] is code, no cid
+        if len(parts) == 3 and parts[0] == "sessions" and parts[2] == "sharing":
+            return self._post_sharing(hm_key, parts[1])
 
         self._error(404, "not_found", f"No route for POST {self.path}")
 
@@ -471,6 +481,27 @@ class RelayHandler(BaseHTTPRequestHandler):
     def _get_audit_verify(self, hm_key: str):
         self._json(_store.verify_all_chains(hm_key))
 
+    def _get_sharing(self, hm_key: str, code: str):
+        """GET /sessions/{code}/<anything>/sharing — return current sharing config."""
+        if not _store.lookup_hm_for_code(code):
+            return self._error(404, "interview_not_found", f"No interview for code {code}.")
+        config = _store.get_sharing_config(hm_key, code)
+        self._json({"code": code, "sharing": config})
+
+    def _get_score_open(self, code: str, cid: str):
+        """
+        GET /sessions/{code}/{cid}/score — open route.
+        Candidate fetches their own score by knowing their cid.
+        Response is filtered by the HM's sharing config.
+        """
+        hm_key = _store.lookup_hm_for_code(code)
+        if hm_key is None:
+            return self._error(404, "interview_not_found", f"No interview for code {code}.")
+        result = _store.get_score_response(hm_key, code, cid)
+        if result is None:
+            return self._error(404, "session_not_found", f"No session for {code}/{cid}.")
+        self._json(result)
+
     # ── auth POST handlers ────────────────────────────────────────────────────
 
     def _post_interview(self, hm_key: str):
@@ -566,6 +597,7 @@ class RelayHandler(BaseHTTPRequestHandler):
             "events.jsonl":  "events_jsonl",
             "report.html":   "report_html",
             "report.json":   "report_json",
+            "debrief.txt":   "debrief_txt",
         }
         missing = [k for k in ["manifest_json", "events_jsonl"] if k not in body]
         if missing:
@@ -642,6 +674,26 @@ class RelayHandler(BaseHTTPRequestHandler):
                 return self._error(409, "already_decided", "Decision already recorded.")
             else:
                 return self._error(500, "store_error", str(e))
+
+    def _post_sharing(self, hm_key: str, code: str):
+        """POST /sessions/{code}/sharing — update sharing config for an interview code."""
+        if not _store.lookup_hm_for_code(code):
+            return self._error(404, "interview_not_found", f"No interview for code {code}.")
+        body = self._read_body()
+        if body is None:
+            return self._error(400, "invalid_payload", "Could not parse JSON body.")
+        sharing = body.get("sharing", body)  # accept {sharing: {...}} or the dict itself
+        score = sharing.get("score", "none")
+        if score not in ("none", "overall", "breakdown", "breakdown_notes"):
+            return self._error(400, "invalid_payload",
+                               "sharing.score must be: none | overall | breakdown | breakdown_notes")
+        config = {
+            "score":    score,
+            "debrief":  bool(sharing.get("debrief", False)),
+            "hm_notes": bool(sharing.get("hm_notes", False)),
+        }
+        _store.save_sharing_config(hm_key, code, config)
+        self._json({"code": code, "sharing": config})
 
 
 # ─── Entry point ──────────────────────────────────────────────────────────────

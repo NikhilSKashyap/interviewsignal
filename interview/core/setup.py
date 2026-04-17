@@ -47,6 +47,7 @@ def create_interview(
     time_limit_minutes: int | None,
     anonymize: bool = True,
     audit_email: str | None = None,
+    sharing: dict | None = None,
 ) -> dict:
     ensure_dirs()
 
@@ -63,6 +64,14 @@ def create_interview(
     except Exception:
         pass
 
+    # Sharing config: what score information candidates can see after submission.
+    # Defaults to no sharing (null). HM can override per-code from dashboard.
+    sharing_config = sharing or {
+        "score":   "none",    # none | overall | breakdown | breakdown_notes
+        "debrief": False,     # share Claude's session debrief with candidate
+        "hm_notes": False,    # share HM summary/concerns with candidate
+    }
+
     payload = {
         "code": code,
         "problem": problem,
@@ -74,6 +83,7 @@ def create_interview(
         "anonymize": anonymize,
         "audit_email": audit_email,
         "created_at": created_at,
+        "sharing": sharing_config,
         # Integrity: hash of the problem + rubric so candidates can't claim
         # the problem was different
         "problem_hash": hashlib.sha256(problem.encode()).hexdigest()[:16],
@@ -150,11 +160,24 @@ def main():
     parser.add_argument("--anonymize", action="store_true", default=True)
     parser.add_argument("--no-anonymize", dest="anonymize", action="store_false")
     parser.add_argument("--audit-email", default=None)
+    parser.add_argument("--sharing-score", default="none",
+                        choices=["none", "overall", "breakdown", "breakdown_notes"],
+                        help="What score info candidates can see after submission")
+    parser.add_argument("--sharing-debrief", action="store_true", default=False,
+                        help="Share Claude's session debrief with candidate")
+    parser.add_argument("--sharing-hm-notes", action="store_true", default=False,
+                        help="Share HM summary and concerns with candidate")
     args = parser.parse_args()
 
     problem = Path(args.problem_file).read_text().strip()
     rubric = Path(args.rubric_file).read_text().strip()
     cc_emails = [e.strip() for e in args.cc_emails.split(",") if e.strip()]
+
+    sharing = {
+        "score":    args.sharing_score,
+        "debrief":  args.sharing_debrief,
+        "hm_notes": args.sharing_hm_notes,
+    }
 
     result = create_interview(
         problem=problem,
@@ -165,6 +188,7 @@ def main():
         time_limit_minutes=args.time_limit,
         anonymize=args.anonymize,
         audit_email=args.audit_email,
+        sharing=sharing,
     )
 
     print(f"\n✓ Interview created.\n")

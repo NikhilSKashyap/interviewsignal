@@ -205,22 +205,123 @@ Decision is immutable after the first save.
 
 ---
 
+### `GET /sessions/{code}/{cid}/score`
+**Who:** Candidate (after submission, to check their score)
+**Auth:** None — open route. The candidate knows their own cid.
+**What:** Return the candidate's score, filtered by the HM's sharing config.
+
+The `cid` is derived locally:
+- GitHub auth: `sha256("github:{github_id}")[:12]`
+- Email fallback: `sha256(email.lower())[:12]`
+
+Both are available in `~/.interview/sessions/<code>/manifest.json` after `/submit`.
+The CLI command `interview score <CODE>` computes this automatically.
+
+Response `200 OK` when score sharing is enabled and session is graded:
+```json
+{
+  "available": true,
+  "overall_score": 7.5,
+  "dimensions": [
+    { "name": "Problem Decomposition", "score": 8, "justification": "..." }
+  ],
+  "summary": "Strong systems thinking...",
+  "standout_moments": ["Caught the edge case early..."],
+  "concerns": ["Tests were thin..."],
+  "debrief": "You did well on X but missed Y..."
+}
+```
+
+Fields present depend on the sharing config:
+| `score` level | Fields returned |
+|---|---|
+| `none` | `{"available": false, "reason": "..."}` |
+| `overall` | `available`, `overall_score` |
+| `breakdown` | + `dimensions` |
+| `breakdown_notes` | + `summary`, `standout_moments`, `concerns` (+ `debrief` / `hm_notes` if enabled) |
+
+Returns `404` if the interview code or cid is not found.
+
+---
+
+### `GET /sessions/{code}/{cid}/sharing`
+**Who:** HM dashboard
+**Auth:** hm_key required
+**What:** Return the current sharing config for this interview code.
+
+Response `200 OK`:
+```json
+{
+  "code": "INT-4829-XK",
+  "sharing": {
+    "score": "breakdown_notes",
+    "debrief": true,
+    "hm_notes": false
+  }
+}
+```
+
+---
+
+### `POST /sessions/{code}/sharing`
+**Who:** HM dashboard (per-interview sharing controls)
+**Auth:** hm_key required
+**What:** Update the sharing config for this interview code. Takes effect immediately
+for all candidates in this interview. Does not require a `cid` — sharing is per-interview,
+not per-candidate.
+
+Request body:
+```json
+{
+  "sharing": {
+    "score": "breakdown",
+    "debrief": true,
+    "hm_notes": false
+  }
+}
+```
+
+`score` must be one of: `none`, `overall`, `breakdown`, `breakdown_notes`.
+`debrief` and `hm_notes` are booleans (default `false`).
+
+Response `200 OK`:
+```json
+{
+  "code": "INT-4829-XK",
+  "sharing": { "score": "breakdown", "debrief": true, "hm_notes": false }
+}
+```
+
+Each change is written to a per-code sharing override file and audit-logged.
+The interview payload's default `sharing` config (set at creation time) is used
+if no override file exists.
+
+---
+
 ## Data storage
 
 The relay stores one directory per session:
 
 ```
-/data/sessions/
-  INT-4829-XK/
-    manifest.json
-    events.jsonl
-    report.html          (if submitted)
-    report.json          (if submitted)
-    grading.json         (written on POST /grade)
-    comments.jsonl       (append-only)
-    decision.json        (written on POST /decision)
-    audit.jsonl          (every action, hash-chained)
-    meta.json            (submitted_at, revealed_at, etc.)
+/data/hms/<hm_key>/
+  interviews/
+    INT-4829-XK.json           — interview payload (problem, rubric, sharing config)
+  sessions/
+    INT-4829-XK/
+      <cid>/
+        manifest.json
+        events.jsonl
+        report.html            (if submitted)
+        report.json            (if submitted)
+        debrief.txt            (Claude's session debrief, if generated)
+        grading.json           (written on POST /grade)
+        comments.jsonl         (append-only)
+        decision.json          (written on POST /decision)
+        audit.jsonl            (every action, hash-chained)
+        meta.json              (submitted_at, revealed_at, github identity, etc.)
+  sharing/
+    INT-4829-XK.json           (sharing config override — written by POST /sessions/{code}/sharing)
+    INT-4829-XK_audit.jsonl    (audit log for sharing changes)
 ```
 
 All files are written atomically (write to temp, rename). The `/data` directory is the
@@ -272,6 +373,7 @@ All errors follow the same shape:
 | 401 | `unauthorized` | Missing or invalid API key |
 | 403 | `not_graded` | Reveal attempted before grade was saved |
 | 404 | `session_not_found` | No session for this code |
+| 404 | `interview_not_found` | No interview for this code |
 | 409 | `already_exists` | Session already submitted (immutable) |
 | 409 | `already_graded` | Grade already recorded (immutable) |
 

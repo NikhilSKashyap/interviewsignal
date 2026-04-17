@@ -323,6 +323,7 @@ class SessionStore:
         "report.html",
         "report.json",
         "grading.json",
+        "debrief.txt",
     })
 
     def get_file(self, hm_key: str, code: str, cid: str, filename: str) -> bytes | None:
@@ -400,6 +401,82 @@ class SessionStore:
         self._write_atomic(d / "decision.json", json.dumps(obj, indent=2))
         self.append_audit(hm_key, code, cid, "decision_recorded", {"decision": decision})
         return {"code": code, "cid": cid, "decision": decision, "recorded_at": recorded_at}
+
+    # ─── sharing config ───────────────────────────────────────────────────────
+
+    def _sharing_override_path(self, hm_key: str, code: str) -> Path:
+        """HM can override the interview's default sharing config per code."""
+        return self._hm_dir(hm_key) / "sharing" / f"{code}.json"
+
+    def get_sharing_config(self, hm_key: str, code: str) -> dict:
+        """
+        Returns the effective sharing config for this code.
+        Override file (set via dashboard) takes precedence over interview payload default.
+        """
+        override_path = self._sharing_override_path(hm_key, code)
+        if override_path.exists():
+            cfg = self._load_json(override_path)
+            if cfg:
+                return cfg
+        # Fall back to interview payload default
+        interview = self._load_json(self._interviews_dir(hm_key) / f"{code}.json")
+        if interview:
+            sharing = interview.get("sharing")
+            if sharing and isinstance(sharing, dict):
+                return sharing
+        return {"score": "none", "debrief": False, "hm_notes": False}
+
+    def save_sharing_config(self, hm_key: str, code: str, config: dict) -> dict:
+        """Persist an HM sharing override for this code. Audit-logged globally."""
+        override_path = self._sharing_override_path(hm_key, code)
+        override_path.parent.mkdir(parents=True, exist_ok=True)
+        self._write_atomic(override_path, json.dumps(config, indent=2))
+        # Append to a per-code sharing audit log (not per-cid)
+        audit_path = self._hm_dir(hm_key) / "sharing" / f"{code}_audit.jsonl"
+        entries = self._load_jsonl(audit_path)
+        prev_hash = entries[-1]["hash"] if entries else "0" * 16
+        entry = {
+            "type":      "sharing_updated",
+            "code":      code,
+            "ts":        time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "config":    config,
+            "prev_hash": prev_hash,
+        }
+        entry["hash"] = self._hash_chain(prev_hash, entry)
+        self._append_jsonl(audit_path, entry)
+        return config
+
+    def get_score_response(self, hm_key: str, code: str, cid: str) -> dict | None:
+        """
+        Build the public score response for a candidate, filtered by sharing config.
+        Returns None if sharing.score == "none" or the session is not yet graded.
+        """
+        if not self.session_exists(hm_key, code, cid):
+            return None
+        sharing = self.get_sharing_config(hm_key, code)
+        score_level = sharing.get("score", "none")
+        if score_level == "none":
+            return {"available": False, "reason": "Score sharing is not enabled for this interview."}
+        grading = self._load_json(self._session_dir(hm_key, code, cid) / "grading.json")
+        if not grading or grading.get("overall_score") is None:
+            return {"available": False, "reason": "Your session has not been graded yet."}
+
+        result: dict = {"available": True}
+        if score_level in ("overall", "breakdown", "breakdown_notes"):
+            result["overall_score"] = grading.get("overall_score")
+        if score_level in ("breakdown", "breakdown_notes"):
+            result["dimensions"] = grading.get("dimensions", [])
+        if score_level == "breakdown_notes":
+            result["summary"]          = grading.get("summary", "")
+            result["standout_moments"] = grading.get("standout_moments", [])
+            result["concerns"]         = grading.get("concerns", [])
+            if sharing.get("debrief"):
+                debrief_bytes = self.get_file(hm_key, code, cid, "debrief.txt")
+                if debrief_bytes:
+                    result["debrief"] = debrief_bytes.decode()
+            if sharing.get("hm_notes"):
+                result["hm_notes"] = grading.get("summary", "")
+        return result
 
     # ─── audit verification ───────────────────────────────────────────────────
 
