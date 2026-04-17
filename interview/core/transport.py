@@ -276,6 +276,8 @@ class RelayTransport(Transport):
             return EmailTransport().send(code)
 
         body: dict = {"code": code, "candidate_email": candidate_email}
+        if manifest.get("session_token"):
+            body["session_token"] = manifest["session_token"]
         file_map = {
             "manifest_json": "manifest.json",
             "events_jsonl":  "events.jsonl",

@@ -470,6 +470,66 @@ def cmd_configure_llm(args):
     print()
 
 
+def cmd_configure_github_app(args):
+    """
+    Configure GitHub OAuth for the relay server.
+
+    This is for relay operators — not candidates. Sets GITHUB_CLIENT_ID and
+    GITHUB_CLIENT_SECRET env vars that the relay reads at startup.
+
+    How to create a GitHub OAuth App:
+      1. GitHub → Settings → Developer settings → OAuth Apps → New OAuth App
+      2. Application name:  interviewsignal (or your company name)
+      3. Homepage URL:      your relay URL  (e.g. https://relay.example.com)
+      4. Callback URL:      <relay_url>/auth/github/callback
+      5. Click Register Application
+      6. Copy Client ID and generate a Client Secret
+    """
+    print("\nConfigure GitHub OAuth for the relay server")
+    print("─" * 52)
+    print("Create an OAuth App at: github.com/settings/developers")
+    print("Callback URL: <your_relay_url>/auth/github/callback\n")
+
+    client_id = input("GitHub Client ID: ").strip()
+    if not client_id:
+        print("\n  No Client ID entered — no changes made.\n")
+        return
+
+    import getpass
+    client_secret = getpass.getpass("GitHub Client Secret: ").strip()
+    if not client_secret:
+        print("\n  No Client Secret entered — no changes made.\n")
+        return
+
+    relay_base = input("Your relay base URL (e.g. https://relay.example.com): ").strip().rstrip("/")
+
+    print("\n  Set these environment variables on your relay server:\n")
+    print(f"  GITHUB_CLIENT_ID={client_id}")
+    print(f"  GITHUB_CLIENT_SECRET={client_secret}")
+    if relay_base:
+        print(f"  RELAY_BASE_URL={relay_base}")
+    print()
+    print("  Railway / Render: add them in the Variables / Environment tab.")
+    print("  Docker:           add them to your docker-compose.yml or .env file.")
+
+    # Also save to local config for self-hosted single-machine deployments
+    config_file = Path.home() / ".interview" / "config.json"
+    config_file.parent.mkdir(parents=True, exist_ok=True)
+    config = {}
+    if config_file.exists():
+        try:
+            config = json.loads(config_file.read_text())
+        except Exception:
+            pass
+    config["github_client_id"]     = client_id
+    config["github_client_secret"] = client_secret
+    if relay_base:
+        config["relay_base_url"] = relay_base
+    config_file.write_text(json.dumps(config, indent=2))
+    os.chmod(config_file, 0o600)
+    print(f"\n✓ Also saved to {config_file} for local relay deployments.\n")
+
+
 def cmd_dashboard(args):
     from interview.dashboard.serve import start_dashboard
     start_dashboard()
@@ -510,6 +570,7 @@ def main():
     sub.add_parser("configure-api-key", help="Store Anthropic API key (direct access)")
     sub.add_parser("configure-llm", help="Configure LLM endpoint for grading (enterprise proxies, custom base URL)")
     sub.add_parser("configure-relay", help="Set relay server URL and API key")
+    sub.add_parser("configure-github-app", help="Configure GitHub OAuth for the relay (relay operators only)")
     sub.add_parser("dashboard", help="Open HM candidate dashboard")
     sub.add_parser("status", help="Show active session status")
 
@@ -527,6 +588,8 @@ def main():
         cmd_configure_llm(args)
     elif args.command == "configure-relay":
         cmd_configure_relay(args)
+    elif args.command == "configure-github-app":
+        cmd_configure_github_app(args)
     elif args.command == "dashboard":
         cmd_dashboard(args)
     elif args.command == "status":

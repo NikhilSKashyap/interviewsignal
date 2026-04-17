@@ -37,6 +37,11 @@ def make_cid(email: str) -> str:
     return hashlib.sha256(email.lower().strip().encode()).hexdigest()[:12]
 
 
+def make_github_cid(github_id: int | str) -> str:
+    """Deterministic, anonymous candidate ID from GitHub user ID."""
+    return hashlib.sha256(f"github:{github_id}".encode()).hexdigest()[:12]
+
+
 class SessionStore:
 
     def __init__(self, data_dir: Path):
@@ -242,7 +247,7 @@ class SessionStore:
     MAX_SESSION_BYTES = 100 * 1024 * 1024  # 100 MB per session
     MAX_FILE_BYTES    = 20  * 1024 * 1024  # 20 MB per individual file
 
-    def save_session(self, hm_key: str, code: str, cid: str, candidate_email: str, files: dict[str, bytes]):
+    def save_session(self, hm_key: str, code: str, cid: str, candidate_email: str, files: dict[str, bytes], github_identity: dict | None = None):
         # Enforce per-file and per-session size limits
         total = sum(len(v) for v in files.values())
         if total > self.MAX_SESSION_BYTES:
@@ -264,7 +269,7 @@ class SessionStore:
                 elapsed = manifest.get("elapsed_minutes")
             except Exception:
                 pass
-        self._save_meta(hm_key, code, cid, {
+        meta: dict = {
             "code":            code,
             "cid":             cid,
             "candidate_email": candidate_email,
@@ -272,7 +277,13 @@ class SessionStore:
             "elapsed_minutes": elapsed,
             "graded":          False,
             "revealed":        False,
-        })
+        }
+        if github_identity:
+            meta["github_id"]       = github_identity.get("github_id")
+            meta["github_username"] = github_identity.get("github_username")
+            meta["avatar_url"]      = github_identity.get("avatar_url")
+            self.record_github_submission(code, github_identity["github_id"], cid)
+        self._save_meta(hm_key, code, cid, meta)
         self.append_audit(hm_key, code, cid, "session_submitted")
 
     def get_session(self, hm_key: str, code: str, cid: str) -> dict | None:
@@ -359,11 +370,13 @@ class SessionStore:
         self._save_meta(hm_key, code, cid, {"revealed": True, "revealed_at": revealed_at})
         self.append_audit(hm_key, code, cid, "identity_revealed", {"delta": delta})
         return {
-            "code":            code,
-            "cid":             cid,
-            "revealed_at":     revealed_at,
-            "delta":           delta,
-            "candidate_email": candidate_email,
+            "code":             code,
+            "cid":              cid,
+            "revealed_at":      revealed_at,
+            "delta":            delta,
+            "candidate_email":  candidate_email,
+            "github_username":  meta.get("github_username"),
+            "avatar_url":       meta.get("avatar_url"),
         }
 
     def add_comment(self, hm_key: str, code: str, cid: str, text: str) -> dict:
@@ -387,6 +400,53 @@ class SessionStore:
         self._write_atomic(d / "decision.json", json.dumps(obj, indent=2))
         self.append_audit(hm_key, code, cid, "decision_recorded", {"decision": decision})
         return {"code": code, "cid": cid, "decision": decision, "recorded_at": recorded_at}
+
+    # ─── audit verification ───────────────────────────────────────────────────
+
+    # ─── GitHub OAuth state storage ───────────────────────────────────────────
+
+    def _github_auth_dir(self) -> Path:
+        d = self.data_dir / "github_auth"
+        d.mkdir(exist_ok=True)
+        return d
+
+    def _github_subs_path(self) -> Path:
+        return self.data_dir / "github_submissions.json"
+
+    def save_github_state(self, state: str, code: str) -> None:
+        """Create a pending OAuth state record keyed by state UUID."""
+        obj = {
+            "state": state,
+            "code": code,
+            "created_at": time.time(),
+            "status": "pending",
+        }
+        self._write_atomic(
+            self._github_auth_dir() / f"{state}.json",
+            json.dumps(obj, indent=2),
+        )
+
+    def get_github_state(self, state: str) -> dict | None:
+        """Read an OAuth state record. Returns None if not found."""
+        return self._load_json(self._github_auth_dir() / f"{state}.json")
+
+    def update_github_state(self, state: str, updates: dict) -> None:
+        """Merge updates into an existing OAuth state record (atomic)."""
+        p = self._github_auth_dir() / f"{state}.json"
+        obj = self._load_json(p) or {}
+        obj.update(updates)
+        self._write_atomic(p, json.dumps(obj, indent=2))
+
+    def check_github_duplicate(self, code: str, github_id: int | str) -> bool:
+        """Return True if this github_id has already submitted for this code."""
+        subs = self._load_json(self._github_subs_path()) or {}
+        return str(github_id) in subs.get(code, {})
+
+    def record_github_submission(self, code: str, github_id: int | str, cid: str) -> None:
+        """Lock github_id → cid for this interview code (prevents re-submission)."""
+        subs = self._load_json(self._github_subs_path()) or {}
+        subs.setdefault(code, {})[str(github_id)] = cid
+        self._write_atomic(self._github_subs_path(), json.dumps(subs, indent=2))
 
     # ─── audit verification ───────────────────────────────────────────────────
 

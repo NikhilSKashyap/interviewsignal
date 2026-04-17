@@ -22,14 +22,121 @@ import base64
 import hmac
 import json
 import os
+import time
+import uuid
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from html import escape as _esc
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.request import Request as _Req, urlopen as _urlopen
+from urllib.error import URLError
 
-from interview.relay.store import SessionStore, StoreError, make_cid
+from interview.relay.store import SessionStore, StoreError, make_cid, make_github_cid
 
 _store: SessionStore | None = None
 _relay_api_key: str = ""
+_github_client_id: str = ""
+_github_client_secret: str = ""
+_relay_base_url: str = ""
+
+
+def _github_configured() -> bool:
+    return bool(_github_client_id and _github_client_secret)
+
+
+# ─── GitHub API helpers ───────────────────────────────────────────────────────
+
+def _exchange_github_code(oauth_code: str) -> dict:
+    """Exchange GitHub OAuth code for an access token. Returns parsed JSON."""
+    data = urlencode({
+        "client_id":     _github_client_id,
+        "client_secret": _github_client_secret,
+        "code":          oauth_code,
+    }).encode()
+    req = _Req(
+        "https://github.com/login/oauth/access_token",
+        data=data,
+        headers={"Accept": "application/json"},
+    )
+    with _urlopen(req, timeout=10) as resp:
+        return json.loads(resp.read())
+
+
+def _fetch_github_profile(access_token: str) -> dict:
+    """Fetch the authenticated GitHub user's profile."""
+    req = _Req(
+        "https://api.github.com/user",
+        headers={
+            "Authorization":        f"Bearer {access_token}",
+            "Accept":               "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "User-Agent":           "interviewsignal",
+        },
+    )
+    with _urlopen(req, timeout=10) as resp:
+        return json.loads(resp.read())
+
+
+# ─── OAuth HTML response pages ────────────────────────────────────────────────
+
+def _oauth_success_html(github_username: str) -> str:
+    uname = _esc(github_username)
+    return f"""<!DOCTYPE html><html lang="en">
+<head><meta charset="UTF-8"><title>Authenticated — interviewsignal</title>
+<style>*{{box-sizing:border-box;margin:0;padding:0}}
+body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+background:#0f0f0f;color:#e0e0e0;display:flex;align-items:center;
+justify-content:center;height:100vh}}
+.box{{text-align:center;padding:48px 40px;border:1px solid #2a2a2a;
+border-radius:14px;background:#161616;max-width:400px}}
+h2{{color:#4ade80;font-size:22px;margin-bottom:12px}}
+p{{color:#888;font-size:14px;line-height:1.6}}
+strong{{color:#e0e0e0}}</style></head>
+<body><div class="box">
+<h2>&#10003; Authenticated</h2>
+<p>Signed in as <strong>@{uname}</strong></p>
+<p style="margin-top:16px">Return to your terminal to continue.</p>
+</div></body></html>"""
+
+
+def _oauth_error_html(message: str) -> str:
+    msg = _esc(message)
+    return f"""<!DOCTYPE html><html lang="en">
+<head><meta charset="UTF-8"><title>Authentication Failed — interviewsignal</title>
+<style>*{{box-sizing:border-box;margin:0;padding:0}}
+body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+background:#0f0f0f;color:#e0e0e0;display:flex;align-items:center;
+justify-content:center;height:100vh}}
+.box{{text-align:center;padding:48px 40px;border:1px solid #2a2a2a;
+border-radius:14px;background:#161616;max-width:400px}}
+h2{{color:#f87171;font-size:22px;margin-bottom:12px}}
+p{{color:#888;font-size:14px;line-height:1.6}}</style></head>
+<body><div class="box">
+<h2>&#10007; Authentication Failed</h2>
+<p>{msg}</p>
+<p style="margin-top:16px">Close this tab and try again.</p>
+</div></body></html>"""
+
+
+def _oauth_duplicate_html(github_username: str, code: str) -> str:
+    uname = _esc(github_username)
+    ecode = _esc(code)
+    return f"""<!DOCTYPE html><html lang="en">
+<head><meta charset="UTF-8"><title>Already Submitted — interviewsignal</title>
+<style>*{{box-sizing:border-box;margin:0;padding:0}}
+body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+background:#0f0f0f;color:#e0e0e0;display:flex;align-items:center;
+justify-content:center;height:100vh}}
+.box{{text-align:center;padding:48px 40px;border:1px solid #2a2a2a;
+border-radius:14px;background:#161616;max-width:420px}}
+h2{{color:#f59e0b;font-size:22px;margin-bottom:12px}}
+p{{color:#888;font-size:14px;line-height:1.6}}
+strong{{color:#e0e0e0}}</style></head>
+<body><div class="box">
+<h2>&#9888; Already Submitted</h2>
+<p><strong>@{uname}</strong> has already submitted for <strong>{ecode}</strong>.</p>
+<p style="margin-top:16px">Each GitHub account can submit once per interview.</p>
+</div></body></html>"""
 
 
 class RelayHandler(BaseHTTPRequestHandler):
@@ -106,6 +213,17 @@ class RelayHandler(BaseHTTPRequestHandler):
         if not parts or parts == ["healthz"]:
             return self._json({"status": "ok"})
 
+        # GitHub OAuth routes — open, no auth
+        if len(parts) >= 2 and parts[0] == "auth" and parts[1] == "github":
+            action = parts[2] if len(parts) > 2 else ""
+            if action == "start":
+                return self._get_github_start()
+            if action == "callback":
+                return self._get_github_callback()
+            if action == "poll":
+                return self._get_github_poll()
+            return self._error(404, "not_found", f"No route for GET {self.path}")
+
         # Open routes — no auth
         if len(parts) == 2 and parts[0] == "interviews":
             return self._get_interview(parts[1])
@@ -175,6 +293,151 @@ class RelayHandler(BaseHTTPRequestHandler):
         if payload is None:
             return self._error(404, "not_found", f"No interview for code {code}.")
         self._json(payload)
+
+    def _get_relay_base(self) -> str:
+        """Best-effort relay base URL for building redirect_uri."""
+        if _relay_base_url:
+            return _relay_base_url.rstrip("/")
+        host = self.headers.get("Host", "localhost:8080")
+        # Assume HTTPS unless it's obviously a local dev host
+        scheme = "http" if host.startswith("localhost") or host.startswith("127.") else "https"
+        return f"{scheme}://{host}"
+
+    def _get_github_start(self):
+        """
+        GET /auth/github/start?code=INT-4829-XK
+        Returns {url, state} for the candidate CLI to open in a browser.
+        Returns 501 if GitHub OAuth is not configured on this relay.
+        """
+        if not _github_configured():
+            return self._json({
+                "github_configured": False,
+                "message": "GitHub OAuth not configured on this relay.",
+            }, 501)
+
+        params = parse_qs(urlparse(self.path).query)
+        code = params.get("code", [""])[0].strip()
+        if not code:
+            return self._error(400, "missing_code", "Missing 'code' query parameter.")
+        if not _store.lookup_hm_for_code(code):
+            return self._error(404, "interview_not_found", f"Interview {code} not found.")
+
+        state = str(uuid.uuid4())
+        _store.save_github_state(state, code)
+
+        redirect_uri = f"{self._get_relay_base()}/auth/github/callback"
+        qs = urlencode({
+            "client_id":    _github_client_id,
+            "redirect_uri": redirect_uri,
+            "scope":        "read:user",
+            "state":        state,
+        })
+        self._json({"url": f"https://github.com/login/oauth/authorize?{qs}", "state": state})
+
+    def _get_github_callback(self):
+        """
+        GET /auth/github/callback?code=<oauth_code>&state=<state>
+        GitHub redirects here after the candidate authorizes.
+        Exchanges the code, fetches the profile, stores the result, returns HTML.
+        """
+        params = parse_qs(urlparse(self.path).query)
+        oauth_code = params.get("code", [""])[0]
+        state      = params.get("state", [""])[0]
+
+        if not oauth_code or not state:
+            return self._text(_oauth_error_html("Missing code or state parameter."), "text/html", 400)
+
+        state_data = _store.get_github_state(state)
+        if not state_data or state_data.get("status") != "pending":
+            return self._text(_oauth_error_html("Invalid or expired state. Please try again."), "text/html", 400)
+
+        if time.time() - state_data.get("created_at", 0) > 300:
+            _store.update_github_state(state, {"status": "expired"})
+            return self._text(_oauth_error_html("Session expired. Run /interview <CODE> again."), "text/html", 400)
+
+        # Exchange OAuth code for access token
+        try:
+            token_data = _exchange_github_code(oauth_code)
+        except Exception as e:
+            _store.update_github_state(state, {"status": "error", "error": str(e)})
+            return self._text(_oauth_error_html(f"GitHub token exchange failed: {e}"), "text/html", 500)
+
+        access_token = token_data.get("access_token", "")
+        if not access_token:
+            err = token_data.get("error_description") or token_data.get("error") or "No access_token in response"
+            _store.update_github_state(state, {"status": "error", "error": err})
+            return self._text(_oauth_error_html(f"GitHub auth failed: {err}"), "text/html", 400)
+
+        # Fetch user profile
+        try:
+            profile = _fetch_github_profile(access_token)
+        except Exception as e:
+            _store.update_github_state(state, {"status": "error", "error": str(e)})
+            return self._text(_oauth_error_html(f"Could not fetch GitHub profile: {e}"), "text/html", 500)
+
+        github_id       = profile.get("id")
+        github_username = profile.get("login", "")
+        avatar_url      = profile.get("avatar_url", "")
+        interview_code  = state_data["code"]
+
+        # Duplicate check — early warning in browser (enforced again on submit)
+        if _store.check_github_duplicate(interview_code, github_id):
+            _store.update_github_state(state, {
+                "status":          "duplicate",
+                "github_username": github_username,
+            })
+            return self._text(_oauth_duplicate_html(github_username, interview_code), "text/html")
+
+        # Success
+        _store.update_github_state(state, {
+            "status":          "complete",
+            "github_id":       github_id,
+            "github_username": github_username,
+            "avatar_url":      avatar_url,
+        })
+        return self._text(_oauth_success_html(github_username), "text/html")
+
+    def _get_github_poll(self):
+        """
+        GET /auth/github/poll?state=<state>
+        Candidate CLI polls this until status == "complete" or a terminal state.
+        """
+        params = parse_qs(urlparse(self.path).query)
+        state  = params.get("state", [""])[0]
+        if not state:
+            return self._error(400, "missing_state", "Missing 'state' query parameter.")
+
+        state_data = _store.get_github_state(state)
+        if not state_data:
+            return self._error(404, "not_found", "Unknown state token.")
+
+        status = state_data.get("status", "pending")
+
+        if status == "pending":
+            if time.time() - state_data.get("created_at", 0) > 300:
+                _store.update_github_state(state, {"status": "expired"})
+                return self._json({"status": "expired"})
+            return self._json({"status": "pending"})
+
+        if status == "complete":
+            return self._json({
+                "status":          "complete",
+                "github_id":       state_data.get("github_id"),
+                "github_username": state_data.get("github_username"),
+                "avatar_url":      state_data.get("avatar_url"),
+                # state UUID doubles as the session_token — relay looks it up by state
+                "session_token":   state,
+            })
+
+        if status == "duplicate":
+            return self._json({
+                "status":          "duplicate",
+                "github_username": state_data.get("github_username"),
+                "message":         "You have already submitted for this interview.",
+            })
+
+        # error / expired
+        return self._json({"status": status, "error": state_data.get("error", "")})
 
     # ── open POST handlers ────────────────────────────────────────────────────
 
@@ -262,10 +525,41 @@ class RelayHandler(BaseHTTPRequestHandler):
         if owner != hm_key:
             return self._error(403, "forbidden", "This code belongs to a different HM.")
 
-        cid = make_cid(candidate_email)
+        # ── GitHub identity resolution ─────────────────────────────────────────
+        github_identity: dict | None = None
+        session_token = body.get("session_token", "").strip()
+
+        if _github_configured():
+            if not session_token:
+                return self._error(
+                    401, "github_auth_required",
+                    "This relay requires GitHub authentication. "
+                    "Run /interview <CODE> to authenticate before submitting.",
+                )
+            state_data = _store.get_github_state(session_token)
+            if not state_data or state_data.get("status") != "complete":
+                return self._error(401, "invalid_session_token",
+                                   "Invalid or expired GitHub session token.")
+            if state_data.get("code") != code:
+                return self._error(403, "token_mismatch",
+                                   "Session token was issued for a different interview code.")
+            github_id = state_data.get("github_id")
+            if _store.check_github_duplicate(code, github_id):
+                return self._error(409, "already_submitted",
+                                   "This GitHub account has already submitted for this interview.")
+            github_identity = {
+                "github_id":       github_id,
+                "github_username": state_data.get("github_username"),
+                "avatar_url":      state_data.get("avatar_url"),
+            }
+            cid = make_github_cid(github_id)
+        else:
+            # No GitHub configured — use email-based cid (existing behaviour)
+            cid = make_cid(candidate_email)
+
         if _store.session_exists(hm_key, code, cid):
             return self._error(409, "already_submitted",
-                               f"{candidate_email} has already submitted for {code}.")
+                               f"A session for this candidate already exists for {code}.")
 
         file_map = {
             "manifest.json": "manifest_json",
@@ -287,7 +581,7 @@ class RelayHandler(BaseHTTPRequestHandler):
                     return self._error(400, "invalid_payload",
                                        f"Could not base64-decode '{key}'.")
 
-        _store.save_session(hm_key, code, cid, candidate_email, files)
+        _store.save_session(hm_key, code, cid, candidate_email, files, github_identity=github_identity)
         import time
         self._json({
             "code":         code,
@@ -353,11 +647,15 @@ class RelayHandler(BaseHTTPRequestHandler):
 # ─── Entry point ──────────────────────────────────────────────────────────────
 
 def start_relay(port: int = 8080, data_dir: Path = Path("/data")):
-    global _store, _relay_api_key
+    global _store, _relay_api_key, _github_client_id, _github_client_secret, _relay_base_url
 
     _relay_api_key = os.environ.get("RELAY_API_KEY", "")
     if not _relay_api_key:
         print("⚠  RELAY_API_KEY not set — master key disabled (dev mode).")
+
+    _github_client_id     = os.environ.get("GITHUB_CLIENT_ID", "")
+    _github_client_secret = os.environ.get("GITHUB_CLIENT_SECRET", "")
+    _relay_base_url       = os.environ.get("RELAY_BASE_URL", "").rstrip("/")
 
     _store = SessionStore(data_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -368,6 +666,9 @@ def start_relay(port: int = 8080, data_dir: Path = Path("/data")):
     print(f"  Listening on  http://0.0.0.0:{port}")
     print(f"  Data dir      {data_dir}")
     print(f"  Master key    {'set' if _relay_api_key else 'not set (dev mode)'}")
+    print(f"  GitHub OAuth  {'enabled' if _github_configured() else 'not configured'}")
+    if _relay_base_url:
+        print(f"  Base URL      {_relay_base_url}")
     print(f"  ─────────────────────────────────────────\n")
 
     try:

@@ -114,22 +114,29 @@ To review candidates: /interview dashboard
 
 When the user types `/interview <CODE>` (e.g. `/interview INT-4829-XK`):
 
-### Step 1: Fetch and display the problem
+### Step 1: Authenticate and start the session
 
 ```bash
 python -m interview.core.session start --code INT-4829-XK
 ```
 
-This decodes the interview package, validates the code, prints the problem statement,
-and automatically configures the relay transport if the HM embedded one in the package —
-so candidates need zero transport setup in the normal flow.
+This command:
+1. Fetches the interview package from the relay (validates the code)
+2. **GitHub OAuth** — if the relay has GitHub configured, opens the browser for GitHub login.
+   The candidate must authorize the app; the CLI polls until complete.
+   One GitHub account = one submission. Duplicate attempts are blocked here.
+3. Prints the problem statement
+4. Begins session recording
 
-Display it clearly:
+If the relay has no GitHub app configured, step 2 is skipped (self-reported identity only).
+
+Display the session header clearly:
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   INTERVIEW SESSION — INT-4829-XK
   Started: 2026-04-13 10:32 AM
+  GitHub:  @candidate-username
   Time limit: 90 minutes
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -141,23 +148,30 @@ Display it clearly:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
+If the candidate has already submitted (duplicate GitHub account), show:
+```
+  ✗ @username has already submitted for INT-4829-XK.
+    Each GitHub account can only submit once per interview.
+```
+Then stop — do not start the session.
+
 ### Step 2: Capture begins — your responsibility as the AI assistant
 
-The session hooks capture tool calls automatically. But **you** must capture the conversation. The hook will fire a prominent `INTERVIEW CAPTURE` banner at the start of each new user turn. When you see it, you MUST run both commands before doing anything else:
+The session hooks capture tool calls automatically. User prompts and your responses are
+captured by the Stop hook at the end of each turn — you do not need to log them manually.
+
+When you see the `INTERVIEW CAPTURE` banner at the start of a new user turn, log your plan:
 
 ```bash
-# STEP 1 — log the candidate's exact message
-python -m interview.core.session log --event-type user_prompt --payload '{"role":"user","text":"CANDIDATE MESSAGE HERE"}'
-
-# STEP 2 — log your plan
 python -m interview.core.session log --event-type thinking --payload '{"plan":"YOUR APPROACH HERE"}'
 ```
 
-Replace the placeholder text with real content. Use single quotes around the JSON payload. If the candidate's message contains a single quote/apostrophe, drop it or rephrase.
+Replace the placeholder with your actual approach. Use single quotes around the JSON payload.
 
-**This is mandatory on every substantive user turn** — when the candidate asks you to write code, debug something, explain an approach, run tests, etc. Skip only for `/submit` and other slash commands.
+**Do this on every substantive user turn** — when the candidate asks you to write code, debug
+something, explain an approach, run tests, etc. Skip for `/submit` and slash commands.
 
-The hiring manager grades based on the conversation, not just the tool calls. Missing logs = missing signal.
+The hiring manager grades based on the conversation, not just the tool calls. Missing plans = missing signal.
 
 ### Step 3: Remind candidate of active session
 
@@ -278,6 +292,19 @@ Features:
 ✗ No active session found.
   Start a session first: /interview <CODE>
 ```
+
+**Candidate already submitted (GitHub duplicate):**
+```
+✗ @username has already submitted for INT-4829-XK.
+  Each GitHub account can only submit once per interview.
+```
+Do not start the session. The relay enforces this — it is not possible to work around.
+
+**GitHub OAuth timed out:**
+```
+✗ Authentication timed out after 5 minutes. Run /interview INT-4829-XK to try again.
+```
+Tell the candidate to re-run the command and complete the browser authorization promptly.
 
 **No transport configured (fallback at session start):**
 ```

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "interviewsignal"
-version = "0.1.5"
+version = "0.2.0"
 description = "AI-native interview platform — capture thought process, not puzzle performance"
 readme = "README.md"
 license = "MIT"
