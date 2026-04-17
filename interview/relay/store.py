@@ -304,7 +304,19 @@ class SessionStore:
             "audit_entries":   audit,
         }
 
+    # Files the relay is allowed to serve — anything else is rejected to prevent
+    # path traversal attacks (e.g. ../../hms/OTHER_KEY/interviews/code.json).
+    _ALLOWED_FILES = frozenset({
+        "manifest.json",
+        "events.jsonl",
+        "report.html",
+        "report.json",
+        "grading.json",
+    })
+
     def get_file(self, hm_key: str, code: str, cid: str, filename: str) -> bytes | None:
+        if filename not in self._ALLOWED_FILES:
+            raise StoreError(f"File not allowed: {filename!r}")
         f = self._session_dir(hm_key, code, cid) / filename
         return f.read_bytes() if f.exists() else None
 

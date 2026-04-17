@@ -1,25 +1,34 @@
 """
 interview.hooks.claude_hook
 ----------------------------
-PreToolUse and PostToolUse hook for Claude Code.
+PreToolUse, PostToolUse, and Stop hook for Claude Code.
 
-Installed at: ~/.claude/settings.json under hooks.PreToolUse and hooks.PostToolUse
+Installed at: ~/.claude/settings.json under hooks.PreToolUse, PostToolUse, Stop
 
 Claude Code passes hook input via stdin as JSON:
   PreToolUse:  {"tool_name": "...", "tool_input": {...}}
   PostToolUse: {"tool_name": "...", "tool_input": {...}, "tool_response": {...}}
+  Stop:        {"session_id": "...", "stop_hook_active": bool}
 
 The hook:
-  1. Logs the event to the active session (if one exists)
-  2. On PreToolUse: injects a capture instruction or status reminder
-  3. On PostToolUse: captures tool output content hash
+  1. Pre/PostToolUse: log tool calls and inject a status reminder
+  2. Stop: read the Claude conversation log, extract the last user + assistant
+     messages, and log them as user_prompt / assistant_message events.
 
-Turn detection:
+Turn detection (Pre/PostToolUse):
   The hook tracks the timestamp of the last non-log tool call in the session.
   A gap of > 30 seconds means the candidate sent a new message — a "new turn".
   On new turns, a PROMINENT instruction fires asking Claude to log both the
   candidate's message and its plan before acting. Mid-turn tool calls get only
   the status line (to avoid noise).
+
+Stop hook — reliable prompt capture:
+  Claude Code stores conversation logs at
+    ~/.claude/projects/<cwd-encoded>/<session_id>.jsonl
+  Each line: {type:"user"|"assistant", message:{role,content}, timestamp, ...}
+  handle_stop() reads from last_stop_ts onward, finds the latest user and
+  assistant messages, and logs them. This captures prompts without relying on
+  injected instructions.
 
 Special handling:
   - Bash calls to `python -m interview.core.session log` are NOT logged as
@@ -32,6 +41,7 @@ Exit codes:
 stdout on PreToolUse injects content back into the AI context.
 """
 
+import datetime
 import json
 import sys
 import time
@@ -39,6 +49,7 @@ from pathlib import Path
 
 INTERVIEW_DIR = Path.home() / ".interview"
 ACTIVE_SESSION_FILE = INTERVIEW_DIR / "active_session.json"
+CLAUDE_PROJECTS_DIR = Path.home() / ".claude" / "projects"
 
 # Gap in seconds that indicates the candidate sent a new message
 NEW_TURN_GAP = 30
@@ -215,12 +226,150 @@ def handle_post_tool_use(data: dict) -> int:
     return 0
 
 
+def _parse_iso_ts(ts_str: str) -> float:
+    """Parse an ISO 8601 timestamp string (e.g. '2026-04-16T21:22:52.439Z') to Unix float."""
+    try:
+        ts = ts_str.rstrip("Z")
+        fmt = "%Y-%m-%dT%H:%M:%S.%f" if "." in ts else "%Y-%m-%dT%H:%M:%S"
+        dt = datetime.datetime.strptime(ts, fmt)
+        return dt.replace(tzinfo=datetime.timezone.utc).timestamp()
+    except Exception:
+        return 0.0
+
+
+def _extract_text(content) -> str:
+    """Extract plain text from a message content field (str or list of blocks)."""
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts = [
+            b.get("text", "").strip()
+            for b in content
+            if isinstance(b, dict) and b.get("type") == "text"
+        ]
+        return "\n".join(p for p in parts if p)
+    return ""
+
+
+def _find_conv_file(session_id: str) -> "Path | None":
+    """Search ~/.claude/projects/*/ for <session_id>.jsonl."""
+    if not CLAUDE_PROJECTS_DIR.exists():
+        return None
+    target = f"{session_id}.jsonl"
+    for project_dir in CLAUDE_PROJECTS_DIR.iterdir():
+        if not project_dir.is_dir():
+            continue
+        candidate = project_dir / target
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def handle_stop(data: dict) -> int:
+    """
+    Stop hook — fires when Claude finishes a response turn.
+
+    Reads ~/.claude/projects/*/<session_id>.jsonl, extracts the last
+    user message and assistant response from this turn, and logs them
+    as user_prompt / assistant_message events in the active session.
+
+    This makes prompt capture reliable: it doesn't depend on injected
+    instructions or Claude's active cooperation.
+    """
+    # stop_hook_active=True means this Stop hook itself triggered another Stop.
+    # Bail out to prevent an infinite loop.
+    if data.get("stop_hook_active"):
+        return 0
+
+    session = _load_active_session()
+    if not session:
+        return 0
+
+    session_id = data.get("session_id", "")
+    if not session_id:
+        return 0
+
+    conv_file = _find_conv_file(session_id)
+    if not conv_file:
+        return 0
+
+    # Cutoff: skip messages we've already logged.
+    # Fall back to session start time so the very first stop skips the
+    # /interview <CODE> command exchange (which happened before started_at).
+    last_stop_ts = float(
+        session.get("last_stop_ts") or session.get("started_at") or 0
+    )
+
+    user_msgs: "list[tuple[float, str]]" = []
+    assistant_msgs: "list[tuple[float, str]]" = []
+
+    try:
+        for line in conv_file.read_text().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except Exception:
+                continue
+
+            msg_type = obj.get("type", "")
+            if msg_type not in ("user", "assistant"):
+                continue
+
+            ts = _parse_iso_ts(obj.get("timestamp", ""))
+            if ts <= last_stop_ts:
+                continue
+
+            text = _extract_text(obj.get("message", {}).get("content", ""))
+            if not text:
+                continue
+
+            if msg_type == "user":
+                user_msgs.append((ts, text))
+            else:
+                assistant_msgs.append((ts, text))
+    except Exception:
+        return 0
+
+    # Nothing new to log
+    if not user_msgs and not assistant_msgs:
+        return 0
+
+    # Reload session — PreToolUse may have updated it during this turn
+    session = _load_active_session()
+    if not session:
+        return 0
+
+    if user_msgs:
+        _, text = user_msgs[-1]
+        if len(text) > 2000:
+            text = text[:2000] + f"...[{len(text)} chars]"
+        _log_event(session, "user_prompt", {"text": text})
+        session = _load_active_session() or session
+
+    if assistant_msgs:
+        _, text = assistant_msgs[-1]
+        if len(text) > 3000:
+            text = text[:3000] + f"...[{len(text)} chars]"
+        _log_event(session, "assistant_message", {"text": text})
+        session = _load_active_session() or session
+
+    # Advance cutoff so the next Stop only sees new messages
+    if session:
+        session["last_stop_ts"] = time.time()
+        ACTIVE_SESSION_FILE.write_text(json.dumps(session, indent=2))
+
+    return 0
+
+
 def main():
     """
     Entry point for the Claude Code hook.
     Usage:
       python -m interview.hooks.claude_hook pre  < hook_input.json
       python -m interview.hooks.claude_hook post < hook_input.json
+      python -m interview.hooks.claude_hook stop < hook_input.json
     """
     if len(sys.argv) < 2:
         sys.exit(0)
@@ -236,6 +385,8 @@ def main():
         sys.exit(handle_pre_tool_use(data))
     elif hook_type == "post":
         sys.exit(handle_post_tool_use(data))
+    elif hook_type == "stop":
+        sys.exit(handle_stop(data))
     else:
         sys.exit(0)
 

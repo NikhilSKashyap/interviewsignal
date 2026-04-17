@@ -19,6 +19,7 @@ Environment variables:
 
 import argparse
 import base64
+import hmac
 import json
 import os
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -53,7 +54,8 @@ class RelayHandler(BaseHTTPRequestHandler):
         token = self._bearer()
         if not token:
             return None
-        if _relay_api_key and token == _relay_api_key:
+        # Use constant-time comparison for the master key to prevent timing attacks.
+        if _relay_api_key and hmac.compare_digest(token, _relay_api_key):
             return token  # operator access
         if _store.hm_exists(token):
             return token
