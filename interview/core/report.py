@@ -55,12 +55,53 @@ def _event_to_html_row(event: dict) -> str:
         </div>"""
 
     elif etype == "tool_call":
-        tool = escape(payload.get("tool_name", ""))
-        inputs = escape(json.dumps(payload.get("tool_input", {}), indent=2)[:400])
-        return f"""
+        tool = payload.get("tool_name", "")
+        safe_tool = escape(tool)
+        tool_input = payload.get("tool_input", {})
+
+        if tool == "Edit":
+            file_path = escape(tool_input.get("file_path", ""))
+            old = tool_input.get("old_string", "")
+            new = tool_input.get("new_string", "")
+            diff_lines = [f'<div class="diff-del">-{escape(ln)}</div>' for ln in old.splitlines()]
+            diff_lines += [f'<div class="diff-add">+{escape(ln)}</div>' for ln in new.splitlines()]
+            diff_body = "\n".join(diff_lines) or '<span class="diff-ctx">— no changes —</span>'
+            return f"""
         <div class="event event-tool">
           <span class="event-time">{ts}</span>
-          <span class="event-type">→ {tool}</span>
+          <span class="event-type">→ Edit</span>
+          <div class="event-diff"><div class="diff-file">{file_path}</div>{diff_body}</div>
+        </div>"""
+
+        elif tool == "Write":
+            file_path = escape(tool_input.get("file_path", ""))
+            content_lines = tool_input.get("content", "").splitlines()
+            diff_lines = [f'<div class="diff-add">+{escape(ln)}</div>' for ln in content_lines[:80]]
+            if len(content_lines) > 80:
+                diff_lines.append(f'<div class="diff-ctx">… +{len(content_lines) - 80} more lines</div>')
+            diff_body = "\n".join(diff_lines) or '<span class="diff-ctx">— empty file —</span>'
+            return f"""
+        <div class="event event-tool">
+          <span class="event-time">{ts}</span>
+          <span class="event-type">→ Write</span>
+          <div class="event-diff"><div class="diff-file">{file_path}</div>{diff_body}</div>
+        </div>"""
+
+        elif tool == "Bash":
+            cmd = escape(tool_input.get("command", ""))
+            return f"""
+        <div class="event event-tool">
+          <span class="event-time">{ts}</span>
+          <span class="event-type">→ Bash</span>
+          <pre class="event-detail event-cmd">$ {cmd}</pre>
+        </div>"""
+
+        else:
+            inputs = escape(json.dumps(tool_input, indent=2)[:400])
+            return f"""
+        <div class="event event-tool">
+          <span class="event-time">{ts}</span>
+          <span class="event-type">→ {safe_tool}</span>
           <pre class="event-detail">{inputs}</pre>
         </div>"""
 
@@ -75,39 +116,31 @@ def _event_to_html_row(event: dict) -> str:
         </div>"""
 
     elif etype == "user_prompt":
-        text = escape(payload.get("text", ""))
+        text = escape(payload.get("text", "")[:300])
         return f"""
-        <div class="msg msg-candidate">
-          <div class="msg-header">
-            <span class="msg-role">Candidate</span>
-            <span class="msg-time">{ts}</span>
-          </div>
-          <div class="msg-body">{text}</div>
+        <div class="event event-user">
+          <span class="event-time">{ts}</span>
+          <span class="event-type">Candidate</span>
+          <div class="event-detail">{text}</div>
         </div>"""
 
     elif etype == "thinking":
         raw_plan = payload.get("plan", payload.get("text", payload.get("reasoning", "")))
-        plan = escape(raw_plan)
-        preview = escape(raw_plan.replace("\n", " ")[:120])
+        plan = escape(raw_plan[:300])
         return f"""
-        <details class="msg msg-thinking">
-          <summary class="msg-header">
-            <span class="msg-role">&#x1f4ad; Reasoning</span>
-            <span class="msg-preview">{preview}…</span>
-            <span class="msg-time">{ts}</span>
-          </summary>
-          <div class="msg-body">{plan}</div>
-        </details>"""
+        <div class="event event-thinking">
+          <span class="event-time">{ts}</span>
+          <span class="event-type">Thinking</span>
+          <div class="event-detail">{plan}</div>
+        </div>"""
 
     elif etype == "assistant_message":
-        text = escape(payload.get("text", ""))
+        text = escape(payload.get("text", "")[:300])
         return f"""
-        <div class="msg msg-assistant">
-          <div class="msg-header">
-            <span class="msg-role">Claude</span>
-            <span class="msg-time">{ts}</span>
-          </div>
-          <div class="msg-body">{text}</div>
+        <div class="event event-assistant">
+          <span class="event-time">{ts}</span>
+          <span class="event-type">Claude</span>
+          <div class="event-detail">{text}</div>
         </div>"""
 
     elif etype == "session_end":
@@ -231,69 +264,33 @@ def generate_html_report(code: str) -> str:
   .concerns h4 {{ color: #f59e0b; font-size: 13px; margin-bottom: 8px; }}
   ul {{ padding-left: 20px; font-size: 13px; color: #bbb; }}
   li {{ margin-bottom: 4px; }}
-  /* ── Compact tool-call / system events ── */
+  /* ── Timeline events ── */
   .timeline {{ display: flex; flex-direction: column; gap: 3px; }}
   .event {{ display: grid; grid-template-columns: 140px 140px 1fr;
              gap: 10px; padding: 6px 12px; border-radius: 5px;
              font-size: 11px; align-items: start; }}
-  .event-start {{ background: #0d2137; }}
-  .event-end {{ background: #0d2137; }}
-  .event-tool {{ background: #141414; }}
+  .event-start  {{ background: #0d2137; }}
+  .event-end    {{ background: #0d2137; }}
+  .event-tool   {{ background: #141414; }}
   .event-result {{ background: #0f0f0f; }}
+  .event-user      {{ background: #1a1500; }}
+  .event-thinking  {{ background: #0b140b; }}
+  .event-assistant {{ background: #0c0d1c; }}
   .event-time {{ color: #555; font-family: monospace; font-size: 10px; padding-top: 1px; }}
   .event-type {{ font-weight: 600; color: #888; }}
-  .event-tool .event-type {{ color: #4a90d9; }}
-  .event-result .event-type {{ color: #555; }}
-  .event-detail {{ color: #888; white-space: pre-wrap; font-size: 10px; }}
+  .event-tool .event-type      {{ color: #4a90d9; }}
+  .event-result .event-type    {{ color: #555; }}
+  .event-user .event-type      {{ color: #d4a800; }}
+  .event-thinking .event-type  {{ color: #4ade80; }}
+  .event-assistant .event-type {{ color: #818cf8; }}
+  .event-detail {{ color: #888; white-space: pre-wrap; font-size: 10px; word-break: break-word; }}
   .event-detail.small {{ font-size: 10px; color: #555; }}
   pre.event-detail {{ font-family: monospace; }}
+  .event-cmd {{ color: #d4a800; }}
 
-  /* ── Conversation message cards ── */
-  .msg {{ margin: 14px 0; border-radius: 10px; overflow: hidden; }}
-
-  /* Candidate */
-  .msg-candidate {{ background: #1b1900; border: 1px solid #3a3200; border-left: 3px solid #d4a800; }}
-  .msg-candidate .msg-header {{ background: #211e00; }}
-  .msg-candidate .msg-role {{ color: #f0c040; font-weight: 700; }}
-  .msg-candidate .msg-body {{ color: #e5d89a; }}
-
-  /* AI Reasoning (collapsible) */
-  .msg-thinking {{ background: #0b150b; border: 1px solid #1a3a1a; border-left: 3px solid #22c55e; }}
-  .msg-thinking summary {{
-    display: flex; align-items: baseline; gap: 10px;
-    padding: 7px 14px; cursor: pointer; list-style: none; user-select: none;
-  }}
-  .msg-thinking summary::-webkit-details-marker {{ display: none; }}
-  .msg-thinking .msg-role {{ color: #4ade80; font-weight: 700; font-size: 12px; white-space: nowrap; }}
-  .msg-thinking .msg-preview {{
-    font-size: 11px; color: #3a6b3a; font-style: italic;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    flex: 1; min-width: 0;
-  }}
-  .msg-thinking[open] .msg-preview {{ display: none; }}
-  .msg-thinking .msg-body {{
-    padding: 10px 16px 14px; font-size: 13px; line-height: 1.65;
-    white-space: pre-wrap; word-break: break-word;
-    color: #5a8f5a; font-style: italic;
-    border-top: 1px solid #1a3a1a;
-  }}
-
-  /* Claude response */
-  .msg-assistant {{ background: #0c0d1e; border: 1px solid #22245a; border-left: 3px solid #818cf8; }}
-  .msg-assistant .msg-header {{ background: #0e0f24; }}
-  .msg-assistant .msg-role {{ color: #a5b4fc; font-weight: 700; }}
-  .msg-assistant .msg-body {{ color: #c5caf5; }}
-
-  /* Shared header / body */
-  .msg-header {{
-    display: flex; align-items: baseline; gap: 10px;
-    padding: 8px 14px; font-size: 12px;
-  }}
-  .msg-time {{ color: #444; font-family: monospace; font-size: 10px; margin-left: auto; white-space: nowrap; }}
-  .msg-body {{
-    padding: 12px 16px 14px; font-size: 14px; line-height: 1.7;
-    white-space: pre-wrap; word-break: break-word;
-  }}
+  /* ── Inline diff for Edit / Write tool calls ── */
+  .event-diff {{ font-family: monospace; font-size: 11px; line-height: 1.5; }}
+  .diff-file {{ color: #60a5fa; font-size: 10px; margin-bottom: 4px; word-break: break-all; }}
   .diff-wrap {{ font-family: monospace; font-size: 12px; background: #0a0a0a;
                 border: 1px solid #222; border-radius: 8px; padding: 16px; overflow-x: auto; }}
   .diff-add {{ color: #4ade80; }}
