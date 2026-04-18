@@ -661,10 +661,7 @@ class RelayHandler(BaseHTTPRequestHandler):
         try:
             self._json(_store.record_reveal(hm_key, code, cid))
         except StoreError as e:
-            if str(e) == "not_graded":
-                return self._error(403, "not_graded", "Cannot reveal before grade is recorded.")
-            else:
-                return self._error(500, "store_error", str(e))
+            return self._error(500, "store_error", str(e))
 
     def _post_comment(self, hm_key: str, code: str, cid: str):
         if not _store.session_exists(hm_key, code, cid):

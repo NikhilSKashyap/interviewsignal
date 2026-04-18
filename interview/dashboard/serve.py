@@ -196,22 +196,7 @@ def _build_candidate_row(r: dict) -> str:
         graded = is_graded(code)
         decision_obj = get_decision(code)
 
-    # Reveal button: only shown for anonymized interviews AND only enabled after grading
-    if show_reveal:
-        if graded:
-            reveal_btn = (
-                f'<button class="btn btn-sm btn-reveal"'
-                f' data-code="{code}" data-cid="{cid}">Reveal</button>'
-            )
-        else:
-            reveal_btn = (
-                f'<span class="badge-pending">Pending Grade</span>'
-                f'<button class="btn btn-sm btn-reveal"'
-                f' data-code="{code}" data-cid="{cid}"'
-                f' disabled title="Grade this candidate first to unlock Reveal">Reveal 🔒</button>'
-            )
-    else:
-        reveal_btn = ""
+    reveal_btn = ""
 
     # Decision badge (local mode only)
     decision_badge = ""
@@ -365,26 +350,6 @@ def _build_dashboard_html(reports: list[dict]) -> str:
     btn.addEventListener('click', () =>
       gradeMultiple([{{code: btn.dataset.code, cid: btn.dataset.cid || ''}}]))
   );
-  document.querySelectorAll('.btn-reveal').forEach(btn => {{
-    btn.addEventListener('click', function() {{
-      if (this.disabled) return;
-      const row = this.closest('tr');
-      const label = row.querySelector('.display-label');
-      fetch('/reveal', {{method:'POST', headers:{{'Content-Type':'application/json'}},
-        body: JSON.stringify({{code: btn.dataset.code, cid: btn.dataset.cid || ''}})}})
-        .then(r => r.json())
-        .then(d => {{
-          label.textContent = d.candidate_email || d.code;
-          this.style.display = 'none';
-          if (d.delta) {{
-            const note = document.createElement('span');
-            note.style.cssText = 'font-size:10px;color:#666;margin-left:8px';
-            note.textContent = '(' + d.delta + ')';
-            label.after(note);
-          }}
-        }});
-    }});
-  }});
   function gradeMultiple(entries) {{
     fetch('/grade', {{method:'POST', headers:{{'Content-Type':'application/json'}},
       body: JSON.stringify({{entries}})}})
@@ -399,7 +364,7 @@ def _build_dashboard_html(reports: list[dict]) -> str:
 def _build_candidate_detail_html(code: str, cid: str = "") -> str:
     """Full candidate detail page: report + comments + decision buttons."""
     from interview.core.decisions import get_comments, get_decision, is_graded
-    from interview.core.audit import read_events as read_audit_events, get_reveal_delta
+    from interview.core.audit import read_events as read_audit_events
 
     # In relay mode with cid, fetch all state from the relay session object
     relay_session = None
@@ -412,7 +377,6 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
         decision_obj    = relay_session.get("decision")
         graded          = relay_session.get("grading") is not None
         audit_events    = relay_session.get("audit_entries", [])
-        revealed        = relay_session.get("revealed", False)
         current_grading = relay_session.get("grading") or {}
         grading_history = relay_session.get("grading_history", [])
     else:
@@ -420,7 +384,6 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
         decision_obj    = get_decision(code)
         graded          = is_graded(code)
         audit_events    = read_audit_events(code)
-        revealed        = any(e.get("type") == "identity_revealed" for e in audit_events)
         current_grading = {}
         grading_history = []
 
@@ -488,15 +451,6 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
             f'</div>'
         )
 
-    # Reveal delta
-    if relay_session:
-        reveal_delta = ""
-        for e in audit_events:
-            if e.get("type") == "identity_revealed":
-                reveal_delta = escape(e.get("delta", ""))
-                break
-    else:
-        reveal_delta = escape(get_reveal_delta(code)) if audit_events else ""
 
     # Grade panel (relay mode — when we have grading data)
     grade_panel_html = ""
@@ -628,66 +582,57 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
     js_cid  = json.dumps(cid)
     cid_attr = f'data-cid="{safe_cid}"' if cid else ""
 
-    # Extract identity fields from relay session (only populated after reveal)
-    revealed_email    = relay_session.get("candidate_email", "") if relay_session else ""
-    revealed_name     = relay_session.get("candidate_name", "")  if relay_session else ""
-    revealed_username = relay_session.get("github_username", "")  if relay_session else ""
-    revealed_repo_url = relay_session.get("github_repo_url", "")  if relay_session else ""
-    revealed_avatar   = relay_session.get("avatar_url", "")       if relay_session else ""
+    # Identity fields — always shown
+    cand_email    = relay_session.get("candidate_email", "") if relay_session else ""
+    cand_name     = relay_session.get("candidate_name", "")  if relay_session else ""
+    cand_username = relay_session.get("github_username", "")  if relay_session else ""
+    cand_repo_url = relay_session.get("github_repo_url", "")  if relay_session else ""
+    cand_avatar   = relay_session.get("avatar_url", "")       if relay_session else ""
 
-    if revealed:
-        # Pre-build HTML fragments (no backslashes in f-string expressions — Python 3.10+)
-        onerror_attr = "onerror=\"this.style.display='none'\""
-        avatar_html = (
-            '<img src="' + escape(revealed_avatar) + '" style="width:48px;height:48px;'
-            'border-radius:50%;flex-shrink:0" ' + onerror_attr + '>'
-            if revealed_avatar else ''
-        )
-        name_html = (
-            '<div style="font-size:14px;font-weight:600;color:#e0e0e0;margin-bottom:2px">'
-            + escape(revealed_name) + '</div>'
-            if revealed_name else ''
-        )
-        email_html = (
-            '<div style="font-size:13px;color:#888;margin-bottom:4px">'
-            + escape(revealed_email) + '</div>'
-            if revealed_email else ''
-        )
-        gh_user_html = (
-            '<div style="font-size:12px;margin-bottom:4px"><a href="https://github.com/'
-            + escape(revealed_username) + '" target="_blank" style="color:#60a5fa;text-decoration:none">@'
-            + escape(revealed_username) + '</a></div>'
-            if revealed_username else ''
-        )
-        repo_html = (
-            '<div style="font-size:12px"><a href="' + escape(revealed_repo_url)
-            + '" target="_blank" style="color:#4ade80;text-decoration:none">View code repository →</a></div>'
-            if revealed_repo_url else ''
-        )
-        safe_reveal_delta = escape(reveal_delta)
-        identity_block = f"""
-      <div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:12px">
+    # Pre-build HTML fragments (no backslashes in f-string expressions — Python 3.10+)
+    onerror_attr = "onerror=\"this.style.display='none'\""
+    avatar_html = (
+        '<img src="' + escape(cand_avatar) + '" style="width:48px;height:48px;'
+        'border-radius:50%;flex-shrink:0" ' + onerror_attr + '>'
+        if cand_avatar else ''
+    )
+    name_html = (
+        '<div style="font-size:14px;font-weight:600;color:#e0e0e0;margin-bottom:2px">'
+        + escape(cand_name) + '</div>'
+        if cand_name else ''
+    )
+    email_html = (
+        '<div style="font-size:13px;color:#888;margin-bottom:4px">'
+        + escape(cand_email) + '</div>'
+        if cand_email else ''
+    )
+    gh_user_html = (
+        '<div style="font-size:12px;margin-bottom:4px"><a href="https://github.com/'
+        + escape(cand_username) + '" target="_blank" style="color:#60a5fa;text-decoration:none">@'
+        + escape(cand_username) + '</a></div>'
+        if cand_username else ''
+    )
+    repo_html = (
+        '<div style="font-size:12px"><a href="' + escape(cand_repo_url)
+        + '" target="_blank" style="color:#4ade80;text-decoration:none">View code repository →</a></div>'
+        if cand_repo_url else ''
+    )
+    no_identity_note = (
+        '<div style="font-size:13px;color:#555">No identity info — GitHub OAuth not configured.</div>'
+        if not any([cand_name, cand_email, cand_username]) else ''
+    )
+    identity_block = f"""
+      <div style="display:flex;align-items:flex-start;gap:14px">
         {avatar_html}
         <div style="min-width:0">
           {name_html}
           {email_html}
           {gh_user_html}
           {repo_html}
+          {no_identity_note}
         </div>
-      </div>
-      <div class="reveal-note">✓ Blind grading confirmed — {safe_reveal_delta}</div>"""
-        identity_panel = f'<div class="panel"><div class="section-title">Identity</div>{identity_block}</div>'
-    else:
-        # Not yet revealed — show reveal button (locked until graded)
-        identity_panel = (
-            '<div class="panel"><div class="section-title">Identity</div>'
-            + ('<button class="btn btn-sm" id="btn-reveal-detail" data-code="' + safe_code + '" '
-               + (f'data-cid="{safe_cid}"' if cid else '')
-               + ' ' + ('disabled title="Grade first to unlock Reveal"' if not graded else '')
-               + '>Reveal Identity' + (' 🔒' if not graded else '') + '</button>'
-               + ('<div style="font-size:11px;color:#555;margin-top:8px">Reveal is locked until a grade is saved. This ensures blind evaluation is preserved in the audit trail.</div>' if not graded else ''))
-            + '</div>'
-        )
+      </div>"""
+    identity_panel = f'<div class="panel"><div class="section-title">Identity</div>{identity_block}</div>'
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -713,8 +658,6 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
                 font-family: monospace; padding: 4px 0; border-bottom: 1px solid #1a1a1a; }}
   .audit-ts {{ color: #555; }}
   .audit-hash {{ color: #333; }}
-  .reveal-note {{ font-size: 12px; color: #888; margin-top: 8px; padding: 8px 12px;
-                  background: #0d1f0d; border: 1px solid #166534; border-radius: 6px; }}
   .back-link {{ color: #60a5fa; text-decoration: none; font-size: 13px; margin-bottom: 24px; display: block; }}
   .reason-input {{ width: 100%; margin-top: 8px; background: #0a0a0a; border: 1px solid #333;
                    color: #e0e0e0; border-radius: 6px; padding: 8px; font-size: 13px; }}
@@ -813,13 +756,6 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
           else {{ alert('Error: ' + d.error); }}
         }});
     }});
-  }});
-
-  document.getElementById('btn-reveal-detail')?.addEventListener('click', function() {{
-    if (this.disabled) return;
-    fetch('/reveal', {{method:'POST', headers:{{'Content-Type':'application/json'}},
-      body: JSON.stringify({{code: _code, cid: _cid}})}})
-      .then(r => r.json()).then(d => {{ location.reload(); }});
   }});
 
   document.getElementById('btn-toggle-revise')?.addEventListener('click', function() {{

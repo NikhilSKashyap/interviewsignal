@@ -5,15 +5,11 @@ Comments and hiring decisions for a candidate.
 
 Comments:   append-only, timestamped, stored in comments.jsonl
 Decisions:  single record per candidate (hire / next_round / reject + reason)
-
-Both are audit-logged and email-anchored via interview.core.audit.
 """
 
 import json
 import time
 from pathlib import Path
-
-from interview.core import audit
 
 INTERVIEW_DIR = Path.home() / ".interview"
 SESSIONS_DIR = INTERVIEW_DIR / "sessions"
@@ -42,12 +38,6 @@ def add_comment(code: str, text: str, author: str = "HM") -> dict:
     comment_file.parent.mkdir(parents=True, exist_ok=True)
     with open(comment_file, "a") as f:
         f.write(json.dumps(comment) + "\n")
-
-    audit.log("comment_added", code, {
-        "author": author,
-        "text": text,
-        "timestamp_iso": comment["timestamp_iso"],
-    })
 
     return comment
 
@@ -99,14 +89,6 @@ def record_decision(
     decision_file.parent.mkdir(parents=True, exist_ok=True)
     decision_file.write_text(json.dumps(record, indent=2))
 
-    event_type = "next_round_scheduled" if decision == "next_round" else "decision_recorded"
-    audit.log(event_type, code, {
-        "decision": decision,
-        "reason": record["reason"],
-        "author": author,
-        "timestamp_iso": record["timestamp_iso"],
-    })
-
     return record
 
 
@@ -146,31 +128,9 @@ def save_grade(code: str, grading: dict) -> dict:
     grading["graded_at_iso"] = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()) + "Z"
     grading_file.write_text(json.dumps(grading, indent=2))
 
-    audit.log("grade_recorded", code, {
-        "overall_score": grading.get("overall_score"),
-        "dimensions": grading.get("dimensions", []),
-        "graded_at_iso": grading["graded_at_iso"],
-    })
-
     return grading
 
 
 def record_reveal(code: str) -> dict:
-    """
-    Log the identity reveal event with grade delta.
-    Called when HM clicks Reveal in the dashboard.
-    """
-    grading_file = SESSIONS_DIR / code / "grading.json"
-    grade_score = None
-    if grading_file.exists():
-        try:
-            grade_score = json.loads(grading_file.read_text()).get("overall_score")
-        except Exception:
-            pass
-
-    event = audit.log("identity_revealed", code, {
-        "grade_score_at_reveal": grade_score,
-    })
-
-    delta = audit.get_reveal_delta(code)
-    return {"event": event, "delta": delta, "grade_score": grade_score}
+    # No-op — identity is always visible. Kept for compatibility.
+    return {}
