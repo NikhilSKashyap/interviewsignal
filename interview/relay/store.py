@@ -308,20 +308,17 @@ class SessionStore:
         comments        = self._load_jsonl(d / "comments.jsonl")
         decision        = self._load_json(d / "decision.json")
         audit           = self._load_jsonl(d / "audit.jsonl")
-        revealed = meta.get("revealed", False)
         return {
             "code":            code,
             "cid":             cid,
             "submitted_at":    meta.get("submitted_at"),
-            "revealed":        revealed,
             "graded_at":       meta.get("graded_at"),
-            "revealed_at":     meta.get("revealed_at"),
             "elapsed_minutes": meta.get("elapsed_minutes"),
-            "candidate_email":  meta.get("candidate_email") if revealed else None,
-            "candidate_name":   meta.get("candidate_name")  if revealed else None,
-            "github_username":  meta.get("github_username") if revealed else None,
-            "github_repo_url":  meta.get("github_repo_url") if revealed else None,
-            "avatar_url":       meta.get("avatar_url")       if revealed else None,
+            "candidate_email":  meta.get("candidate_email"),
+            "candidate_name":   meta.get("candidate_name"),
+            "github_username":  meta.get("github_username"),
+            "github_repo_url":  meta.get("github_repo_url"),
+            "avatar_url":       meta.get("avatar_url"),
             "manifest":        manifest,
             "report":          report,
             "grading":         grading,
@@ -361,8 +358,6 @@ class SessionStore:
         grading["graded_at"] = graded_at
         self._write_atomic(d / "grading.json", json.dumps(grading, indent=2))
         self._save_meta(hm_key, code, cid, {"graded": True, "graded_at": graded_at})
-        self.append_audit(hm_key, code, cid, "grade_recorded",
-                          {"overall_score": grading.get("overall_score")})
         return {"code": code, "cid": cid, "graded_at": graded_at}
 
     def revise_grade(self, hm_key: str, code: str, cid: str, grading: dict, reason: str) -> dict:
@@ -386,15 +381,6 @@ class SessionStore:
         grading["graded_at"] = graded_at
         self._write_atomic(d / "grading.json", json.dumps(grading, indent=2))
         self._save_meta(hm_key, code, cid, {"graded_at": graded_at})
-
-        # Audit — record whether identity was known at the time of revision
-        meta = self._load_meta(hm_key, code, cid)
-        self.append_audit(hm_key, code, cid, "grade_revised", {
-            "previous_score": current.get("overall_score"),
-            "new_score":      grading.get("overall_score"),
-            "reason":         reason,
-            "revealed":       meta.get("revealed", False),
-        })
         return {
             "code":           code,
             "cid":            cid,
@@ -405,34 +391,14 @@ class SessionStore:
         }
 
     def record_reveal(self, hm_key: str, code: str, cid: str) -> dict:
-        if not self.is_graded(hm_key, code, cid):
-            raise StoreError("not_graded")
+        # No-op — identity is always visible. Kept for API compatibility.
         meta = self._load_meta(hm_key, code, cid)
-        graded_at   = meta.get("graded_at", "")
-        revealed_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        delta = ""
-        if graded_at:
-            try:
-                import datetime
-                fmt = "%Y-%m-%dT%H:%M:%SZ"
-                diff = (
-                    datetime.datetime.strptime(revealed_at, fmt) -
-                    datetime.datetime.strptime(graded_at, fmt)
-                ).total_seconds() / 60
-                delta = f"{round(diff, 1)} minutes after grade was recorded"
-            except Exception:
-                pass
-        candidate_email = meta.get("candidate_email", "")
-        self._save_meta(hm_key, code, cid, {"revealed": True, "revealed_at": revealed_at})
-        self.append_audit(hm_key, code, cid, "identity_revealed", {"delta": delta})
         return {
-            "code":             code,
-            "cid":              cid,
-            "revealed_at":      revealed_at,
-            "delta":            delta,
-            "candidate_email":  candidate_email,
-            "github_username":  meta.get("github_username"),
-            "avatar_url":       meta.get("avatar_url"),
+            "code":            code,
+            "cid":             cid,
+            "candidate_email": meta.get("candidate_email", ""),
+            "github_username": meta.get("github_username"),
+            "avatar_url":      meta.get("avatar_url"),
         }
 
     def add_comment(self, hm_key: str, code: str, cid: str, text: str) -> dict:
@@ -444,7 +410,6 @@ class SessionStore:
             "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         }
         self._append_jsonl(path, comment)
-        self.append_audit(hm_key, code, cid, "comment_added", {"preview": text[:60]})
         return comment
 
     def save_decision(self, hm_key: str, code: str, cid: str, decision: str, reason: str = "") -> dict:
@@ -454,7 +419,6 @@ class SessionStore:
         recorded_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         obj = {"decision": decision, "reason": reason, "recorded_at": recorded_at}
         self._write_atomic(d / "decision.json", json.dumps(obj, indent=2))
-        self.append_audit(hm_key, code, cid, "decision_recorded", {"decision": decision})
         return {"code": code, "cid": cid, "decision": decision, "recorded_at": recorded_at}
 
     # ─── sharing config ───────────────────────────────────────────────────────
