@@ -138,24 +138,33 @@ def _create_github_repo(github_token: str, code: str) -> str | None:
     return None
 
 
-def _git_init_with_remote(repo_url: str, code: str):
+def _ensure_git_init(code: str):
     """
-    Initialize git in the working directory (if not already a repo),
-    add the 'interview' remote, and create an initial session-start commit.
-    Non-blocking — all failures are swallowed.
+    Ensure the working directory is a git repo and has an initial session commit.
+    Always called at session start — non-blocking.
     """
     cwd = os.getcwd()
     try:
-        # Check if already a git repo
         is_git = subprocess.run(
             ["git", "rev-parse", "--git-dir"],
             cwd=cwd, capture_output=True,
         ).returncode == 0
-
         if not is_git:
             subprocess.run(["git", "init"], cwd=cwd, capture_output=True)
+        subprocess.run(["git", "add", "-A"], cwd=cwd, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "--allow-empty", "-m",
+             f"interview session start — {code}"],
+            cwd=cwd, capture_output=True,
+        )
+    except Exception:
+        pass
 
-        # Remove existing 'interview' remote if present
+
+def _add_github_remote(repo_url: str):
+    """Add or update the 'interview' git remote. Non-blocking."""
+    cwd = os.getcwd()
+    try:
         subprocess.run(
             ["git", "remote", "remove", "interview"],
             cwd=cwd, capture_output=True,
@@ -164,16 +173,8 @@ def _git_init_with_remote(repo_url: str, code: str):
             ["git", "remote", "add", "interview", repo_url],
             cwd=cwd, capture_output=True,
         )
-
-        # Initial commit (--allow-empty in case working tree is clean)
-        subprocess.run(["git", "add", "-A"], cwd=cwd, capture_output=True)
-        subprocess.run(
-            ["git", "commit", "--allow-empty", "-m",
-             f"interview session start — {code}"],
-            cwd=cwd, capture_output=True,
-        )
     except Exception:
-        pass  # Non-blocking — session continues regardless
+        pass
 
 
 def _git_push_session(session_meta: dict) -> bool:
@@ -393,6 +394,9 @@ def start_session(code: str, candidate_email: str | None = None) -> dict:
             relay_api_key=interview.get("relay_api_key", ""),
         )
 
+    # Always ensure a git repo exists in the working directory for diff capture.
+    _ensure_git_init(code)
+
     # GitHub OAuth — one GitHub account = one submission per interview code.
     # Falls back gracefully if the relay has no GitHub app configured.
     github_auth: dict | None = None
@@ -401,7 +405,7 @@ def start_session(code: str, candidate_email: str | None = None) -> dict:
         if github_auth and github_auth.get("duplicate"):
             return {}  # Already submitted — abort cleanly
 
-    # Create a GitHub repo for this session if OAuth succeeded
+    # Create a GitHub repo and wire up the remote if OAuth succeeded
     github_repo_url: str | None = None
     if github_auth and not github_auth.get("duplicate"):
         github_token_val = github_auth.get("github_token")
@@ -410,9 +414,9 @@ def start_session(code: str, candidate_email: str | None = None) -> dict:
             github_repo_url = _create_github_repo(github_token_val, code)
             if github_repo_url:
                 print(f" ✓")
-                _git_init_with_remote(github_repo_url, code)
+                _add_github_remote(github_repo_url)
             else:
-                print(f" ⚠  (repo creation failed — session continues without git repo)")
+                print(f" ⚠  (repo creation failed — session continues)")
 
     # Resolve candidate email
     resolved_candidate_email = candidate_email or interview.get("candidate_email")
