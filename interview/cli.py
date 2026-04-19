@@ -124,10 +124,38 @@ When the user types `/interview` or `/submit`, invoke the Skill tool with `skill
         }]
     }]
 
+    # 4. Add permissions so interview commands run without yes/no prompts
+    permissions = settings.setdefault("permissions", {})
+    allow = permissions.setdefault("allow", [])
+    interview_permissions = [
+        "Bash(echo *)",
+        f"Bash({sys.executable} -m interview.core.setup *)",
+        f"Bash({sys.executable} -m interview.core.session *)",
+        f"Bash({sys.executable} -m interview.core.report *)",
+        f"Bash({sys.executable} -m interview.core.transport *)",
+        "Bash(python -m interview.core.setup *)",
+        "Bash(python -m interview.core.session *)",
+        "Bash(python -m interview.core.report *)",
+        "Bash(python -m interview.core.transport *)",
+        "Bash(python3 -m interview.core.setup *)",
+        "Bash(python3 -m interview.core.session *)",
+        "Bash(python3 -m interview.core.report *)",
+        "Bash(python3 -m interview.core.transport *)",
+        "Bash(git init)",
+        "Bash(git add *)",
+        "Bash(git commit *)",
+        "Bash(git push *)",
+        "Bash(git remote *)",
+    ]
+    for p in interview_permissions:
+        if p not in allow:
+            allow.append(p)
+    permissions["allow"] = allow
+
     settings_json.parent.mkdir(parents=True, exist_ok=True)
     settings_json.write_text(json.dumps(settings, indent=2))
     if verbose:
-        print(f"  ✓ Hooks installed: {settings_json}")
+        print(f"  ✓ Hooks + permissions installed: {settings_json}")
 
     # Verify the hook is actually reachable in this Python environment
     import subprocess as _sp
