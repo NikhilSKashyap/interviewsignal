@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m interview.core.setup *)",
+      "Bash(python -m interview.core.session *)",
+      "Bash(python -m interview.core.report *)",
+      "Bash(python -m interview.core.transport *)",
+      "Bash(python3 -m interview.core.setup *)",
+      "Bash(python3 -m interview.core.session *)",
+      "Bash(python3 -m interview.core.report *)",
+      "Bash(python3 -m interview.core.transport *)",
+      "Bash(git init)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(git remote *)"
+    ]
+  }
+}
