@@ -52,11 +52,8 @@ You'll be asked for:
 - Problem statement
 - Grading rubric (plain language — "weight decomposition 40%, code quality 30%, tests 30%")
 - Time limit (optional)
-- Anonymize candidates? (yes / no — off by default; recommended for high-volume hiring)
-- Score sharing level (what candidates can see after grading)
 
-**Relay mode:** no email configuration needed — candidates go straight to your dashboard.
-**Email mode only:** you'll also be asked for your email, CC list, and an audit recipient.
+That's it. In relay mode no email setup is needed — candidates go straight to your dashboard.
 
 You get back a code like `INT-4829-XK`. Share it with your candidate — that's all they need.
 
@@ -86,10 +83,11 @@ to see your score (if the HM has enabled sharing).
 ### Hiring manager — review
 
 ```bash
-interview dashboard   # → http://localhost:7832
+interview dashboard              # → http://localhost:7832
+interview dashboard INT-4829-XK  # → jump straight to a candidate
 ```
 
-Click into any candidate to see the full transcript (prompts + AI reasoning + tool calls), dimension scores, and diff. Add comments. Record your decision. If anonymization is enabled, candidates appear as "Candidate A", "Candidate B" — click Reveal when you're ready to unmask. Reveal is disabled until a grade is saved.
+Click into any candidate to see the full transcript (prompts + AI reasoning + tool calls), dimension scores, and diff. Candidate identity (name, email, GitHub username, avatar, repo link) is always visible. Add comments. Record your decision.
 
 Use **Verify Chain** to confirm the session log is tamper-evident. Control what candidates see after grading with the **Score Sharing** panel — nothing, overall score, full breakdown, or breakdown with notes. Claude's session debrief is always shared automatically regardless of this setting.
 
@@ -113,7 +111,7 @@ Candidate side                          HM side
   ↓ fetches problem from relay            ↓ localhost:7832
   ↓ relay auto-configured locally         ↓ candidates arrive
 Session starts                            ↓ Grade All / Grade Selected
-  ↓ hooks capture every tool call         ↓ Reveal unlocks after grading
+  ↓ hooks capture every tool call         ↓ identity always visible
   ↓ append-only events.jsonl              ↓ comment thread
   ↓ hash chain (tamper-evident)           ↓ hire / next round / reject
 /submit                                   ↓ full audit trail
@@ -131,14 +129,11 @@ Session starts                            ↓ Grade All / Grade Selected
 
 **The integrity model:**
 
-Every HM action — grading, revealing identity, adding a comment, recording a decision, revising a grade — is appended to a SHA-256 hash chain. In relay mode, the relay's server-side timestamp is the integrity anchor. In email mode, key events are silently emailed to a designated audit recipient with the mail server's timestamp as the anchor. Reveal is physically disabled until a grade is saved.
-
-Grade revisions require an explicit reason. The audit records whether identity was revealed at revision time:
+The candidate session log is append-only and SHA-256 hash-chained — any tampering breaks the chain. In relay mode, the relay's server-side timestamp is the integrity anchor. Grade revisions require an explicit reason and the audit records whether identity was known at revision time:
 
 ```
-[2026-04-13T10:47:22Z] grade_recorded    INT-4829-XK  hash=d4abe5e6  score=7.7
-[2026-04-13T10:52:09Z] identity_revealed INT-4829-XK  hash=2370be19
-[2026-04-13T11:30:00Z] grade_revised     INT-4829-XK  hash=9f2c1a3b  7.7→8.2  revealed=true
+[2026-04-13T10:47:22Z] grade_recorded  INT-4829-XK  hash=d4abe5e6  score=7.7
+[2026-04-13T11:30:00Z] grade_revised   INT-4829-XK  hash=9f2c1a3b  7.7→8.2  reason="missed edge cases"
 ```
 
 Use `GET /audit/verify` to walk the full chain and confirm integrity.
@@ -292,6 +287,7 @@ interview configure-email      # SMTP fallback (no relay)
 
 # Runtime
 interview dashboard            # Local HM dashboard at localhost:7832
+interview dashboard <CODE>     # Jump straight to a candidate's detail page
 interview status               # Check active session
 interview score <CODE>         # Candidate: fetch your score from relay
 interview install --help       # Platform install options
