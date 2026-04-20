@@ -37,7 +37,7 @@ Uses relay if configured, falls back to email. If neither is configured, prints 
 
 ## Step 4 — Generate session debrief
 
-Read `~/.interview/sessions/<CODE>/events.jsonl`. Write an honest debrief to `~/.interview/sessions/<CODE>/debrief.txt` using the Write tool.
+Use the **Read tool** (not Bash) to read `~/.interview/sessions/<CODE>/events.jsonl`. Write an honest debrief to `~/.interview/sessions/<CODE>/debrief.txt` using the **Write tool**.
 
 Frame it as a direct reflection addressed to the candidate. Cover:
 1. What they did well — specific moments where their thinking was strong
