@@ -146,6 +146,8 @@ When the user types `/interview` or `/submit`, invoke the Skill tool with `skill
         "Bash(git commit *)",
         "Bash(git push *)",
         "Bash(git remote *)",
+        "Bash(cat ~/.interview/*)",
+        "Write(~/.interview/*)",
     ]
     for p in interview_permissions:
         if p not in allow:
