@@ -48,6 +48,7 @@ def create_interview(
     anonymize: bool = False,
     audit_email: str | None = None,
     sharing: dict | None = None,
+    auto_grade: bool = False,
 ) -> dict:
     ensure_dirs()
 
@@ -91,6 +92,7 @@ def create_interview(
         # hm_key scopes the session to this HM on the relay (Model B)
         "relay_url": relay_url,
         "hm_key": hm_key,
+        "auto_grade": auto_grade,
     }
 
     # Save locally on HM's machine
@@ -162,6 +164,9 @@ def main():
     parser.add_argument("--anonymize", action="store_true", default=False)
     parser.add_argument("--no-anonymize", dest="anonymize", action="store_false")
     parser.add_argument("--audit-email", default=None)
+    parser.add_argument("--auto-grade", action="store_true", default=False,
+                        help="Automatically grade submissions when they arrive (requires GRADING_API_KEY on relay)")
+    parser.add_argument("--no-auto-grade", dest="auto_grade", action="store_false")
     parser.add_argument("--sharing-score", default="none",
                         choices=["none", "overall", "breakdown", "breakdown_notes"],
                         help="What score info candidates can see after submission")
@@ -196,6 +201,7 @@ def main():
         anonymize=args.anonymize,
         audit_email=args.audit_email,
         sharing=sharing,
+        auto_grade=args.auto_grade,
     )
 
     relay_url = result["payload"].get("relay_url", "")

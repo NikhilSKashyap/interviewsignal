@@ -33,6 +33,16 @@ from urllib.error import URLError
 
 from interview.relay.store import SessionStore, StoreError, make_cid, make_github_cid
 
+# ─── Environment variables ────────────────────────────────────────────────────
+# RELAY_API_KEY     — HM registration key (required in production)
+# GRADING_API_KEY   — Anthropic API key for auto-grading (optional)
+# GRADING_MODEL     — Model for auto-grading (default: claude-haiku-4-5-20251001)
+# GITHUB_CLIENT_ID  — GitHub OAuth app client ID (optional)
+# GITHUB_CLIENT_SECRET — GitHub OAuth app client secret (optional)
+# RELAY_BASE_URL    — Public base URL of this relay (optional, for OAuth redirect URIs)
+# RELAY_DATA_DIR    — Data directory (default: /data)
+# RELAY_PORT / PORT — Port to listen on (default: 8080)
+
 _store: SessionStore | None = None
 _relay_api_key: str = ""
 _github_client_id: str = ""
@@ -623,6 +633,49 @@ class RelayHandler(BaseHTTPRequestHandler):
                             github_identity=github_identity,
                             github_repo_url=github_repo_url,
                             candidate_name=candidate_name)
+
+        # Auto-grade if configured
+        grading_api_key = os.environ.get("GRADING_API_KEY", "")
+        if grading_api_key:
+            interview_config = _store.get_interview_config(hm_key, code)
+            if interview_config and interview_config.get("auto_grade"):
+                try:
+                    # Set ANTHROPIC_API_KEY and INTERVIEW_GRADING_MODEL for the grader
+                    orig_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+                    orig_model   = os.environ.get("INTERVIEW_GRADING_MODEL", "")
+                    os.environ["ANTHROPIC_API_KEY"] = grading_api_key
+                    grading_model = os.environ.get("GRADING_MODEL", "")
+                    if grading_model:
+                        os.environ["INTERVIEW_GRADING_MODEL"] = grading_model
+                    try:
+                        from interview.core import grader as grader_mod
+                        # Cache session files locally so grader can read them
+                        from pathlib import Path as _Path
+                        session_local_dir = _Path.home() / ".interview" / "sessions" / code
+                        session_local_dir.mkdir(parents=True, exist_ok=True)
+                        for fname in ("manifest.json", "events.jsonl"):
+                            if fname in files:
+                                local_f = session_local_dir / fname
+                                if not local_f.exists():
+                                    local_f.write_bytes(files[fname])
+                        grade = grader_mod.grade_session(code)
+                        if grade:
+                            # grade_session already calls decisions.save_grade locally;
+                            # persist to relay store (the authoritative location)
+                            _store.save_grade(hm_key, code, cid, grade, graded_by="auto")
+                    finally:
+                        # Restore original env vars
+                        if orig_api_key:
+                            os.environ["ANTHROPIC_API_KEY"] = orig_api_key
+                        else:
+                            os.environ.pop("ANTHROPIC_API_KEY", None)
+                        if orig_model:
+                            os.environ["INTERVIEW_GRADING_MODEL"] = orig_model
+                        else:
+                            os.environ.pop("INTERVIEW_GRADING_MODEL", None)
+                except Exception as e:
+                    print(f"[auto-grade] failed for {code}/{cid}: {e}", flush=True)
+
         import time
         self._json({
             "code":         code,

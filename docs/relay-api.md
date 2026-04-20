@@ -1,290 +1,174 @@
 # Relay API Contract
 
-The relay is an optional self-hosted HTTP server that replaces email as the transport layer
-between candidates and hiring managers. When `relay_url` is set in config, all submissions
-route through it. Without it, the system falls back to email — fully backward compatible.
+The relay is an HTTP server that connects candidates to hiring managers. When `relay_url` is set
+in config, all submissions route through it. Without it, the system falls back to email — fully
+backward compatible for single-candidate workflows.
 
-The relay is deliberately dumb: it stores sealed session packages and serves them back.
-It does not grade. It does not send email. It does not decrypt anything.
+The relay is deliberately dumb: it stores sealed session packages and serves them back. It does
+not grade. It does not send email. It does not decrypt anything. Grading is always HM-side,
+using the HM's own Anthropic API key.
 
 ---
 
 ## Authentication
 
-Every request requires:
+The relay uses two auth models:
 
+**HM key (`hm_key`):** Each HM registers once via `POST /register` and receives a unique UUID.
+All HM-gated routes require `Authorization: Bearer <hm_key>`. Sessions, interviews, and sharing
+configs are namespaced under this key — no HM can access another's data.
+
+**Master key (`RELAY_API_KEY`):** Operator-level access. Set via environment variable at relay
+startup. Accepts the master key in place of any `hm_key`. Used for relay administration only;
+HMs never set or use this key.
+
+**Open routes (no auth):** `POST /register`, `GET /interviews/{code}`, `GET /auth/github/*`,
+and `GET /sessions/{code}/{cid}/score` require no authorization header.
+
+Requests to auth-gated routes with a missing or invalid token return:
+```json
+{ "error": "unauthorized", "message": "Valid hm_key required." }
 ```
-Authorization: Bearer <api_key>
-```
-
-The API key is set at relay deployment time via the `RELAY_API_KEY` environment variable.
-Both candidates and HMs use the same key — the relay is an internal service, behind your
-VPN or private network. OAuth/SSO is Phase 2.
-
-Requests without a valid key return `401 Unauthorized`.
 
 ---
 
-## Endpoints
+## Environment variables
 
-### `POST /sessions`
-**Who:** Candidate (on `/submit`)
-**What:** Submit a sealed session package.
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RELAY_API_KEY` | (none) | Master operator key. If unset, master key auth is disabled (dev mode). |
+| `RELAY_DATA_DIR` | `/data` | Root directory for all stored data. |
+| `RELAY_PORT` | `8080` | Listening port. |
+| `RELAY_BASE_URL` | (auto-detected) | Public base URL for building OAuth redirect URIs. |
+| `GITHUB_CLIENT_ID` | (none) | GitHub OAuth app client ID. Required for GitHub OAuth. |
+| `GITHUB_CLIENT_SECRET` | (none) | GitHub OAuth app client secret. Required for GitHub OAuth. |
 
-Request body (JSON):
+Future variables (planned for auto-grading):
+| `GRADING_API_KEY` | (none) | Anthropic key for server-side auto-grading on submission. |
+| `GRADING_MODEL` | (TBD) | Model to use for server-side grading. |
+
+---
+
+## Open endpoints
+
+### `GET /healthz`
+Health check. No auth required.
+
+Response `200 OK`:
 ```json
-{
-  "code": "INT-4829-XK",
-  "candidate_email": "jane@example.com",
-  "candidate_name": "Jane Doe",
-  "github_username": "janedoe",
-  "github_repo_url": "https://github.com/janedoe/interview-INT-4829-XK",
-  "manifest_json":  "<base64-encoded manifest.json>",
-  "events_jsonl":   "<base64-encoded events.jsonl>",
-  "report_html":    "<base64-encoded report.html>",
-  "report_json":    "<base64-encoded report.json>"
-}
+{ "status": "ok" }
 ```
 
-- `manifest_json` and `events_jsonl` are required. The relay rejects submissions without them.
-- `report_html` and `report_json` are optional — if absent, the HM can still grade and a report
-  can be regenerated from the raw session data.
-- `candidate_name`, `github_username`, and `github_repo_url` are optional. They are populated
-  when GitHub OAuth is used and repo creation succeeds.
-- `github_repo_url` is `null` if git push failed or OAuth is not configured.
-- If a session with this code already exists, returns `409 Conflict`. Submissions are immutable.
+---
+
+### `POST /register`
+Register as a new HM. No auth required. Returns a unique `hm_key` scoped to this HM.
+Run once per HM. `interview configure-relay` calls this automatically.
 
 Response `201 Created`:
 ```json
-{ "code": "INT-4829-XK", "submitted_at": "2026-04-13T10:32:00Z" }
+{ "hm_key": "550e8400-e29b-41d4-a716-446655440000" }
 ```
 
 ---
 
-### `GET /sessions`
-**Who:** HM dashboard
-**What:** List all sessions submitted to this relay.
-
-Response `200 OK`:
-```json
-[
-  {
-    "code": "INT-4829-XK",
-    "submitted_at": "2026-04-13T10:32:00Z",
-    "elapsed_minutes": 47,
-    "overall_score": null,
-    "graded": false,
-    "revealed": false
-  }
-]
-```
-
-Ordered by `submitted_at` descending (most recent first).
-
----
-
-### `GET /sessions/{code}`
-**Who:** HM dashboard
-**What:** Full session detail — everything needed to render the candidate page.
+### `GET /interviews/{code}`
+Fetch an interview package by code. No auth required — candidates call this to bootstrap their
+session. The package includes the problem, rubric, relay_url, hm_key, sharing config, and more.
 
 Response `200 OK`:
 ```json
 {
   "code": "INT-4829-XK",
-  "submitted_at": "2026-04-13T10:32:00Z",
-  "revealed": false,
-  "candidate_email": null,
-  "candidate_name": null,
-  "github_username": null,
-  "github_repo_url": null,
-  "avatar_url": null,
-  "manifest": { "elapsed_minutes": 47, "event_count": 38, ... },
-  "report": { "overall_score": null, "dimensions": [], ... },
-  "grading": null,
-  "comments": [],
-  "decision": null,
-  "audit_entries": []
+  "problem": "Build a rate limiter...",
+  "rubric": "Score on: decomposition, edge cases, ...",
+  "hm_email": "alice@company.com",
+  "time_limit_minutes": 60,
+  "anonymize": false,
+  "sharing": { "score": "breakdown_notes" },
+  "relay_url": "https://relay.interviewsignal.dev",
+  "hm_key": "550e8400-...",
+  "created_at": 1744754400
 }
 ```
 
-`candidate_email`, `candidate_name`, `github_username`, `github_repo_url`, and `avatar_url`
-are only populated when `revealed: true` — until then they are `null` to enforce blind grading.
-
-`report_html` is not included here — fetch separately to avoid large payloads in the list view.
+Returns `404` if the code is not registered.
 
 ---
 
-### `GET /sessions/{code}/report.html`
-**Who:** HM dashboard (iframe embed)
-**What:** The raw HTML report file. Returns `text/html`.
+### `GET /auth/github/start?code={code}`
+Initiate GitHub OAuth for a candidate. No auth required. Returns the authorization URL to open
+in the candidate's browser.
 
----
+Returns `501` if GitHub OAuth is not configured on this relay (`GITHUB_CLIENT_ID` not set).
 
-### `GET /sessions/{code}/events`
-**Who:** HM dashboard (grader)
-**What:** Raw `events.jsonl` content. Returns `text/plain`, one JSON object per line.
-
-This is what the grader reads to rebuild the session transcript. The relay serves it verbatim —
-no transformation.
-
----
-
-### `POST /sessions/{code}/grade`
-**Who:** HM dashboard (after clicking "Grade" or "Submit Revision")
-**What:** Save or revise a grading result. The dashboard runs grading locally using the
-HM's API key and posts the result here for persistence and audit logging.
-
-**First grade** — request body (JSON):
+Response `200 OK` (when configured):
 ```json
 {
-  "dimensions": [
-    { "name": "Problem Decomposition", "score": 8, "justification": "..." }
-  ],
-  "overall_score": 7.7,
-  "summary": "...",
-  "standout_moments": ["..."],
-  "concerns": ["..."]
-}
-```
-
-Response `200 OK`:
-```json
-{ "code": "INT-4829-XK", "cid": "abc123def456", "graded_at": "2026-04-13T10:47:22Z" }
-```
-
-**Grade revision** — include a `reason` field in the request body:
-```json
-{
-  "dimensions": [...],
-  "overall_score": 8.2,
-  "summary": "...",
-  "reason": "Undervalued the store abstraction — the session showed clearer separation of concerns than initially assessed."
-}
-```
-
-If the session is already graded and `reason` is missing or empty, returns `400`:
-```json
-{ "error": "revision_requires_reason", "message": "Grade revision requires a 'reason' field explaining the change." }
-```
-
-Response `200 OK` for a revision:
-```json
-{
-  "code": "INT-4829-XK",
-  "cid": "abc123def456",
-  "graded_at": "2026-04-13T11:30:00Z",
-  "revision": true,
-  "previous_score": 7.7,
-  "new_score": 8.2
-}
-```
-
-The previous grade is moved to `grading_history.jsonl` before overwriting `grading.json`.
-The audit trail records a `grade_revised` event:
-```json
-{
-  "type": "grade_revised",
-  "code": "INT-4829-XK",
-  "previous_score": 7.7,
-  "new_score": 8.2,
-  "reason": "Undervalued the store abstraction...",
-  "revealed": true,
-  "ts": "2026-04-13T11:30:00Z",
-  "prev_hash": "d4abe5e6",
-  "hash": "9f2c1a3b"
-}
-```
-
-The `revealed` field records whether the candidate's identity was known at the time of
-revision — the key data point for proving merit-first evaluation.
-
-`grading_history.jsonl` schema (one line per superseded grade):
-```json
-{ ...full_grading_payload, "superseded_at": "ISO timestamp", "revision_reason": "..." }
-```
-
-Once the first grade is saved, the `reveal` endpoint becomes unlockable.
-The candidate score endpoint (`GET /sessions/{code}/{cid}/score`) always serves the
-latest grade — revision history is not exposed to candidates.
-
----
-
-### `POST /sessions/{code}/reveal`
-**Who:** HM dashboard (after clicking "Reveal")
-**What:** Record that identity was revealed. Only permitted if the session is graded.
-
-Returns `403 Forbidden` if not yet graded — this is the technical enforcement of
-grade-before-reveal.
-
-Response `200 OK`:
-```json
-{
-  "code": "INT-4829-XK",
-  "revealed_at": "2026-04-13T10:52:09Z",
-  "delta": "4.8 minutes after grade was recorded"
+  "url": "https://github.com/login/oauth/authorize?client_id=...&state=...&scope=read:user",
+  "state": "uuid-state-token"
 }
 ```
 
 ---
 
-### `POST /sessions/{code}/comment`
-**Who:** HM dashboard
-**What:** Append a comment to the session.
-
-Request body:
-```json
-{ "text": "Strong systems thinking. Invite to next round." }
-```
-
-Response `200 OK`:
-```json
-{
-  "id": "c1",
-  "text": "Strong systems thinking. Invite to next round.",
-  "created_at": "2026-04-13T11:05:00Z"
-}
-```
-
-Comments are append-only. There is no delete or edit endpoint.
+### `GET /auth/github/callback`
+GitHub OAuth callback. GitHub redirects here after authorization. Exchanges the code for an
+access token, fetches the GitHub profile, stores the result, and returns an HTML page.
+Candidate CLI polls `/auth/github/poll` to get the result — this endpoint is browser-only.
 
 ---
 
-### `POST /sessions/{code}/decision`
-**Who:** HM dashboard
-**What:** Record a hire/reject/next-round decision.
+### `GET /auth/github/poll?state={state}`
+Candidate CLI polls this after opening the GitHub auth URL. Returns the current status.
 
-Request body:
+Response when pending:
+```json
+{ "status": "pending" }
+```
+
+Response when complete:
 ```json
 {
-  "decision": "next_round",
-  "reason": "Strong decomposition, want to see system design."
+  "status": "complete",
+  "github_id": 12345678,
+  "github_username": "janedoe",
+  "github_name": "Jane Doe",
+  "avatar_url": "https://avatars.githubusercontent.com/u/12345678",
+  "session_token": "uuid-state-token",
+  "github_token": "gho_..."
 }
 ```
 
-`decision` must be one of: `hire`, `next_round`, `reject`.
+The `session_token` is the state UUID. The candidate CLI uses it as auth when calling
+`POST /sessions`. The `github_token` is used by the candidate CLI to create the GitHub repo —
+it is never written to `manifest.json` or stored on the relay.
 
-Response `200 OK`:
+Response when duplicate (already submitted):
 ```json
-{ "code": "INT-4829-XK", "decision": "next_round", "recorded_at": "2026-04-13T11:10:00Z" }
+{
+  "status": "duplicate",
+  "github_username": "janedoe",
+  "message": "You have already submitted for this interview."
+}
 ```
-
-Decision is immutable after the first save.
 
 ---
 
 ### `GET /sessions/{code}/{cid}/score`
-**Who:** Candidate (after submission, to check their score)
-**Auth:** None — open route. The candidate knows their own cid.
-**What:** Return the candidate's score, filtered by the HM's sharing config.
-
-The `cid` is derived locally:
+Candidate fetches their own score. No auth required. The `cid` is derived locally:
 - GitHub auth: `sha256("github:{github_id}")[:12]`
 - Email fallback: `sha256(email.lower())[:12]`
 
 Both are available in `~/.interview/sessions/<code>/manifest.json` after `/submit`.
 The CLI command `interview score <CODE>` computes this automatically.
 
-Response `200 OK` when score sharing is enabled and session is graded:
+Response when score sharing is disabled or session not yet graded:
+```json
+{ "available": false, "reason": "Score sharing is not enabled for this interview." }
+```
+
+Response when score is available (fields depend on sharing level):
 ```json
 {
   "available": true,
@@ -299,148 +183,427 @@ Response `200 OK` when score sharing is enabled and session is graded:
 }
 ```
 
-Fields present depend on the sharing config:
-| `score` level | Fields returned |
+Fields returned by sharing level:
+
+| `score` config | Fields returned |
 |---|---|
 | `none` | `{"available": false, "reason": "..."}` |
 | `overall` | `available`, `overall_score` |
 | `breakdown` | + `dimensions` |
 | `breakdown_notes` | + `summary`, `standout_moments`, `concerns` |
 
-`debrief` is always included in the response when available — it's Claude's analysis
-of the session, not the HM's evaluation, so it's not an HM toggle.
+`debrief` is always included when available — it is Claude's analysis of the session, not the
+HM's evaluation, and is not an HM toggle.
 
 Returns `404` if the interview code or cid is not found.
 
 ---
 
-### `GET /sessions/{code}/{cid}/sharing`
-**Who:** HM dashboard
-**Auth:** hm_key required
-**What:** Return the current sharing config for this interview code.
+## HM-gated endpoints
 
-Response `200 OK`:
+All require `Authorization: Bearer <hm_key>`.
+
+### `POST /interviews`
+Push an interview package to the relay. Called by `setup.create_interview()` when a relay is
+configured. The `payload_b64` field is the base64-encoded interview JSON.
+
+Request body:
 ```json
 {
   "code": "INT-4829-XK",
-  "sharing": {
-    "score": "breakdown_notes"
-  }
+  "payload_b64": "<base64-encoded interview JSON>"
+}
+```
+
+Response `201 Created`:
+```json
+{ "code": "INT-4829-XK", "registered_at": "2026-04-19T10:00:00Z" }
+```
+
+Returns `409` if the code is already registered.
+
+---
+
+### `POST /sessions`
+Candidate submits a sealed session package. The `hm_key` must match the owner of the interview
+code. If GitHub OAuth is configured on the relay, `session_token` is required.
+
+Request body:
+```json
+{
+  "code": "INT-4829-XK",
+  "candidate_email": "jane@example.com",
+  "candidate_name": "Jane Doe",
+  "session_token": "uuid-state-token",
+  "github_repo_url": "https://github.com/janedoe/interview-INT-4829-XK",
+  "manifest_json": "<base64-encoded manifest.json>",
+  "events_jsonl":  "<base64-encoded events.jsonl>",
+  "report_html":   "<base64-encoded report.html>",
+  "report_json":   "<base64-encoded report.json>",
+  "debrief_txt":   "<base64-encoded debrief.txt>"
+}
+```
+
+- `manifest_json` and `events_jsonl` are required. All other fields are optional.
+- `session_token` is required when GitHub OAuth is configured on the relay.
+- `github_repo_url` is omitted if repo creation failed or OAuth is not configured.
+- Returns `401` with `github_auth_required` if OAuth is configured but `session_token` is missing.
+- Returns `409` if this candidate has already submitted for this code.
+- Returns `403` if the code belongs to a different HM.
+- Returns `413` if the request body exceeds 200 MB (base64 overhead above the 100 MB session limit).
+
+Response `201 Created`:
+```json
+{
+  "code": "INT-4829-XK",
+  "cid": "abc123def456",
+  "submitted_at": "2026-04-19T10:32:00Z"
 }
 ```
 
 ---
 
-### `POST /sessions/{code}/sharing`
-**Who:** HM dashboard (per-interview sharing controls)
-**Auth:** hm_key required
-**What:** Update the sharing config for this interview code. Takes effect immediately
-for all candidates in this interview. Does not require a `cid` — sharing is per-interview,
-not per-candidate.
+### `GET /sessions`
+List all interviews and candidates for this HM.
+
+Response `200 OK`:
+```json
+{
+  "interviews": [
+    {
+      "code": "INT-4829-XK",
+      "title": "Build a rate limiter...",
+      "created_at": 1744754400,
+      "time_limit_minutes": 60,
+      "anonymize": false,
+      "candidate_count": 3,
+      "candidates": [
+        {
+          "cid": "abc123def456",
+          "submitted_at": "2026-04-19T10:32:00Z",
+          "elapsed_minutes": 47,
+          "overall_score": 7.5,
+          "event_count": 38,
+          "graded": true,
+          "revealed": false,
+          "github_username": "janedoe",
+          "github_repo_url": "https://github.com/janedoe/interview-INT-4829-XK",
+          "candidate_name": "Jane Doe",
+          "avatar_url": "https://avatars.githubusercontent.com/u/12345678"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Identity fields (`github_username`, `candidate_name`, `avatar_url`, `github_repo_url`) are
+always populated — there is no reveal gate. `revealed` in `meta.json` is kept for historical
+compatibility but has no behavioural effect.
+
+---
+
+### `GET /sessions/{code}`
+List candidates for one interview code.
+
+Response `200 OK`:
+```json
+{
+  "code": "INT-4829-XK",
+  "candidates": [ ... ]
+}
+```
+
+---
+
+### `GET /sessions/{code}/{cid}`
+Full session detail for one candidate.
+
+Response `200 OK`:
+```json
+{
+  "code": "INT-4829-XK",
+  "cid": "abc123def456",
+  "submitted_at": "2026-04-19T10:32:00Z",
+  "graded_at": "2026-04-19T11:15:00Z",
+  "elapsed_minutes": 47,
+  "candidate_email": "jane@example.com",
+  "candidate_name": "Jane Doe",
+  "github_username": "janedoe",
+  "github_repo_url": "https://github.com/janedoe/interview-INT-4829-XK",
+  "avatar_url": "https://avatars.githubusercontent.com/u/12345678",
+  "manifest": { "event_count": 38, "elapsed_minutes": 47, ... },
+  "report": { "overall_score": null, ... },
+  "grading": {
+    "dimensions": [...],
+    "overall_score": 7.5,
+    "summary": "...",
+    "standout_moments": [...],
+    "concerns": [...],
+    "graded_at": "2026-04-19T11:15:00Z"
+  },
+  "grading_history": [],
+  "comments": [],
+  "decision": null,
+  "audit_entries": [...]
+}
+```
+
+Identity fields are always populated — not gated on a reveal flag.
+
+---
+
+### `GET /sessions/{code}/{cid}/events`
+Raw `events.jsonl` content. Returns `text/plain`, one JSON object per line. The dashboard
+downloads this to the local sessions directory so `grader.py` can read it for grading.
+
+---
+
+### `GET /sessions/{code}/{cid}/report.html`
+The HTML report. Returns `text/html`.
+
+---
+
+### `GET /sessions/{code}/<anything>/sharing`
+Return the current sharing config for this interview code. The `cid` segment in the URL is
+ignored — sharing is per-interview-code, not per-candidate.
+
+Response `200 OK`:
+```json
+{ "code": "INT-4829-XK", "sharing": { "score": "breakdown_notes" } }
+```
+
+---
+
+### `POST /sessions/{code}/{cid}/grade`
+Save or revise a grading result. The dashboard runs grading locally and posts the result here.
+
+**First grade** — request body:
+```json
+{
+  "dimensions": [
+    { "name": "Problem Decomposition", "score": 8, "justification": "..." }
+  ],
+  "overall_score": 7.5,
+  "summary": "Strong systems thinking...",
+  "standout_moments": ["Caught the edge case early"],
+  "concerns": ["Tests were thin"]
+}
+```
+
+Response `200 OK`:
+```json
+{ "code": "INT-4829-XK", "cid": "abc123def456", "graded_at": "2026-04-19T11:15:00Z" }
+```
+
+**Grade revision** — include a `reason` field:
+```json
+{
+  "dimensions": [...],
+  "overall_score": 8.2,
+  "summary": "...",
+  "reason": "Undervalued the store abstraction on first read."
+}
+```
+
+If the session is already graded and `reason` is missing or empty:
+```json
+{ "error": "revision_requires_reason", "message": "Grade revision requires a 'reason' field explaining the change." }
+```
+
+Response `200 OK` for a revision:
+```json
+{
+  "code": "INT-4829-XK",
+  "cid": "abc123def456",
+  "graded_at": "2026-04-19T11:30:00Z",
+  "revision": true,
+  "previous_score": 7.5,
+  "new_score": 8.2
+}
+```
+
+The previous grade is moved to `grading_history.jsonl` before `grading.json` is overwritten.
+Grade revision history is never exposed to candidates via the score endpoint.
+
+---
+
+### `POST /sessions/{code}/{cid}/reveal`
+No-op. Returns `200 OK` and does nothing. Identity is always visible; this endpoint exists
+only for API compatibility with older dashboard versions.
+
+Response `200 OK`:
+```json
+{
+  "code": "INT-4829-XK",
+  "cid": "abc123def456",
+  "candidate_email": "jane@example.com",
+  "github_username": "janedoe",
+  "avatar_url": "https://avatars.githubusercontent.com/u/12345678"
+}
+```
+
+---
+
+### `POST /sessions/{code}/{cid}/comment`
+Append a comment to the session. Comments are append-only — no edit or delete.
 
 Request body:
 ```json
+{ "text": "Strong systems thinking. Invite to next round." }
+```
+
+Response `200 OK`:
+```json
 {
-  "sharing": {
-    "score": "breakdown"
-  }
+  "id": "c1",
+  "text": "Strong systems thinking. Invite to next round.",
+  "created_at": "2026-04-19T11:05:00Z"
 }
+```
+
+---
+
+### `POST /sessions/{code}/{cid}/decision`
+Record a hire/reject/next-round decision. Immutable after the first write.
+
+Request body:
+```json
+{ "decision": "next_round", "reason": "Strong decomposition, want to see system design." }
+```
+
+`decision` must be one of: `hire`, `next_round`, `reject`.
+
+Response `200 OK`:
+```json
+{ "code": "INT-4829-XK", "cid": "abc123def456", "decision": "next_round", "recorded_at": "2026-04-19T11:10:00Z" }
+```
+
+Returns `409 already_decided` if a decision has already been recorded.
+
+---
+
+### `POST /sessions/{code}/sharing`
+Update the sharing config for an interview code. Applies to all candidates in this interview.
+Does not require a `cid`. Each change is audit-logged.
+
+Request body (either form accepted):
+```json
+{ "sharing": { "score": "breakdown" } }
+```
+or:
+```json
+{ "score": "breakdown" }
 ```
 
 `score` must be one of: `none`, `overall`, `breakdown`, `breakdown_notes`.
 
 Response `200 OK`:
 ```json
-{
-  "code": "INT-4829-XK",
-  "sharing": { "score": "breakdown" }
-}
+{ "code": "INT-4829-XK", "sharing": { "score": "breakdown" } }
 ```
 
-Each change is written to a per-code sharing override file and audit-logged.
-The interview payload's default `sharing` config (set at creation time) is used
-if no override file exists.
+The interview payload's default `sharing` config (set at creation time) is used as the fallback
+if no override file exists. The override file takes precedence.
+
+---
+
+### `GET /audit/verify`
+Walk the entire per-session `audit.jsonl` for all sessions belonging to this HM and verify
+every hash chain.
+
+Response `200 OK` (intact):
+```json
+{ "ok": true, "entries": 47, "message": "Chain intact." }
+```
+
+Response `200 OK` (broken):
+```json
+{ "ok": false, "entries": 47, "message": "Hash mismatch: INT-4829-XK/abc123def456 entry 3: expected 9f2c1a3b, got deadbeef" }
+```
 
 ---
 
 ## Data storage
 
-The relay stores one directory per session:
-
 ```
-/data/hms/<hm_key>/
-  interviews/
-    INT-4829-XK.json           — interview payload (problem, rubric, sharing config)
-  sessions/
-    INT-4829-XK/
-      <cid>/
-        manifest.json
-        events.jsonl
-        report.html            (if submitted)
-        report.json            (if submitted)
-        debrief.txt            (Claude's session debrief, if generated)
-        grading.json           (written on POST /grade)
-        comments.jsonl         (append-only)
-        decision.json          (written on POST /decision)
-        audit.jsonl            (every action, hash-chained)
-        meta.json              (submitted_at, revealed_at, github identity, etc.)
-  sharing/
-    INT-4829-XK.json           (sharing config override — written by POST /sessions/{code}/sharing)
-    INT-4829-XK_audit.jsonl    (audit log for sharing changes)
+/data/
+  code_index.json                    — {code: hm_key} global lookup
+  github_submissions.json            — {code: {github_id: cid}} duplicate prevention
+  github_auth/
+    <state-uuid>.json                — pending/complete/expired OAuth state records
+  hms/
+    <hm_key>/
+      info.json                      — {hm_key, registered_at}
+      interviews/
+        <code>.json                  — full interview payload
+      sessions/
+        <code>/
+          <cid>/
+            manifest.json
+            events.jsonl
+            report.html
+            report.json
+            debrief.txt
+            grading.json             — current grading result
+            grading_history.jsonl    — superseded grades (one per line)
+            comments.jsonl           — append-only comments
+            decision.json            — hire/next_round/reject
+            audit.jsonl              — hash-chained HM action log
+            meta.json                — submitted_at, github identity, graded flag
+      sharing/
+        <code>.json                  — sharing config override
+        <code>_audit.jsonl           — audit log for sharing changes
 ```
 
-All files are written atomically (write to temp, rename). The `/data` directory is the
+All files are written atomically (write to `.tmp`, then rename). The `/data` directory is the
 only thing that needs to be backed up.
 
+**Size limits:**
+- Request body: 200 MB (base64 adds ~33% overhead over the 100 MB session limit)
+- Per session: 100 MB
+- Per individual file: 20 MB
+
 ---
 
-## Audit log
+## Audit log format
 
-Every state-changing action appended to `audit.jsonl` with a SHA-256 hash chain:
+Every state-changing action appended to `audit.jsonl` with SHA-256 hash chain:
 
 ```jsonl
-{"type":"session_submitted","code":"INT-4829-XK","ts":"2026-04-13T10:32:00Z","prev_hash":"0000","hash":"a1b2..."}
-{"type":"grade_recorded",   "code":"INT-4829-XK","ts":"2026-04-13T10:47:22Z","prev_hash":"a1b2","hash":"c3d4..."}
-{"type":"identity_revealed","code":"INT-4829-XK","ts":"2026-04-13T10:52:09Z","prev_hash":"c3d4","hash":"e5f6..."}
+{"type":"session_submitted","code":"INT-4829-XK","cid":"abc123","ts":"2026-04-19T10:32:00Z","prev_hash":"0000000000000000","hash":"a1b2c3d4e5f60001"}
+{"type":"grade_recorded",   "code":"INT-4829-XK","cid":"abc123","ts":"2026-04-19T11:15:00Z","prev_hash":"a1b2c3d4e5f60001","hash":"b2c3d4e5f6070002"}
 ```
 
-The chain is verifiable with `GET /audit/verify`.
-
----
-
-### `GET /audit/verify`
-**Who:** HM or compliance team
-**What:** Walk the entire audit chain and report integrity status.
-
-Response `200 OK`:
-```json
-{ "ok": true, "entries": 47, "message": "Chain intact." }
-```
-
-Or if tampered:
-```json
-{ "ok": false, "entries": 47, "message": "Hash mismatch at entry 23." }
-```
+Verifiable via `GET /audit/verify`.
 
 ---
 
 ## Error responses
 
 All errors follow the same shape:
-
 ```json
-{ "error": "session_not_found", "message": "No session found for INT-XXXX." }
+{ "error": "session_not_found", "message": "No session for INT-4829-XK/abc123def456." }
 ```
 
 | Status | Code | Meaning |
 |--------|------|---------|
 | 400 | `invalid_payload` | Missing required fields or malformed JSON |
-| 401 | `unauthorized` | Missing or invalid API key |
-| 403 | `not_graded` | Reveal attempted before grade was saved |
-| 404 | `session_not_found` | No session for this code |
+| 400 | `revision_requires_reason` | Grade revision missing reason field |
+| 401 | `unauthorized` | Missing or invalid hm_key |
+| 401 | `github_auth_required` | Relay requires GitHub OAuth but session_token missing |
+| 401 | `invalid_session_token` | session_token not found or not in complete state |
+| 403 | `forbidden` | Code belongs to a different HM |
+| 403 | `token_mismatch` | session_token was issued for a different interview code |
+| 404 | `not_found` | Route not found |
+| 404 | `session_not_found` | No session for this code/cid |
 | 404 | `interview_not_found` | No interview for this code |
-| 409 | `already_exists` | Session already submitted (immutable) |
-| 409 | `already_graded` | Grade already recorded (immutable) |
+| 404 | `file_not_found` | Requested file not found for this session |
+| 409 | `already_exists` | Interview code already registered |
+| 409 | `already_submitted` | This candidate (or GitHub account) has already submitted |
+| 409 | `already_decided` | Decision already recorded (immutable) |
+| 413 | `payload_too_large` | Request body exceeds 200 MB |
+| 501 | (JSON body) | GitHub OAuth requested but not configured on this relay |
 
 ---
 
@@ -455,27 +618,34 @@ docker run -d \
   interviewsignal/relay:latest
 ```
 
-Point candidates and HMs at it:
-
+With GitHub OAuth:
 ```bash
-interview configure-relay  # prompts for relay_url and api_key
+docker run -d \
+  --name interviewsignal-relay \
+  -p 8080:8080 \
+  -e RELAY_API_KEY=your-secret-key \
+  -e GITHUB_CLIENT_ID=your-client-id \
+  -e GITHUB_CLIENT_SECRET=your-client-secret \
+  -e RELAY_BASE_URL=https://relay.example.com \
+  -v /path/to/data:/data \
+  interviewsignal/relay:latest
 ```
 
-Stored in `~/.interview/config.json`:
-```json
-{
-  "relay_url": "https://interviews.internal.yourco.com",
-  "relay_api_key": "your-secret-key"
-}
+Or with Docker Compose:
+```bash
+docker compose up
+```
+
+HMs configure their relay once:
+```bash
+interview configure-relay   # prompts for relay URL → auto-registers hm_key
 ```
 
 ---
 
 ## What the relay does not do
 
-- **No grading.** The HM's dashboard runs grading locally using their own Anthropic API key
-  and posts the result. The relay stores it.
-- **No email.** The relay does not send anything. Notifications are out of scope for v1.
-- **No decryption.** Session payloads are stored as-is. The relay has no access to problem
-  content, rubrics, or candidate details beyond the code.
-- **No user accounts.** One API key, one relay, one team. Multi-tenant is Phase 3.
+- **No grading.** Grading runs on the HM's machine using their Anthropic API key. The relay stores the result.
+- **No email.** The relay sends nothing. Notifications are out of scope.
+- **No decryption.** Session payloads are stored as-is.
+- **No real-time monitoring.** Sessions are visible only after submission.

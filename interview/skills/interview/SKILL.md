@@ -49,6 +49,11 @@ Ask five questions, one at a time:
 → breakdown_notes: per-dimension scores with HM notes
 → Claude's session debrief is always shared regardless of this setting.
 
+**6. Auto-grade submissions?**
+"Should submissions be graded automatically when candidates submit? You can still revise grades from the dashboard. (yes / no, default: no)"
+→ If yes: each submission is graded by AI immediately on arrival and appears in the dashboard with an "Auto" badge.
+→ Requires GRADING_API_KEY to be configured on the relay. Without it, this setting is silently ignored and you grade manually.
+
 Then run:
 
 ```bash
@@ -57,10 +62,11 @@ python -m interview.core.setup create \
   --rubric "RUBRIC TEXT HERE" \
   --time-limit <MINUTES> \
   --anonymize \
-  --sharing-score <none|overall|breakdown|breakdown_notes>
+  --sharing-score <none|overall|breakdown|breakdown_notes> \
+  --auto-grade
 ```
 
-(Omit `--time-limit` if none given. Omit `--anonymize` if no. Use `--no-anonymize` explicitly if you want to be safe.)
+(Omit `--time-limit` if none given. Omit `--anonymize` if no. Use `--no-anonymize` explicitly if you want to be safe. Omit `--auto-grade` if no, or use `--no-auto-grade` explicitly.)
 
 Show the result:
 

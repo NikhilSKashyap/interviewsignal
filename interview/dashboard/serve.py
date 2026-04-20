@@ -67,11 +67,22 @@ def _load_all_reports() -> list[dict]:
                         r = json.loads(report_file.read_text())
                         r["_source"] = "local"
                         manifest_file = session_dir / "manifest.json"
+                        manifest: dict = {}
                         if manifest_file.exists():
                             manifest = json.loads(manifest_file.read_text())
                             r["_anonymize"] = manifest.get("anonymize", True)
                         else:
                             r["_anonymize"] = True
+                        # Load or compute flags for this local session
+                        session_code = session_dir.name
+                        local_flags = _load_local_flags(session_code)
+                        r["flag_count"] = len(local_flags)
+                        if any(f.get("severity") == "red" for f in local_flags):
+                            r["flag_severity"] = "red"
+                        elif any(f.get("severity") == "yellow" for f in local_flags):
+                            r["flag_severity"] = "yellow"
+                        else:
+                            r["flag_severity"] = "none"
                         reports.append(r)
                     except Exception:
                         pass
@@ -184,6 +195,16 @@ def _build_candidate_row(r: dict) -> str:
     score_col = _score_color(score)
     elapsed = r.get("elapsed_minutes", "—")
     submitted = _format_time(r.get("submitted_at") or r.get("ended_at"))
+    # Unix timestamp for JS sorting
+    submitted_ts = r.get("submitted_at") or r.get("ended_at") or 0
+    if isinstance(submitted_ts, str):
+        try:
+            import datetime
+            submitted_ts = datetime.datetime.fromisoformat(
+                submitted_ts.replace("Z", "+00:00")
+            ).timestamp()
+        except Exception:
+            submitted_ts = 0
     event_count = r.get("event_count", "—")
     code = r["code"]
     cid = r.get("cid", "")
@@ -195,6 +216,24 @@ def _build_candidate_row(r: dict) -> str:
     else:
         graded = is_graded(code)
         decision_obj = get_decision(code)
+
+    # Determine status for data attribute
+    if decision_obj or r.get("decision"):
+        row_status = "decided"
+    elif graded or (score is not None):
+        row_status = "graded"
+    else:
+        row_status = "pending"
+
+    # Duration as float for sorting (strip " min" suffix if present)
+    elapsed_float = 0.0
+    try:
+        elapsed_float = float(str(elapsed).replace("min", "").strip())
+    except Exception:
+        pass
+
+    # Flag severity for data attribute
+    flag_severity = r.get("flag_severity", "none")
 
     reveal_btn = ""
 
@@ -212,13 +251,48 @@ def _build_candidate_row(r: dict) -> str:
         f"/candidate?code={quote(code, safe='')}"
     )
 
+    # Flag indicator dot
+    flag_count = r.get("flag_count", 0)
+    if flag_severity == "red":
+        flag_dot_color = "#ef4444"
+        flag_title = f"{flag_count} red flag(s)"
+    elif flag_severity == "yellow":
+        flag_dot_color = "#f59e0b"
+        flag_title = f"{flag_count} yellow flag(s)"
+    else:
+        flag_dot_color = "#22c55e"
+        flag_title = "No flags"
+    flag_indicator = (
+        f'<span title="{flag_title}" style="color:{flag_dot_color};font-size:16px;line-height:1">&#9679;</span>'
+    )
+
+    # Graded-by badge (Auto vs HM)
+    graded_by = r.get("graded_by", "hm") if r.get("graded") else None
+    graded_by_badge = ""
+    if graded_by == "auto":
+        graded_by_badge = (
+            ' <span title="Auto-graded on submission" '
+            'style="font-size:10px;color:#60a5fa;background:#0c1a2e;'
+            'border:1px solid #1e40af;border-radius:10px;padding:1px 6px;'
+            'vertical-align:middle">Auto</span>'
+        )
+    elif graded_by == "hm" and r.get("graded"):
+        graded_by_badge = (
+            ' <span title="Graded by hiring manager" '
+            'style="font-size:10px;color:#a3a3a3;background:#1a1a1a;'
+            'border:1px solid #333;border-radius:10px;padding:1px 6px;'
+            'vertical-align:middle">HM</span>'
+        )
+
+    score_data = score if score is not None else ""
     return f"""
-    <tr data-code="{code}" data-cid="{cid}">
+    <tr data-code="{code}" data-cid="{cid}" data-score="{score_data}" data-submitted="{submitted_ts}" data-duration="{elapsed_float}" data-flag-severity="{flag_severity}" data-status="{row_status}">
       <td class="td-label">
         <input type="checkbox" class="candidate-checkbox" data-code="{code}" data-cid="{cid}">
         <span class="display-label">{label}</span>{decision_badge}
       </td>
-      <td><span class="score-badge" style="color:{score_col}">{score_str}</span></td>
+      <td><span class="score-badge" style="color:{score_col}">{score_str}</span>{graded_by_badge}</td>
+      <td>{flag_indicator}</td>
       <td>{elapsed} min</td>
       <td>{event_count}</td>
       <td>{submitted}</td>
@@ -266,10 +340,13 @@ def _build_dashboard_html(reports: list[dict]) -> str:
     labeled_reports = _apply_labels(reports)
     rows = "\n".join(_build_candidate_row(r) for r in labeled_reports)
     count = len(reports)
-    graded = sum(1 for r in reports if r.get("overall_score") is not None)
-    avg_score = round(
-        sum(r["overall_score"] for r in reports if r.get("overall_score") is not None) / graded, 1
-    ) if graded else "—"
+    graded_count = sum(1 for r in reports if r.get("overall_score") is not None)
+    avg_score_val = round(
+        sum(r["overall_score"] for r in reports if r.get("overall_score") is not None) / graded_count, 1
+    ) if graded_count else None
+
+    # Default sort: score descending if any graded, else submission time descending
+    default_sort = "score-desc" if graded_count > 0 else "submitted-desc"
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -282,7 +359,7 @@ def _build_dashboard_html(reports: list[dict]) -> str:
   .stat {{ background: #161616; border: 1px solid #222; border-radius: 8px; padding: 16px 24px; }}
   .stat-val {{ font-size: 28px; font-weight: 700; color: #fff; }}
   .stat-label {{ font-size: 12px; color: #666; margin-top: 4px; }}
-  .toolbar {{ display: flex; gap: 12px; margin-bottom: 16px; align-items: center; }}
+  .toolbar {{ display: flex; gap: 12px; margin-bottom: 16px; align-items: center; flex-wrap: wrap; }}
   table {{ width: 100%; border-collapse: collapse; }}
   thead th {{ text-align: left; font-size: 11px; font-weight: 600; color: #666;
               text-transform: uppercase; letter-spacing: 0.06em;
@@ -300,6 +377,43 @@ def _build_dashboard_html(reports: list[dict]) -> str:
   .audit-link {{ font-size: 11px; color: #444; margin-left: auto; }}
   .audit-link a {{ color: #444; text-decoration: none; }}
   .audit-link a:hover {{ color: #888; }}
+  /* Sort + filter controls */
+  .controls-row {{ display: flex; gap: 12px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }}
+  .controls-row label {{ font-size: 12px; color: #888; }}
+  .ctrl-select {{ background: #1a1a1a; border: 1px solid #333; color: #ccc;
+                  padding: 5px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; }}
+  .ctrl-input {{ background: #1a1a1a; border: 1px solid #333; color: #ccc;
+                 padding: 5px 8px; border-radius: 6px; font-size: 12px; width: 58px; }}
+  /* Summary bar */
+  .summary-bar {{ background: #111; border: 1px solid #222; border-radius: 6px;
+                  padding: 10px 16px; margin-bottom: 10px; font-size: 12px; color: #888;
+                  display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }}
+  .summary-bar span {{ color: #ccc; }}
+  .summary-bar .sep {{ color: #333; }}
+  /* Selection count bar */
+  .sel-bar {{ background: #0c1a2e; border: 1px solid #1e40af; border-radius: 6px;
+              padding: 8px 14px; margin-bottom: 8px; font-size: 12px; color: #93c5fd;
+              display: none; }}
+  /* Batch actions bar */
+  .batch-bar {{ background: #111; border: 1px solid #333; border-radius: 6px;
+                padding: 10px 14px; margin-bottom: 10px; display: none;
+                gap: 10px; align-items: center; flex-wrap: wrap; }}
+  .batch-bar.visible {{ display: flex; }}
+  .batch-progress {{ font-size: 12px; color: #888; margin-left: 8px; }}
+  /* Pagination */
+  .pagination {{ display: flex; gap: 10px; align-items: center; margin-top: 16px;
+                 font-size: 13px; color: #888; }}
+  .pagination button {{ background: #1a1a1a; border: 1px solid #333; color: #ccc;
+                         padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; }}
+  .pagination button:disabled {{ opacity: 0.3; cursor: not-allowed; }}
+  /* Confirmation dialog overlay */
+  .confirm-overlay {{ position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+                       z-index: 1000; display: flex; align-items: center; justify-content: center; }}
+  .confirm-box {{ background: #161616; border: 1px solid #333; border-radius: 10px;
+                  padding: 28px 32px; max-width: 420px; width: 90%; }}
+  .confirm-box h3 {{ font-size: 15px; color: #fff; margin-bottom: 10px; }}
+  .confirm-box p {{ font-size: 13px; color: #888; margin-bottom: 20px; }}
+  .confirm-btns {{ display: flex; gap: 10px; }}
 </style>
 </head>
 <body>
@@ -312,8 +426,8 @@ def _build_dashboard_html(reports: list[dict]) -> str:
 
   <div class="stats">
     <div class="stat"><div class="stat-val">{count}</div><div class="stat-label">Candidates</div></div>
-    <div class="stat"><div class="stat-val">{graded}</div><div class="stat-label">Graded</div></div>
-    <div class="stat"><div class="stat-val">{avg_score}</div><div class="stat-label">Avg Score</div></div>
+    <div class="stat"><div class="stat-val">{graded_count}</div><div class="stat-label">Graded</div></div>
+    <div class="stat"><div class="stat-val">{avg_score_val if avg_score_val is not None else "—"}</div><div class="stat-label">Avg Score</div></div>
   </div>
 
   {'<div class="received-hint"><strong>Relay connected.</strong> Submissions appear automatically when candidates run /submit.</div>'
@@ -326,39 +440,423 @@ def _build_dashboard_html(reports: list[dict]) -> str:
     <button class="btn" onclick="location.reload()">↻ Refresh</button>
   </div>
 
-  {'<table><thead><tr><th><input type="checkbox" id="select-all"> Candidate</th><th>Score</th><th>Duration</th><th>Events</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>' + rows + '</tbody></table>'
+  {'<div id="candidates-section">' if reports else ''}
+
+  {'<!-- Sort controls -->' if reports else ''}
+  {'<div class="controls-row"><label>Sort by:</label><select class="ctrl-select" id="sort-select"><option value="score-desc">Score ↓</option><option value="score-asc">Score ↑</option><option value="submitted-desc">Submitted (newest)</option><option value="submitted-asc">Submitted (oldest)</option><option value="duration">Session duration</option><option value="flags">Flag severity (red first)</option></select></div>' if reports else ''}
+
+  {'<!-- Filter controls -->' if reports else ''}
+  {'<div class="controls-row"><label>Status:</label><select class="ctrl-select" id="filter-status"><option value="all">All</option><option value="graded">Graded</option><option value="pending">Pending</option><option value="decided">Decided</option></select><label style="margin-left:8px">Flags:</label><select class="ctrl-select" id="filter-flags"><option value="all">All</option><option value="clean">Clean only</option><option value="flagged">Flagged only</option></select><label style="margin-left:8px">Score:</label><input type="number" class="ctrl-input" id="filter-score-min" min="0" max="10" step="0.1" placeholder="min"><span style="color:#555;font-size:12px">–</span><input type="number" class="ctrl-input" id="filter-score-max" min="0" max="10" step="0.1" placeholder="max"><button class="btn btn-sm" id="btn-apply-filter" style="margin-left:4px">Apply</button></div>' if reports else ''}
+
+  {'<!-- Summary bar -->' if reports else ''}
+  {'<div class="summary-bar" id="summary-bar"><span id="sb-total">0 submissions</span><span class="sep">|</span><span id="sb-graded">0 graded</span><span class="sep">|</span><span id="sb-pending">0 pending</span><span class="sep">|</span><span id="sb-avg">avg score —</span><span class="sep">|</span><span id="sb-advancing">0 advancing</span><span class="sep">|</span><span id="sb-rejected">0 rejected</span></div>' if reports else ''}
+
+  {'<!-- Selection count bar -->' if reports else ''}
+  {'<div class="sel-bar" id="sel-bar">0 selected</div>' if reports else ''}
+
+  {'<!-- Batch actions bar -->' if reports else ''}
+  {'<div class="batch-bar" id="batch-bar"><button class="btn btn-sm btn-grade" id="batch-grade">Grade Selected</button><button class="btn btn-sm btn-next" id="batch-advance">Advance Selected</button><button class="btn btn-sm btn-reject" id="batch-reject">Reject Selected</button><span style="margin-left:8px;color:#555;font-size:12px">|</span><label style="font-size:12px;color:#888;margin-left:8px">Reject below score:</label><input type="number" class="ctrl-input" id="batch-threshold" min="0" max="10" step="0.1" placeholder="e.g. 5"><button class="btn btn-sm btn-reject" id="batch-reject-below" style="margin-left:4px">Reject Below</button><span class="batch-progress" id="batch-progress"></span></div>' if reports else ''}
+
+  {'<table id="candidates-table"><thead><tr><th><input type="checkbox" id="select-all"> Candidate</th><th>Score</th><th>Flags</th><th>Duration</th><th>Events</th><th>Submitted</th><th>Actions</th></tr></thead><tbody id="candidates-tbody">' + rows + '</tbody></table>'
    if reports else
    '<div class="empty"><h3>No submissions yet.</h3><p>Candidates appear here after /submit.</p></div>'}
 
+  {'<!-- Pagination -->' if reports else ''}
+  {'<div class="pagination" id="pagination-bar"><button id="btn-prev-page" disabled>← Prev</button><span id="page-label"></span><button id="btn-next-page" disabled>Next →</button></div>' if reports else ''}
+
+  {'</div>' if reports else ''}
+
 </div>
+
+<!-- Confirmation dialog (hidden) -->
+<div class="confirm-overlay" id="confirm-overlay" style="display:none">
+  <div class="confirm-box">
+    <h3 id="confirm-title">Are you sure?</h3>
+    <p id="confirm-msg">This action cannot be undone.</p>
+    <div class="confirm-btns">
+      <button class="btn btn-primary" id="confirm-ok">Confirm</button>
+      <button class="btn" id="confirm-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <script>
-  document.getElementById('select-all')?.addEventListener('change', function() {{
-    document.querySelectorAll('.candidate-checkbox').forEach(cb => cb.checked = this.checked);
+(function() {{
+  // ── Constants ──────────────────────────────────────────────────────────────
+  const PAGE_SIZE = 50;
+  let currentPage = 1;
+
+  // ── Row references ─────────────────────────────────────────────────────────
+  const tbody = document.getElementById('candidates-tbody');
+  if (!tbody) return; // No candidates — nothing to do
+
+  const allRows = Array.from(tbody.querySelectorAll('tr'));
+
+  // Rows that survive current filter (updated by applyFilterAndSort)
+  let visibleRows = allRows.slice();
+
+  // ── Sort ───────────────────────────────────────────────────────────────────
+  const sortSelect = document.getElementById('sort-select');
+  sortSelect.value = '{default_sort}';
+
+  function sortRows(rows, key) {{
+    const flagOrder = {{ none: 0, yellow: 1, red: 2 }};
+    return rows.slice().sort((a, b) => {{
+      switch (key) {{
+        case 'score-desc': {{
+          const sa = a.dataset.score !== '' ? parseFloat(a.dataset.score) : -1;
+          const sb = b.dataset.score !== '' ? parseFloat(b.dataset.score) : -1;
+          return sb - sa;
+        }}
+        case 'score-asc': {{
+          const sa = a.dataset.score !== '' ? parseFloat(a.dataset.score) : 99;
+          const sb = b.dataset.score !== '' ? parseFloat(b.dataset.score) : 99;
+          return sa - sb;
+        }}
+        case 'submitted-desc':
+          return parseFloat(b.dataset.submitted || 0) - parseFloat(a.dataset.submitted || 0);
+        case 'submitted-asc':
+          return parseFloat(a.dataset.submitted || 0) - parseFloat(b.dataset.submitted || 0);
+        case 'duration':
+          return parseFloat(b.dataset.duration || 0) - parseFloat(a.dataset.duration || 0);
+        case 'flags': {{
+          const fa = flagOrder[a.dataset.flagSeverity] ?? 0;
+          const fb = flagOrder[b.dataset.flagSeverity] ?? 0;
+          return fb - fa;
+        }}
+        default:
+          return 0;
+      }}
+    }});
+  }}
+
+  // ── Filter ─────────────────────────────────────────────────────────────────
+  const filterStatus = document.getElementById('filter-status');
+  const filterFlags  = document.getElementById('filter-flags');
+  const scoreMin     = document.getElementById('filter-score-min');
+  const scoreMax     = document.getElementById('filter-score-max');
+
+  function filterRows(rows) {{
+    const status  = filterStatus.value;
+    const flags   = filterFlags.value;
+    const minVal  = scoreMin.value !== '' ? parseFloat(scoreMin.value) : null;
+    const maxVal  = scoreMax.value !== '' ? parseFloat(scoreMax.value) : null;
+
+    return rows.filter(row => {{
+      // Status filter
+      if (status !== 'all' && row.dataset.status !== status) return false;
+      // Flags filter
+      if (flags === 'clean' && row.dataset.flagSeverity !== 'none') return false;
+      if (flags === 'flagged' && row.dataset.flagSeverity === 'none') return false;
+      // Score range filter
+      const score = row.dataset.score !== '' ? parseFloat(row.dataset.score) : null;
+      if (minVal !== null && (score === null || score < minVal)) return false;
+      if (maxVal !== null && (score === null || score > maxVal)) return false;
+      return true;
+    }});
+  }}
+
+  // ── Summary bar ────────────────────────────────────────────────────────────
+  function updateSummaryBar(rows) {{
+    const total    = rows.length;
+    const graded   = rows.filter(r => r.dataset.status === 'graded' || r.dataset.status === 'decided').length;
+    const pending  = rows.filter(r => r.dataset.status === 'pending').length;
+    const scores   = rows.map(r => r.dataset.score !== '' ? parseFloat(r.dataset.score) : null).filter(s => s !== null);
+    const avg      = scores.length ? (scores.reduce((a,b) => a+b, 0) / scores.length).toFixed(1) : '—';
+
+    // Count decided rows by inspecting decision badge text
+    let advancing = 0, rejected = 0;
+    rows.forEach(r => {{
+      const badge = r.querySelector('.display-label')?.nextElementSibling;
+      if (!badge) return;
+      const t = badge.textContent || '';
+      if (t.includes('Next Round') || t.includes('Hired')) advancing++;
+      if (t.includes('Rejected')) rejected++;
+    }});
+
+    document.getElementById('sb-total').textContent   = total + ' submission' + (total !== 1 ? 's' : '');
+    document.getElementById('sb-graded').textContent  = graded + ' graded';
+    document.getElementById('sb-pending').textContent = pending + ' pending';
+    document.getElementById('sb-avg').textContent     = 'avg score ' + avg;
+    document.getElementById('sb-advancing').textContent = advancing + ' advancing';
+    document.getElementById('sb-rejected').textContent  = rejected + ' rejected';
+  }}
+
+  // ── Pagination ─────────────────────────────────────────────────────────────
+  const btnPrev  = document.getElementById('btn-prev-page');
+  const btnNext  = document.getElementById('btn-next-page');
+  const pageLabel = document.getElementById('page-label');
+  const paginationBar = document.getElementById('pagination-bar');
+
+  function renderPage() {{
+    const totalPages = Math.max(1, Math.ceil(visibleRows.length / PAGE_SIZE));
+    if (currentPage > totalPages) currentPage = totalPages;
+
+    const start = (currentPage - 1) * PAGE_SIZE;
+    const end   = start + PAGE_SIZE;
+
+    // Hide all rows, then show the current page slice of visible rows
+    allRows.forEach(r => {{ r.style.display = 'none'; }});
+    visibleRows.slice(start, end).forEach(r => {{ r.style.display = ''; }});
+
+    btnPrev.disabled  = currentPage <= 1;
+    btnNext.disabled  = currentPage >= totalPages;
+    pageLabel.textContent = `Page ${{currentPage}} of ${{totalPages}} (${{visibleRows.length}} candidates)`;
+
+    // Only show pagination bar when needed
+    paginationBar.style.display = visibleRows.length > PAGE_SIZE ? 'flex' : 'none';
+
+    updateSelectionCount();
+  }}
+
+  btnPrev.addEventListener('click', () => {{ currentPage--; renderPage(); }});
+  btnNext.addEventListener('click', () => {{ currentPage++; renderPage(); }});
+
+  // ── Main apply function ────────────────────────────────────────────────────
+  function applyFilterAndSort() {{
+    currentPage = 1;
+
+    // Filter
+    const filtered = filterRows(allRows);
+
+    // Sort
+    const sorted = sortRows(filtered, sortSelect.value);
+
+    // Reorder DOM
+    sorted.forEach(r => tbody.appendChild(r));
+    visibleRows = sorted;
+
+    renderPage();
+    updateSummaryBar(visibleRows);
+    // Uncheck all when filter changes
+    document.getElementById('select-all').checked = false;
+    document.querySelectorAll('.candidate-checkbox').forEach(cb => cb.checked = false);
+    updateSelectionCount();
+  }}
+
+  sortSelect.addEventListener('change', applyFilterAndSort);
+  document.getElementById('btn-apply-filter').addEventListener('click', applyFilterAndSort);
+
+  // ── Select all (visible page rows only) ────────────────────────────────────
+  document.getElementById('select-all').addEventListener('change', function() {{
+    const start = (currentPage - 1) * PAGE_SIZE;
+    const end   = start + PAGE_SIZE;
+    visibleRows.slice(start, end).forEach(r => {{
+      const cb = r.querySelector('.candidate-checkbox');
+      if (cb) cb.checked = this.checked;
+    }});
+    updateSelectionCount();
   }});
-  document.getElementById('btn-grade-selected')?.addEventListener('click', function() {{
+
+  document.addEventListener('change', function(e) {{
+    if (e.target.classList.contains('candidate-checkbox')) {{
+      updateSelectionCount();
+    }}
+  }});
+
+  function updateSelectionCount() {{
+    const checked = document.querySelectorAll('.candidate-checkbox:checked').length;
+    const selBar   = document.getElementById('sel-bar');
+    const batchBar = document.getElementById('batch-bar');
+    if (checked > 0) {{
+      selBar.style.display = 'block';
+      selBar.textContent = checked + ' of ' + visibleRows.length + ' selected';
+      batchBar.classList.add('visible');
+    }} else {{
+      selBar.style.display = 'none';
+      batchBar.classList.remove('visible');
+    }}
+  }}
+
+  // ── Grade multiple ─────────────────────────────────────────────────────────
+  document.getElementById('btn-grade-selected').addEventListener('click', function() {{
     const entries = [...document.querySelectorAll('.candidate-checkbox:checked')]
       .map(cb => ({{code: cb.dataset.code, cid: cb.dataset.cid || ''}}));
     if (!entries.length) {{ alert('Select at least one candidate.'); return; }}
     gradeMultiple(entries);
   }});
-  document.getElementById('btn-grade-all')?.addEventListener('click', function() {{
+  document.getElementById('btn-grade-all').addEventListener('click', function() {{
     const entries = [...document.querySelectorAll('.candidate-checkbox')]
       .map(cb => ({{code: cb.dataset.code, cid: cb.dataset.cid || ''}}));
     gradeMultiple(entries);
   }});
-  document.querySelectorAll('.btn-grade').forEach(btn =>
+  document.querySelectorAll('.btn-grade:not(#batch-grade)').forEach(btn =>
     btn.addEventListener('click', () =>
       gradeMultiple([{{code: btn.dataset.code, cid: btn.dataset.cid || ''}}]))
   );
+  document.getElementById('batch-grade')?.addEventListener('click', function() {{
+    const entries = [...document.querySelectorAll('.candidate-checkbox:checked')]
+      .map(cb => ({{code: cb.dataset.code, cid: cb.dataset.cid || ''}}));
+    if (!entries.length) {{ alert('Select at least one candidate.'); return; }}
+    gradeMultiple(entries);
+  }});
+
   function gradeMultiple(entries) {{
     fetch('/grade', {{method:'POST', headers:{{'Content-Type':'application/json'}},
       body: JSON.stringify({{entries}})}})
       .then(r => r.json()).then(d => {{ alert(d.message); location.reload(); }})
       .catch(e => alert('Grade failed: ' + e));
   }}
+
+  // ── Confirmation dialog helpers ────────────────────────────────────────────
+  function showConfirm(title, msg) {{
+    return new Promise(resolve => {{
+      document.getElementById('confirm-title').textContent = title;
+      document.getElementById('confirm-msg').textContent   = msg;
+      const overlay = document.getElementById('confirm-overlay');
+      overlay.style.display = 'flex';
+      const okBtn = document.getElementById('confirm-ok');
+      const cancelBtn = document.getElementById('confirm-cancel');
+      function cleanup(val) {{
+        overlay.style.display = 'none';
+        okBtn.removeEventListener('click', onOk);
+        cancelBtn.removeEventListener('click', onCancel);
+        resolve(val);
+      }}
+      function onOk() {{ cleanup(true); }}
+      function onCancel() {{ cleanup(false); }}
+      okBtn.addEventListener('click', onOk);
+      cancelBtn.addEventListener('click', onCancel);
+    }});
+  }}
+
+  // ── Batch decision helper ──────────────────────────────────────────────────
+  async function batchDecision(entries, decision, reason, label) {{
+    if (!entries.length) {{ alert('No candidates selected.'); return; }}
+    const confirmed = await showConfirm(
+      label + ' ' + entries.length + ' candidate' + (entries.length !== 1 ? 's' : '') + '?',
+      'This will record a "' + decision + '" decision for each selected candidate. This cannot be undone.'
+    );
+    if (!confirmed) return;
+
+    const progressEl = document.getElementById('batch-progress');
+    let done = 0;
+    for (const entry of entries) {{
+      progressEl.textContent = label + '... ' + done + '/' + entries.length + ' done';
+      try {{
+        await fetch('/record-decision', {{
+          method: 'POST',
+          headers: {{'Content-Type': 'application/json'}},
+          body: JSON.stringify({{code: entry.code, cid: entry.cid, decision, reason, author: 'HM'}}),
+        }});
+      }} catch(e) {{
+        console.error('Decision failed for', entry.code, e);
+      }}
+      done++;
+    }}
+    progressEl.textContent = 'Done! Reloading...';
+    location.reload();
+  }}
+
+  document.getElementById('batch-advance')?.addEventListener('click', async function() {{
+    const entries = [...document.querySelectorAll('.candidate-checkbox:checked')]
+      .map(cb => ({{code: cb.dataset.code, cid: cb.dataset.cid || ''}}));
+    await batchDecision(entries, 'next_round', 'Batch advance', 'Advance');
+  }});
+
+  document.getElementById('batch-reject')?.addEventListener('click', async function() {{
+    const entries = [...document.querySelectorAll('.candidate-checkbox:checked')]
+      .map(cb => ({{code: cb.dataset.code, cid: cb.dataset.cid || ''}}));
+    await batchDecision(entries, 'reject', 'Batch reject', 'Reject');
+  }});
+
+  document.getElementById('batch-reject-below')?.addEventListener('click', async function() {{
+    const threshold = parseFloat(document.getElementById('batch-threshold').value);
+    if (isNaN(threshold)) {{ alert('Enter a score threshold first.'); return; }}
+    // Only graded candidates in current view with score below threshold
+    const entries = visibleRows
+      .filter(r => r.dataset.score !== '' && parseFloat(r.dataset.score) < threshold)
+      .map(r => ({{code: r.dataset.code, cid: r.dataset.cid || ''}}));
+    if (!entries.length) {{
+      alert('No graded candidates in the current view with score below ' + threshold + '.');
+      return;
+    }}
+    await batchDecision(entries, 'reject', 'Batch reject (below ' + threshold + ')', 'Reject below ' + threshold);
+  }});
+
+  // ── Initial render ─────────────────────────────────────────────────────────
+  applyFilterAndSort();
+}})();
 </script>
 </body>
 </html>"""
+
+
+def _load_local_flags(code: str) -> list[dict]:
+    """
+    For local (non-relay) sessions: load flags.json if it exists, otherwise
+    compute flags on the fly from events.jsonl + manifest.json.
+    Returns an empty list on any error.
+    """
+    try:
+        from interview.core.flags import compute_flags
+        session_dir = SESSIONS_DIR / code
+        flags_file = session_dir / "flags.json"
+        if flags_file.exists():
+            try:
+                return json.loads(flags_file.read_text())
+            except Exception:
+                pass
+        # Compute on the fly
+        events_file = session_dir / "events.jsonl"
+        manifest_file = session_dir / "manifest.json"
+        if not events_file.exists():
+            return []
+        events: list[dict] = []
+        for line in events_file.read_text().splitlines():
+            line = line.strip()
+            if line:
+                try:
+                    events.append(json.loads(line))
+                except Exception:
+                    pass
+        manifest: dict = {}
+        if manifest_file.exists():
+            try:
+                manifest = json.loads(manifest_file.read_text())
+            except Exception:
+                pass
+        return compute_flags(events, manifest)
+    except Exception:
+        return []
+
+
+def _build_flags_panel_html(flags: list[dict]) -> str:
+    """
+    Build the HTML for the session flags panel.
+    Returns an empty string when there are no flags.
+    All flag text is HTML-escaped before rendering.
+    """
+    if not flags:
+        return ""
+
+    badges = ""
+    for flag in flags:
+        severity = flag.get("severity", "yellow")
+        label    = escape(str(flag.get("label", "")))
+        detail   = escape(str(flag.get("detail", "")))
+        if severity == "red":
+            bg     = "#fee2e2"
+            border = "#ef4444"
+            color  = "#991b1b"
+        else:
+            bg     = "#fef3c7"
+            border = "#f59e0b"
+            color  = "#92400e"
+        badges += (
+            f'<div style="background:{bg};border:1px solid {border};color:{color};'
+            f'border-radius:6px;padding:10px 14px;margin-bottom:8px">'
+            f'<div style="font-weight:600;font-size:13px;margin-bottom:2px">{label}</div>'
+            f'<div style="font-size:12px">{detail}</div>'
+            f'</div>'
+        )
+
+    return (
+        f'<div class="panel" style="border-color:#2a2a2a">'
+        f'<div class="section-title">Session Flags</div>'
+        f'{badges}'
+        f'</div>'
+    )
 
 
 def _build_candidate_detail_html(code: str, cid: str = "") -> str:
@@ -379,6 +877,7 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
         audit_events    = relay_session.get("audit_entries", [])
         current_grading = relay_session.get("grading") or {}
         grading_history = relay_session.get("grading_history", [])
+        session_flags   = relay_session.get("flags", [])
     else:
         raw_comments    = get_comments(code)
         decision_obj    = get_decision(code)
@@ -386,6 +885,8 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
         audit_events    = read_audit_events(code)
         current_grading = {}
         grading_history = []
+        # Load or compute flags for local sessions
+        session_flags = _load_local_flags(code)
 
     # Embed the report via iframe
     report_iframe_src = (
@@ -458,6 +959,7 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
         current_score   = current_grading.get("overall_score")
         current_summary = escape(current_grading.get("summary", ""))
         score_display   = f"{current_score} / 10" if current_score is not None else "—"
+        graded_by_val   = current_grading.get("graded_by", "hm")
 
         # Latest revision info (most recent history entry = previous grade)
         revision_badge = ""
@@ -502,12 +1004,28 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
         else:
             history_section = ""
 
+        # Build graded-by label for the detail page
+        if graded_by_val == "auto":
+            graded_by_label = (
+                '<span title="Graded automatically on submission" '
+                'style="font-size:11px;color:#60a5fa;background:#0c1a2e;'
+                'border:1px solid #1e40af;border-radius:10px;padding:2px 8px;'
+                'margin-left:8px;vertical-align:middle">Auto-graded</span>'
+            )
+        else:
+            graded_by_label = (
+                '<span title="Graded by hiring manager" '
+                'style="font-size:11px;color:#a3a3a3;background:#1a1a1a;'
+                'border:1px solid #333;border-radius:10px;padding:2px 8px;'
+                'margin-left:8px;vertical-align:middle">HM-graded</span>'
+            )
+
         revise_score_val = current_score if current_score is not None else ""
         grade_panel_html = f"""
     <div class="panel" id="grade-panel">
       <div class="section-title">Grade</div>
       <div style="font-size:22px;font-weight:700;color:#fbbf24;margin-bottom:4px">
-        {score_display}{revision_badge}
+        {score_display}{revision_badge}{graded_by_label}
       </div>
       {revision_reason_html}
       {f'<div style="font-size:12px;color:#555;margin-top:8px">{current_summary}</div>' if current_summary else ''}
@@ -574,6 +1092,9 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
       <button class="btn btn-sm" id="btn-save-sharing" data-code="{escape(code)}">Save sharing settings</button>
       <span id="sharing-saved" style="display:none;font-size:12px;color:#4ade80;margin-left:10px">Saved.</span>
     </div>"""
+
+    # Flags panel
+    flags_panel_html = _build_flags_panel_html(session_flags)
 
     safe_code = escape(code)
     safe_cid = escape(cid) if cid else ""
@@ -674,6 +1195,7 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
 
 <div class="layout">
   <div>
+    {flags_panel_html}
     <div class="panel">
       <div class="section-title">Session Report</div>
       {report_iframe}
@@ -976,6 +1498,9 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
 
         if path == "/" or path == "/dashboard":
             reports = _load_all_reports()
+            filter_code = params.get("filter", [""])[0]
+            if filter_code:
+                reports = [r for r in reports if r.get("code") == filter_code]
             self._send_html(_build_dashboard_html(reports))
 
         elif path == "/candidate":
@@ -1261,7 +1786,7 @@ def _run_grading(code: str, cid: str = ""):
 def start_dashboard(code: str | None = None):
     ensure_dirs()
     base_url = f"http://localhost:{PORT}"
-    open_url = f"{base_url}/candidate?code={code}" if code else base_url
+    open_url = f"{base_url}/?filter={code}" if code else base_url
     relay = get_relay_url()
     print(f"\n✓ interviewsignal dashboard running at {base_url}")
     if relay:

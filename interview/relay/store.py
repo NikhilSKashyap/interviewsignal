@@ -27,6 +27,8 @@ import time
 import uuid
 from pathlib import Path
 
+from interview.core.flags import compute_flags
+
 
 class StoreError(Exception):
     pass
@@ -154,6 +156,10 @@ class SessionStore:
             return None
         return self._load_json(self._interviews_dir(hm_key) / f"{code}.json")
 
+    def get_interview_config(self, hm_key: str, code: str) -> dict | None:
+        """Fetch an interview package by hm_key + code (HM-scoped). Returns None if not found."""
+        return self._load_json(self._interviews_dir(hm_key) / f"{code}.json")
+
     def list_interviews(self, hm_key: str) -> list[dict]:
         """List all interviews for an HM with candidate submission counts."""
         interviews_dir = self._interviews_dir(hm_key)
@@ -195,6 +201,15 @@ class SessionStore:
             report   = self._load_json(cid_dir / "report.json") or {}
             grading  = self._load_json(cid_dir / "grading.json") or {}
             manifest = self._load_json(cid_dir / "manifest.json") or {}
+            flags    = self._load_json(cid_dir / "flags.json") or []
+            # Compute flag summary fields
+            flag_count = len(flags)
+            if any(f.get("severity") == "red" for f in flags):
+                flag_severity = "red"
+            elif any(f.get("severity") == "yellow" for f in flags):
+                flag_severity = "yellow"
+            else:
+                flag_severity = "none"
             result.append({
                 "cid":             cid_dir.name,
                 "submitted_at":    meta.get("submitted_at"),
@@ -203,11 +218,14 @@ class SessionStore:
                 "overall_score":   grading.get("overall_score") or report.get("overall_score"),
                 "event_count":     manifest.get("event_count"),
                 "graded":          meta.get("graded", False),
+                "graded_by":       meta.get("graded_by", grading.get("graded_by", "hm")),
                 "revealed":        meta.get("revealed", False),
                 "github_username": meta.get("github_username"),
                 "github_repo_url": meta.get("github_repo_url"),
                 "candidate_name":  meta.get("candidate_name"),
                 "avatar_url":      meta.get("avatar_url"),
+                "flag_count":      flag_count,
+                "flag_severity":   flag_severity,
             })
         return sorted(result, key=lambda x: x.get("submitted_at") or "", reverse=True)
 
@@ -296,6 +314,28 @@ class SessionStore:
         self._save_meta(hm_key, code, cid, meta)
         self.append_audit(hm_key, code, cid, "session_submitted")
 
+        # Compute and persist quality flags
+        try:
+            events_bytes = files.get("events.jsonl", b"")
+            events_list: list[dict] = []
+            for line in events_bytes.decode(errors="replace").splitlines():
+                line = line.strip()
+                if line:
+                    try:
+                        events_list.append(json.loads(line))
+                    except Exception:
+                        pass
+            manifest_for_flags: dict = {}
+            if "manifest.json" in files:
+                try:
+                    manifest_for_flags = json.loads(files["manifest.json"])
+                except Exception:
+                    pass
+            flags = compute_flags(events_list, manifest_for_flags)
+            self._write_atomic(d / "flags.json", json.dumps(flags, indent=2))
+        except Exception:
+            pass
+
     def get_session(self, hm_key: str, code: str, cid: str) -> dict | None:
         d = self._session_dir(hm_key, code, cid)
         meta = self._load_json(d / "meta.json")
@@ -308,6 +348,7 @@ class SessionStore:
         comments        = self._load_jsonl(d / "comments.jsonl")
         decision        = self._load_json(d / "decision.json")
         audit           = self._load_jsonl(d / "audit.jsonl")
+        flags           = self._load_json(d / "flags.json") or []
         return {
             "code":            code,
             "cid":             cid,
@@ -326,6 +367,7 @@ class SessionStore:
             "comments":        comments,
             "decision":        decision,
             "audit_entries":   audit,
+            "flags":           flags,
         }
 
     # Files the relay is allowed to serve — anything else is rejected to prevent
@@ -337,6 +379,7 @@ class SessionStore:
         "report.json",
         "grading.json",
         "debrief.txt",
+        "flags.json",
     })
 
     def get_file(self, hm_key: str, code: str, cid: str, filename: str) -> bytes | None:
@@ -350,15 +393,16 @@ class SessionStore:
     def is_graded(self, hm_key: str, code: str, cid: str) -> bool:
         return self._load_meta(hm_key, code, cid).get("graded", False)
 
-    def save_grade(self, hm_key: str, code: str, cid: str, grading: dict) -> dict:
+    def save_grade(self, hm_key: str, code: str, cid: str, grading: dict, graded_by: str = "hm") -> dict:
         if self.is_graded(hm_key, code, cid):
             raise StoreError("already_graded")
         d = self._session_dir(hm_key, code, cid)
         graded_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         grading["graded_at"] = graded_at
+        grading["graded_by"] = graded_by
         self._write_atomic(d / "grading.json", json.dumps(grading, indent=2))
-        self._save_meta(hm_key, code, cid, {"graded": True, "graded_at": graded_at})
-        return {"code": code, "cid": cid, "graded_at": graded_at}
+        self._save_meta(hm_key, code, cid, {"graded": True, "graded_at": graded_at, "graded_by": graded_by})
+        return {"code": code, "cid": cid, "graded_at": graded_at, "graded_by": graded_by}
 
     def revise_grade(self, hm_key: str, code: str, cid: str, grading: dict, reason: str) -> dict:
         """
