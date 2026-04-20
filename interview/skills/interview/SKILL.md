@@ -51,12 +51,36 @@ AI collaboration (25%): Did they direct the AI effectively — precise prompts, 
 → Default no — useful for small teams who already know who's interviewing.
 
 **5. Share AI score with candidate?**
-"What score information should candidates see after grading? (none / overall / breakdown / breakdown_notes, default: none)"
-→ none: candidate sees nothing
-→ overall: single score only
-→ breakdown: per-dimension scores
-→ breakdown_notes: per-dimension scores with HM notes
-→ Claude's session debrief is always shared regardless of this setting.
+Present these options with examples so the HM can make an informed choice:
+
+```
+What should candidates see after grading? (default: none)
+
+  none             — Candidate sees only their session debrief. No score.
+
+  overall          — Candidate sees:
+                       Your score: 7.8 / 10
+
+  breakdown        — Candidate sees:
+                       Your score: 7.8 / 10
+                       ├ Problem understanding   8/10
+                       ├ Solution approach        8/10
+                       ├ Code quality             7/10
+                       └ AI collaboration         8/10
+
+  breakdown_notes  — Same as breakdown, plus the AI's written notes per
+                     dimension and an overall summary:
+                       Your score: 7.8 / 10
+                       ├ Problem understanding   8/10  "Correctly identified..."
+                       ├ Solution approach        8/10  "Clean decomposition..."
+                       ...
+                       Summary: Strong across the board, particularly...
+
+Note: Claude's session debrief (a reflection on what you did well and
+missed) is always shown to the candidate regardless of this setting.
+```
+
+→ Accept: none / overall / breakdown / breakdown_notes. Default: none.
 
 **6. Auto-grade submissions?**
 "Should submissions be graded automatically when candidates submit? You can still revise grades from the dashboard. (yes / no, default: no)"
