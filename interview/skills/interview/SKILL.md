@@ -36,16 +36,16 @@ Ask three questions, one at a time:
 "Time limit? (e.g. '90 minutes', or Enter for none)"
 → Optional integer (minutes) or null.
 
-Then write both inputs to temp files and run:
+Then run, passing problem and rubric as direct arguments:
 
 ```bash
 python -m interview.core.setup create \
-  --problem-file /tmp/interview_problem.txt \
-  --rubric-file /tmp/interview_rubric.txt \
+  --problem "PROBLEM TEXT HERE" \
+  --rubric "RUBRIC TEXT HERE" \
   --time-limit <MINUTES>
 ```
 
-(Omit `--time-limit` if none given.)
+(Omit `--time-limit` if none given. Use actual text from the HM's answers — no temp files needed.)
 
 Show the result:
 

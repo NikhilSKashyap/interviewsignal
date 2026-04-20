@@ -151,8 +151,10 @@ def load_interview(code: str) -> dict | None:
 def main():
     parser = argparse.ArgumentParser(description="Create an interview session")
     parser.add_argument("command", choices=["create"])
-    parser.add_argument("--problem-file", required=True)
-    parser.add_argument("--rubric-file", required=True)
+    parser.add_argument("--problem-file", default=None)
+    parser.add_argument("--rubric-file", default=None)
+    parser.add_argument("--problem", default=None, help="Problem text directly (alternative to --problem-file)")
+    parser.add_argument("--rubric", default=None, help="Rubric text directly (alternative to --rubric-file)")
     parser.add_argument("--hm-email", default="")
     parser.add_argument("--cc-emails", default="")
     parser.add_argument("--candidate-email", default=None)
@@ -165,8 +167,19 @@ def main():
                         help="What score info candidates can see after submission")
     args = parser.parse_args()
 
-    problem = Path(args.problem_file).read_text().strip()
-    rubric = Path(args.rubric_file).read_text().strip()
+    if args.problem:
+        problem = args.problem.strip()
+    elif args.problem_file:
+        problem = Path(args.problem_file).read_text().strip()
+    else:
+        raise SystemExit("error: --problem or --problem-file is required")
+
+    if args.rubric:
+        rubric = args.rubric.strip()
+    elif args.rubric_file:
+        rubric = Path(args.rubric_file).read_text().strip()
+    else:
+        raise SystemExit("error: --rubric or --rubric-file is required")
     cc_emails = [e.strip() for e in args.cc_emails.split(",") if e.strip()]
 
     sharing = {
