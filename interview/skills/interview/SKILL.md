@@ -29,8 +29,17 @@ Ask five questions, one at a time:
 → Accept multiline. Store as-is.
 
 **2. Evaluation criteria**
-"How should this be evaluated? Describe what you're looking for and how to weight it."
-→ Freeform text. Example: "Problem decomposition 40%, code quality 30%, tests 30%"
+"How should this be evaluated? Describe what you're looking for and how to weight it — or press Enter for the default rubric."
+
+Default rubric (use when HM presses Enter or types "default" / "NA"):
+```
+Problem understanding (25%): Did the candidate correctly interpret the requirements? Did they ask clarifying questions or surface edge cases before diving in?
+Solution approach (25%): Did they break the problem down well? Is the approach sound — not over-engineered, not under-thought?
+Code quality (25%): Is the final code clean, readable, and correct? Are edge cases handled?
+AI collaboration (25%): Did they direct the AI effectively — precise prompts, course-correcting mistakes, iterating rather than accepting the first output blindly?
+```
+
+→ The rubric is a guide for the AI grader — plain language, any format. Weights are a hint, not a formula. The HM always has final say and can revise the grade from the dashboard.
 
 **3. Time limit**
 "Time limit? (e.g. '90 minutes', or Enter for none)"
