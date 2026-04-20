@@ -388,11 +388,134 @@ def _parse_grading_response(text: str) -> dict:
     return json.loads(text)
 
 
-# ─── Main grading function ────────────────────────────────────────────────────
+# ─── Grading error ────────────────────────────────────────────────────────────
 
 class GradingError(Exception):
     pass
 
+
+# ─── In-memory transcript builder ────────────────────────────────────────────
+
+def build_transcript_from_events(events: list[dict]) -> str:
+    """
+    Build a transcript string from an in-memory events list.
+    Same logic as build_transcript() but takes events directly instead of
+    reading from ~/.interview/sessions/{code}/events.jsonl.
+    Used by relay auto-grading so no disk I/O is required.
+    """
+    if not events:
+        return "(no session events found)"
+
+    # Find session start time
+    start_ts = None
+    for e in events:
+        if e["type"] == "session_start":
+            start_ts = e["timestamp"]
+            break
+    if start_ts is None and events:
+        start_ts = events[0]["timestamp"]
+
+    lines = []
+    for e in events:
+        etype = e["type"]
+        ts = e.get("timestamp", start_ts)
+        elapsed = round((ts - start_ts) / 60, 1) if start_ts else 0
+        tag = f"[T+{elapsed}min]"
+        payload = e.get("payload", {})
+
+        if etype == "session_start":
+            git = payload.get("git_snapshot", {})
+            commit = (git.get("commit") or "none")[:8]
+            lines.append(f"{tag}  SESSION START  git={commit}")
+
+        elif etype == "user_prompt":
+            text = payload.get("text", "").strip()
+            if text:
+                lines.append(f"{tag}  CANDIDATE:    {text[:300]}")
+
+        elif etype == "thinking":
+            plan = (
+                payload.get("plan")
+                or payload.get("text")
+                or payload.get("reasoning")
+                or ""
+            ).strip()
+            if plan:
+                lines.append(f"{tag}  THINKING:     {plan[:300]}")
+
+        elif etype == "assistant_message":
+            text = payload.get("text", "").strip()
+            if text:
+                lines.append(f"{tag}  ASSISTANT:    {text[:300]}")
+
+        elif etype == "tool_call":
+            tool = payload.get("tool_name", "?")
+            inp = payload.get("tool_input", {})
+            detail = _summarise_tool_input(tool, inp)
+            lines.append(f"{tag}  → {tool:<12} {detail}")
+
+        elif etype == "tool_result":
+            tool = payload.get("tool_name", "?")
+            summary = payload.get("response_summary", {})
+            detail = _summarise_tool_result(tool, summary)
+            lines.append(f"{tag}  ← {tool:<12} {detail}")
+
+        elif etype == "session_end":
+            elapsed_total = payload.get("elapsed_minutes", 0)
+            lines.append(f"{tag}  SESSION END  total={elapsed_total}min")
+
+    return "\n".join(lines)
+
+
+def grade_session_from_data(
+    events: list[dict],
+    manifest: dict,
+    rubric: str,
+    api_key: str,
+    model: str | None = None,
+) -> dict:
+    """
+    Grade a session from in-memory data. Used by relay auto-grading.
+
+    The rubric is passed explicitly — loaded from the relay store, never from
+    candidate-supplied data. This ensures the HM's rubric never travels to
+    the candidate's machine and cannot be manipulated by the candidate.
+
+    Returns the same dict shape as grade_session().
+    Raises GradingError on API or parse failure.
+    """
+    transcript = build_transcript_from_events(events)
+
+    # Inject rubric into a copy of manifest so _build_grading_prompt() works
+    # without requiring the rubric to be stored in the candidate manifest.
+    manifest_with_rubric = {**manifest, "rubric": rubric}
+    prompt = _build_grading_prompt(manifest_with_rubric, transcript)
+
+    llm_config = {
+        "base_url":      DEFAULT_BASE_URL,
+        "api_key":       api_key,
+        "model":         model or DEFAULT_GRADING_MODEL,
+        "api_format":    "anthropic",
+        "extra_headers": {},
+    }
+
+    try:
+        raw = _call_api(prompt, llm_config)
+    except Exception as e:
+        raise GradingError(f"API call failed during auto-grading: {e}")
+
+    try:
+        grading = _parse_grading_response(raw)
+    except json.JSONDecodeError as e:
+        raise GradingError(f"Could not parse auto-grading response as JSON: {e}\nRaw: {raw[:200]}")
+
+    if "overall_score" not in grading or "dimensions" not in grading:
+        raise GradingError(f"Unexpected auto-grading response shape: {list(grading.keys())}")
+
+    return grading
+
+
+# ─── Main grading function ────────────────────────────────────────────────────
 
 def grade_session(code: str) -> dict:
     """
@@ -416,9 +539,23 @@ def grade_session(code: str) -> dict:
             f"The session may have started before the interview was fully configured."
         )
     if not rubric:
+        # Rubric is no longer stored in candidate manifests (security: rubric
+        # must not reach the candidate's machine). Fall back to the locally-
+        # created interview package in CREATED_DIR (HM-side grading only).
+        created_file = INTERVIEW_DIR / "created" / f"{code}.json"
+        if created_file.exists():
+            try:
+                created_pkg = json.loads(created_file.read_text())
+                rubric = created_pkg.get("rubric", "").strip()
+                if rubric:
+                    manifest["rubric"] = rubric
+            except Exception:
+                pass
+    if not rubric:
         raise GradingError(
-            f"Session {code} has no grading rubric in its manifest. "
-            f"The rubric is required for meaningful grading."
+            f"Session {code} has no grading rubric. "
+            f"The rubric is required for meaningful grading. "
+            f"In relay mode, grading is done server-side where the rubric is stored securely."
         )
 
     # Check grading is configured (API key OR enterprise proxy URL)

@@ -32,6 +32,7 @@ from urllib.request import Request as _Req, urlopen as _urlopen
 from urllib.error import URLError
 
 from interview.relay.store import SessionStore, StoreError, make_cid, make_github_cid
+from interview.core.grader import DEFAULT_GRADING_MODEL
 
 # ─── Environment variables ────────────────────────────────────────────────────
 # RELAY_API_KEY     — HM registration key (required in production)
@@ -309,10 +310,15 @@ class RelayHandler(BaseHTTPRequestHandler):
     # ── open GET handlers ─────────────────────────────────────────────────────
 
     def _get_interview(self, code: str):
-        payload = _store.get_interview(code)
-        if payload is None:
+        # Look up the hm_key so we can call get_interview_candidate()
+        hm_key = _store.lookup_hm_for_code(code)
+        if hm_key is None:
             return self._error(404, "not_found", f"No interview for code {code}.")
-        self._json(payload)
+        # Return only candidate-safe fields — rubric never leaves the relay
+        candidate_pkg = _store.get_interview_candidate(hm_key, code)
+        if candidate_pkg is None:
+            return self._error(404, "not_found", f"No interview for code {code}.")
+        self._json(candidate_pkg)
 
     def _get_relay_base(self) -> str:
         """Best-effort relay base URL for building redirect_uri."""
@@ -634,47 +640,32 @@ class RelayHandler(BaseHTTPRequestHandler):
                             github_repo_url=github_repo_url,
                             candidate_name=candidate_name)
 
-        # Auto-grade if configured
-        grading_api_key = os.environ.get("GRADING_API_KEY", "")
+        # --- Auto-grading (best-effort, non-fatal) ---
+        grading_api_key = os.environ.get("GRADING_API_KEY", "").strip()
         if grading_api_key:
-            interview_config = _store.get_interview_config(hm_key, code)
-            if interview_config and interview_config.get("auto_grade"):
-                try:
-                    # Set ANTHROPIC_API_KEY and INTERVIEW_GRADING_MODEL for the grader
-                    orig_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-                    orig_model   = os.environ.get("INTERVIEW_GRADING_MODEL", "")
-                    os.environ["ANTHROPIC_API_KEY"] = grading_api_key
-                    grading_model = os.environ.get("GRADING_MODEL", "")
-                    if grading_model:
-                        os.environ["INTERVIEW_GRADING_MODEL"] = grading_model
-                    try:
-                        from interview.core import grader as grader_mod
-                        # Cache session files locally so grader can read them
-                        from pathlib import Path as _Path
-                        session_local_dir = _Path.home() / ".interview" / "sessions" / code
-                        session_local_dir.mkdir(parents=True, exist_ok=True)
-                        for fname in ("manifest.json", "events.jsonl"):
-                            if fname in files:
-                                local_f = session_local_dir / fname
-                                if not local_f.exists():
-                                    local_f.write_bytes(files[fname])
-                        grade = grader_mod.grade_session(code)
+            try:
+                auto_grade_flag = _store.get_auto_grade(hm_key, code)
+                if auto_grade_flag:
+                    rubric = _store.get_rubric(hm_key, code)
+                    if rubric:
+                        # Load the just-saved session data (events + manifest from relay store)
+                        session_data = _store.get_session(hm_key, code, cid)
+                        events = session_data.get("events", [])
+                        manifest = session_data.get("manifest", {})
+                        grading_model = os.environ.get("GRADING_MODEL", DEFAULT_GRADING_MODEL)
+                        from interview.core.grader import grade_session_from_data
+                        grade = grade_session_from_data(
+                            events=events,
+                            manifest=manifest,
+                            rubric=rubric,
+                            api_key=grading_api_key,
+                            model=grading_model,
+                        )
                         if grade:
-                            # grade_session already calls decisions.save_grade locally;
-                            # persist to relay store (the authoritative location)
                             _store.save_grade(hm_key, code, cid, grade, graded_by="auto")
-                    finally:
-                        # Restore original env vars
-                        if orig_api_key:
-                            os.environ["ANTHROPIC_API_KEY"] = orig_api_key
-                        else:
-                            os.environ.pop("ANTHROPIC_API_KEY", None)
-                        if orig_model:
-                            os.environ["INTERVIEW_GRADING_MODEL"] = orig_model
-                        else:
-                            os.environ.pop("INTERVIEW_GRADING_MODEL", None)
-                except Exception as e:
-                    print(f"[auto-grade] failed for {code}/{cid}: {e}", flush=True)
+            except Exception as e:
+                print(f"[auto-grade] {code}/{cid}: {e}", flush=True)
+        # --- end auto-grading ---
 
         import time
         self._json({

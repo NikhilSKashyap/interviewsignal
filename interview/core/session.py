@@ -437,12 +437,14 @@ def start_session(code: str, candidate_email: str | None = None, candidate_name:
         "started_at":         started_at,
         "candidate_email":    resolved_candidate_email,
         "candidate_name":     resolved_candidate_name,
-        "hm_email":           interview["hm_email"],
+        "hm_email":           interview.get("hm_email", ""),
         "cc_emails":          interview.get("cc_emails", []),
         "audit_email":        interview.get("audit_email"),
         "time_limit_minutes": interview.get("time_limit_minutes"),
         "anonymize":          interview.get("anonymize", False),
-        "rubric":             interview["rubric"],
+        # NOTE: rubric intentionally NOT stored — the HM's rubric must never
+        # reach the candidate's machine. Relay-side grading loads it from the
+        # relay store via get_rubric() which is never exposed to candidates.
         "problem":            interview["problem"],
         "git_base_commit":    git_snapshot.get("commit"),
         "last_event_hash":    "",
@@ -558,7 +560,10 @@ def seal_session(code: str) -> dict:
         "github_avatar_url": session.get("avatar_url"),
         "hm_email":          session.get("hm_email"),
         "cc_emails":         session.get("cc_emails", []),
-        "rubric":            session.get("rubric", ""),
+        # NOTE: rubric intentionally NOT included in manifest — the HM's rubric
+        # must never reach the candidate's machine. Relay-side grading loads the
+        # rubric from the relay store (get_rubric()) which is never exposed
+        # to candidates via any public endpoint.
         "problem":           session.get("problem", ""),
         "started_at":        session["started_at"],
         "ended_at":          ended_at,

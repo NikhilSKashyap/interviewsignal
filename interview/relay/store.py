@@ -156,6 +156,42 @@ class SessionStore:
             return None
         return self._load_json(self._interviews_dir(hm_key) / f"{code}.json")
 
+    # Fields safe to expose to candidates via GET /interviews/{code}.
+    # rubric, sharing, auto_grade, audit_email, hm_email, cc_emails,
+    # candidate_email, and anonymize are deliberately excluded.
+    _CANDIDATE_SAFE_FIELDS = frozenset({
+        "code", "problem", "time_limit_minutes", "relay_url",
+        "hm_key", "created_at", "problem_hash",
+    })
+
+    def get_interview_candidate(self, hm_key: str, code: str) -> dict | None:
+        """
+        Return candidate-safe fields only.
+        Never includes rubric, sharing, auto_grade, or PII fields.
+        """
+        full = self._load_json(self._interviews_dir(hm_key) / f"{code}.json")
+        if full is None:
+            return None
+        return {k: v for k, v in full.items() if k in self._CANDIDATE_SAFE_FIELDS}
+
+    def get_rubric(self, hm_key: str, code: str) -> str | None:
+        """
+        Return just the rubric string for internal grading use.
+        Never called from a public endpoint.
+        """
+        pkg = self._load_json(self._interviews_dir(hm_key) / f"{code}.json")
+        if pkg is None:
+            return None
+        rubric = pkg.get("rubric", "").strip()
+        return rubric if rubric else None
+
+    def get_auto_grade(self, hm_key: str, code: str) -> bool:
+        """Return the auto_grade flag from the stored interview config."""
+        pkg = self._load_json(self._interviews_dir(hm_key) / f"{code}.json")
+        if pkg is None:
+            return False
+        return bool(pkg.get("auto_grade", False))
+
     def get_interview_config(self, hm_key: str, code: str) -> dict | None:
         """Fetch an interview package by hm_key + code (HM-scoped). Returns None if not found."""
         return self._load_json(self._interviews_dir(hm_key) / f"{code}.json")
@@ -349,6 +385,7 @@ class SessionStore:
         decision        = self._load_json(d / "decision.json")
         audit           = self._load_jsonl(d / "audit.jsonl")
         flags           = self._load_json(d / "flags.json") or []
+        events          = self._load_jsonl(d / "events.jsonl")
         return {
             "code":            code,
             "cid":             cid,
@@ -361,6 +398,7 @@ class SessionStore:
             "github_repo_url":  meta.get("github_repo_url"),
             "avatar_url":       meta.get("avatar_url"),
             "manifest":        manifest,
+            "events":          events,
             "report":          report,
             "grading":         grading,
             "grading_history": grading_history,
