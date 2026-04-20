@@ -949,6 +949,7 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", len(encoded))
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         try:
             self.wfile.write(encoded)
@@ -960,6 +961,7 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", len(encoded))
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         try:
             self.wfile.write(encoded)
@@ -1256,11 +1258,12 @@ def _run_grading(code: str, cid: str = ""):
             print(f"  ⚠ Grade saved locally but relay sync failed: {e}")
 
 
-def start_dashboard():
+def start_dashboard(code: str | None = None):
     ensure_dirs()
-    url = f"http://localhost:{PORT}"
+    base_url = f"http://localhost:{PORT}"
+    open_url = f"{base_url}/candidate?code={code}" if code else base_url
     relay = get_relay_url()
-    print(f"\n✓ interviewsignal dashboard running at {url}")
+    print(f"\n✓ interviewsignal dashboard running at {base_url}")
     if relay:
         print(f"  Relay:  {relay}")
         print(f"  Mode:   relay — submissions fetched from relay automatically")
@@ -1268,7 +1271,7 @@ def start_dashboard():
         print(f"  Mode:   email — save report JSON attachments to ~/.interview/received/")
         print(f"  Tip:    run 'interview configure-relay' to connect a relay server")
     print(f"  Press Ctrl+C to stop.\n")
-    webbrowser.open(url)
+    webbrowser.open(open_url)
 
     server = http.server.HTTPServer(("localhost", PORT), DashboardHandler)
     try:
@@ -1278,4 +1281,5 @@ def start_dashboard():
 
 
 if __name__ == "__main__":
-    start_dashboard()
+    import sys as _sys
+    start_dashboard(_sys.argv[1] if len(_sys.argv) > 1 else None)

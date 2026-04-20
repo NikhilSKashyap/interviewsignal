@@ -562,7 +562,7 @@ def cmd_configure_github_app(args):
 
 def cmd_dashboard(args):
     from interview.dashboard.serve import start_dashboard
-    start_dashboard()
+    start_dashboard(getattr(args, "code", None))
 
 
 def cmd_status(args):
@@ -699,7 +699,8 @@ def main():
     sub.add_parser("configure-api-key", help="Store Anthropic API key (direct access)")
     sub.add_parser("configure-llm", help="Configure LLM endpoint for grading (enterprise proxies, custom base URL)")
     sub.add_parser("configure-relay", help="Set relay server URL and API key")
-    sub.add_parser("dashboard", help="Open HM candidate dashboard")
+    p_dashboard = sub.add_parser("dashboard", help="Open HM candidate dashboard")
+    p_dashboard.add_argument("code", nargs="?", default=None, help="Jump directly to a candidate (e.g. INT-1234-AB)")
     sub.add_parser("status", help="Show active session status")
 
     p_score = sub.add_parser("score", help="Fetch your score for a submitted interview")
