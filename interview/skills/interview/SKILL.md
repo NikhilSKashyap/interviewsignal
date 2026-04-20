@@ -22,7 +22,7 @@ trigger: /interview
 
 ## Flow 1 — Hiring Manager Setup (`/interview hm`)
 
-Ask three questions, one at a time:
+Ask five questions, one at a time:
 
 **1. Problem statement**
 "Paste your problem statement."
@@ -36,16 +36,31 @@ Ask three questions, one at a time:
 "Time limit? (e.g. '90 minutes', or Enter for none)"
 → Optional integer (minutes) or null.
 
-Then run, passing problem and rubric as direct arguments:
+**4. Anonymize candidates?**
+"Should candidates appear anonymously until you decide to reveal them? (yes / no, default: no)"
+→ If yes: candidates appear as 'Candidate A', 'Candidate B' in the dashboard until manually unmasked.
+→ Default no — useful for small teams who already know who's interviewing.
+
+**5. Share AI score with candidate?**
+"What score information should candidates see after grading? (none / overall / breakdown / breakdown_notes, default: none)"
+→ none: candidate sees nothing
+→ overall: single score only
+→ breakdown: per-dimension scores
+→ breakdown_notes: per-dimension scores with HM notes
+→ Claude's session debrief is always shared regardless of this setting.
+
+Then run:
 
 ```bash
 python -m interview.core.setup create \
   --problem "PROBLEM TEXT HERE" \
   --rubric "RUBRIC TEXT HERE" \
-  --time-limit <MINUTES>
+  --time-limit <MINUTES> \
+  --anonymize \
+  --sharing-score <none|overall|breakdown|breakdown_notes>
 ```
 
-(Omit `--time-limit` if none given. Use actual text from the HM's answers — no temp files needed.)
+(Omit `--time-limit` if none given. Omit `--anonymize` if no. Use `--no-anonymize` explicitly if you want to be safe.)
 
 Show the result:
 
@@ -66,10 +81,18 @@ To review submissions: interview dashboard
 
 ## Flow 2 — Candidate Session (`/interview <CODE>`)
 
-Run:
+First, ask the candidate for their identity (two questions, one at a time):
+
+**1.** "What's your name?"
+**2.** "What's your email address?"
+
+Then run:
 
 ```bash
-python -m interview.core.session start --code INT-4829-XK
+python -m interview.core.session start \
+  --code INT-4829-XK \
+  --candidate-name "NAME HERE" \
+  --candidate-email "EMAIL HERE"
 ```
 
 This:

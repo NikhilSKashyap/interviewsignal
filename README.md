@@ -52,8 +52,10 @@ You'll be asked for:
 - Problem statement
 - Grading rubric (plain language — "weight decomposition 40%, code quality 30%, tests 30%")
 - Time limit (optional)
+- Anonymize candidates? (default: no — candidates appear by name; yes shows "Candidate A/B/C" until you unmask)
+- Score sharing (default: none — what candidates see after grading: none / overall / breakdown / breakdown_notes)
 
-That's it. In relay mode no email setup is needed — candidates go straight to your dashboard.
+In relay mode no email setup is needed — candidates go straight to your dashboard.
 
 You get back a code like `INT-4829-XK`. Share it with your candidate — that's all they need.
 
@@ -64,7 +66,7 @@ pip install interviewsignal && interview install
 /interview INT-4829-XK
 ```
 
-If the relay has GitHub OAuth configured, a browser tab opens for GitHub login — one account, one submission. The problem appears once auth completes. A public GitHub repo (`interview-{code}`) is created automatically and a git remote named `interview` is wired up in your working directory. Work normally — ask the AI questions, write code, run tests. The session records everything automatically.
+You'll be asked for your name and email first. If the relay has GitHub OAuth configured, a browser tab opens for GitHub login — one account, one submission — and GitHub identity takes priority. The problem appears once that completes. A public GitHub repo (`interview-{code}`) is created automatically and a git remote named `interview` is wired up in your working directory. Work normally — ask the AI questions, write code, run tests. The session records everything automatically.
 
 When done:
 

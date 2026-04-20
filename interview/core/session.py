@@ -365,7 +365,7 @@ def _authenticate_github(relay_url: str, code: str) -> dict | None:
     return None
 
 
-def start_session(code: str, candidate_email: str | None = None) -> dict:
+def start_session(code: str, candidate_email: str | None = None, candidate_name: str | None = None) -> dict:
     """
     Start a new interview session for the given code.
     Returns the interview payload (problem statement etc.).
@@ -418,8 +418,16 @@ def start_session(code: str, candidate_email: str | None = None) -> dict:
             else:
                 print(f" ⚠  (repo creation failed — session continues)")
 
-    # Resolve candidate email
-    resolved_candidate_email = candidate_email or interview.get("candidate_email")
+    # Resolve candidate identity — GitHub takes priority, fall back to args
+    resolved_candidate_email = (
+        (github_auth.get("github_email") if github_auth else None)
+        or candidate_email
+        or interview.get("candidate_email")
+    )
+    resolved_candidate_name = (
+        (github_auth.get("github_name") if github_auth else None)
+        or candidate_name
+    )
 
     git_snapshot = _get_git_snapshot()
     started_at = time.time()
@@ -428,7 +436,7 @@ def start_session(code: str, candidate_email: str | None = None) -> dict:
         "code":               code,
         "started_at":         started_at,
         "candidate_email":    resolved_candidate_email,
-        "candidate_name":     github_auth.get("github_name")     if github_auth else None,
+        "candidate_name":     resolved_candidate_name,
         "hm_email":           interview["hm_email"],
         "cc_emails":          interview.get("cc_emails", []),
         "audit_email":        interview.get("audit_email"),
@@ -595,12 +603,13 @@ def main():
     parser.add_argument("command", choices=["start", "seal", "log", "status"])
     parser.add_argument("--code", default=None)
     parser.add_argument("--candidate-email", default=None)
+    parser.add_argument("--candidate-name", default=None)
     parser.add_argument("--event-type", default=None)
     parser.add_argument("--payload", default="{}")
     args = parser.parse_args()
 
     if args.command == "start":
-        result = start_session(args.code, args.candidate_email)
+        result = start_session(args.code, args.candidate_email, args.candidate_name)
         if result:
             interview = result["interview"]
             meta = result["session_meta"]
