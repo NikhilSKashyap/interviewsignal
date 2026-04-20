@@ -125,6 +125,9 @@ When the user types `/interview` or `/submit`, invoke the Skill tool with `skill
     }]
 
     # 4. Add permissions so interview commands run without yes/no prompts
+    # Use absolute paths computed at install time (like sys.executable) so they
+    # work regardless of how Claude Code resolves ~ vs full paths.
+    interview_home = str(Path.home() / ".interview")
     permissions = settings.setdefault("permissions", {})
     allow = permissions.setdefault("allow", [])
     interview_permissions = [
@@ -146,8 +149,8 @@ When the user types `/interview` or `/submit`, invoke the Skill tool with `skill
         "Bash(git commit *)",
         "Bash(git push *)",
         "Bash(git remote *)",
-        "Bash(cat ~/.interview/*)",
-        "Write(~/.interview/*)",
+        f"Read({interview_home}/*)",
+        f"Write({interview_home}/*)",
     ]
     for p in interview_permissions:
         if p not in allow:
