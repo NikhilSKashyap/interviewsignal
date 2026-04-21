@@ -312,6 +312,14 @@ class RelayTransport(Transport):
             print(f"✓ Session submitted to relay: {self.relay_url}")
             return True
         except TransportError as e:
+            err = str(e)
+            if "github_auth_required" in err or "invalid_session_token" in err:
+                # Relay requires GitHub authentication — email fallback would bypass
+                # identity verification, so we hard-stop here instead.
+                print(f"✗ Relay submission blocked: GitHub authentication required.")
+                print(f"  Your session was started without GitHub auth.")
+                print(f"  Start a new session with /interview <CODE> to authenticate properly.")
+                return False
             print(f"⚠ Relay submission failed: {e}")
             print(f"  Falling back to email...")
             return EmailTransport().send(code)

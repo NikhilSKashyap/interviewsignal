@@ -52,9 +52,21 @@ Then re-send to include the debrief:
 python -m interview.core.transport send --code <CODE>
 ```
 
-## Step 5 — Show result
+## Step 5 — Fetch score (if auto-graded)
 
-Display the debrief then the submission confirmation:
+Auto-grading runs synchronously on the relay — by the time submission succeeds, the score may already be available. Try:
+
+```bash
+interview score <CODE>
+```
+
+- If it returns a score: include it in the final display (Step 6).
+- If it says "not graded yet" or "sharing not enabled": skip silently — just show the debrief.
+- If it errors (no relay, etc.): skip silently.
+
+## Step 6 — Show result
+
+Display the debrief then the submission confirmation. If a score was returned in Step 5, include it:
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -64,7 +76,8 @@ Display the debrief then the submission confirmation:
 <debrief text>
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ✓ Submitted — <CODE>  |  <elapsed>min
-
-  To check your score once graded: interview score <CODE>
+  Score: 7.8 / 10            ← only if score was returned in Step 5
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
+
+If the score was not available, omit the Score line entirely — do not show "not graded yet" in the final block.
