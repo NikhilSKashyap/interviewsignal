@@ -644,13 +644,19 @@ class RelayHandler(BaseHTTPRequestHandler):
         # --- Auto-grading (best-effort, non-fatal) ---
         auto_graded = False
         grading_api_key = os.environ.get("GRADING_API_KEY", "").strip()
-        if grading_api_key:
+        if not grading_api_key:
+            print(f"[auto-grade] {code}/{cid}: GRADING_API_KEY not set — skipping", flush=True)
+        else:
             try:
                 auto_grade_flag = _store.get_auto_grade(hm_key, code)
-                if auto_grade_flag:
+                if not auto_grade_flag:
+                    print(f"[auto-grade] {code}/{cid}: auto_grade=false for this interview — skipping", flush=True)
+                else:
                     rubric = _store.get_rubric(hm_key, code)
-                    if rubric:
-                        # Load the just-saved session data (events + manifest from relay store)
+                    if not rubric:
+                        print(f"[auto-grade] {code}/{cid}: no rubric found — skipping", flush=True)
+                    else:
+                        print(f"[auto-grade] {code}/{cid}: starting grading...", flush=True)
                         session_data = _store.get_session(hm_key, code, cid)
                         events = session_data.get("events", [])
                         manifest = session_data.get("manifest", {})
@@ -666,8 +672,11 @@ class RelayHandler(BaseHTTPRequestHandler):
                         if grade:
                             _store.save_grade(hm_key, code, cid, grade, graded_by="auto")
                             auto_graded = True
+                            print(f"[auto-grade] {code}/{cid}: graded OK — score={grade.get('overall_score')}", flush=True)
+                        else:
+                            print(f"[auto-grade] {code}/{cid}: grader returned empty result", flush=True)
             except Exception as e:
-                print(f"[auto-grade] {code}/{cid}: {e}", flush=True)
+                print(f"[auto-grade] {code}/{cid}: FAILED — {e}", flush=True)
         # --- end auto-grading ---
 
         import time
