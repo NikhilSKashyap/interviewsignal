@@ -298,8 +298,13 @@ def _authenticate_github(relay_url: str, code: str) -> dict | None:
 
     Returns one of:
       {"github_id": ..., "github_username": ..., "avatar_url": ..., "session_token": ...}
-      {"duplicate": True}   — already submitted, caller should abort
-      None                  — OAuth not configured or timed out, proceed with email-only
+                        — success; caller proceeds with GitHub identity
+      {"duplicate": True}
+                        — already submitted; caller should abort
+      {"blocked": True, "reason": str}
+                        — OAuth is configured on the relay but could not complete;
+                          caller must abort (do not fall back to email-only)
+      None              — OAuth not configured on this relay; caller continues with email-only
     """
     start_url = f"{relay_url.rstrip('/')}/auth/github/start?code={code}"
     try:
@@ -308,18 +313,20 @@ def _authenticate_github(relay_url: str, code: str) -> dict | None:
             data = json.loads(resp.read())
     except urllib.error.HTTPError as e:
         if e.code == 501:
-            # Relay has no GitHub app configured — skip OAuth silently
+            # Relay explicitly says GitHub OAuth is not configured — skip silently
             return None
-        print(f"  ⚠  Could not reach relay for GitHub auth (HTTP {e.code}). Continuing without it.")
-        return None
+        # Any other HTTP error: relay is reachable but auth failed. Block.
+        return {"blocked": True, "reason": f"Relay returned HTTP {e.code}. Please try again."}
     except Exception as e:
-        print(f"  ⚠  Could not reach relay for GitHub auth: {e}. Continuing without it.")
-        return None
+        # Timeout / connection error: relay is in the package so it's expected to be up.
+        # We cannot verify identity — block rather than silently fall through.
+        return {"blocked": True, "reason": f"Could not reach relay: {e}. Please try again."}
 
-    if not data.get("github_configured", True) is False and not data.get("url"):
-        return None
+    # Relay responded. Check whether GitHub OAuth is configured.
     if data.get("github_configured") is False:
-        return None
+        return None  # Relay has no GitHub app — continue with email-only
+    if not data.get("url"):
+        return None  # No auth URL returned — treat as not configured
 
     auth_url = data.get("url", "")
     state    = data.get("state", "")
@@ -358,11 +365,11 @@ def _authenticate_github(relay_url: str, code: str) -> dict | None:
             print(f"    Each GitHub account can only submit once per interview.\n")
             return {"duplicate": True}
         if status in ("error", "expired"):
-            print(f"\n  ✗ GitHub authentication failed ({status}). Please try again.\n")
-            return None
+            print(f"\n  ✗ GitHub authentication failed ({status}).\n")
+            return {"blocked": True, "reason": f"Authentication {status}. Run /interview {code} to try again."}
 
-    print(f"\n  ✗ Authentication timed out after 5 minutes. Run /interview {code} to try again.\n")
-    return None
+    print(f"\n  ✗ Authentication timed out after 5 minutes.\n")
+    return {"blocked": True, "reason": f"Authentication timed out. Run /interview {code} to try again."}
 
 
 def start_session(code: str, candidate_email: str | None = None, candidate_name: str | None = None) -> dict:
@@ -398,12 +405,17 @@ def start_session(code: str, candidate_email: str | None = None, candidate_name:
     _ensure_git_init(code)
 
     # GitHub OAuth — one GitHub account = one submission per interview code.
-    # Falls back gracefully if the relay has no GitHub app configured.
+    # Falls back to email-only only when relay confirms OAuth is not configured.
+    # If OAuth is configured but fails (network error, timeout), the session is blocked.
     github_auth: dict | None = None
     if relay_url:
         github_auth = _authenticate_github(relay_url, code)
         if github_auth and github_auth.get("duplicate"):
             return {}  # Already submitted — abort cleanly
+        if github_auth and github_auth.get("blocked"):
+            print(f"\n✗ Session not started: GitHub authentication required but did not complete.")
+            print(f"  {github_auth.get('reason', '')}\n")
+            return {}  # OAuth configured but failed — do not fall through to email-only
 
     # Create a GitHub repo and wire up the remote if OAuth succeeded
     github_repo_url: str | None = None
