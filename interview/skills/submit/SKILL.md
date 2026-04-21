@@ -54,17 +54,17 @@ python -m interview.core.transport send --code <CODE>
 
 ## Step 5 — Fetch score (if auto-graded)
 
-The relay response from Step 3's transport send includes `auto_graded: true/false`.
+The transport send output (from Step 3 or Step 4's re-send) includes a line:
+- `auto_graded: true` — grading completed on the relay synchronously
+- `auto_graded: false` — grading was skipped (not enabled, no API key, etc.)
 
-**If `auto_graded` is true**: grading already completed on the relay. Run:
+**If output contains `auto_graded: true`**: run:
 ```bash
 interview score <CODE>
 ```
-Include the score in Step 6 if it returns one. If score sharing is "none", the command will say so — skip silently.
+Include the score in Step 6 if it returns one. If score sharing is "none", skip silently.
 
-**If `auto_graded` is false** (or transport send failed / fell back to email): do not run `interview score`. Instead note in Step 6 that grading is pending.
-
-The transport send command prints the raw relay response — check for `"auto_graded": true` in that output.
+**If output contains `auto_graded: false`** or no `auto_graded` line (old relay): show "Grading pending" in Step 6.
 
 ## Step 6 — Show result
 

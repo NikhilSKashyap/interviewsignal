@@ -310,7 +310,11 @@ class RelayTransport(Transport):
         try:
             result = self._request("POST", "/sessions", body=body, timeout=60)
             print(f"✓ Session submitted to relay: {self.relay_url}")
-            # Return relay response dict so callers can inspect auto_graded flag
+            if isinstance(result, dict):
+                if result.get("auto_graded"):
+                    print(f"auto_graded: true")
+                else:
+                    print(f"auto_graded: false")
             return result if isinstance(result, dict) else True
         except TransportError as e:
             err = str(e)
