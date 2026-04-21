@@ -609,9 +609,8 @@ class RelayHandler(BaseHTTPRequestHandler):
             # No GitHub configured — use email-based cid (existing behaviour)
             cid = make_cid(candidate_email)
 
-        if _store.session_exists(hm_key, code, cid):
-            return self._error(409, "already_submitted",
-                               f"A session for this candidate already exists for {code}.")
+        # Re-submission from the same session (e.g. debrief update) is allowed — just overwrite.
+        # Duplicate-account enforcement happens at OAuth/session-start time, not here.
 
         file_map = {
             "manifest.json": "manifest_json",
