@@ -5,23 +5,25 @@
 [![GitHub](https://img.shields.io/badge/github-NikhilSKashyap%2Finterviewsignal-blue)](https://github.com/NikhilSKashyap/interviewsignal)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**An AI-native interview platform.** Captures the full thought process — prompts, reasoning, tool calls, diffs — and sends a structured, tamper-evident audit to the hiring manager.
+**Broad-interview, not broadcast-reject.** One code. Any number of candidates. Every one of them gets a fair shot — real problem, real tools, real feedback. `pip install` and you're running. Zero setup cost. Completely secure.
 
 No contrived puzzles. No whiteboard anxiety. Just signal.
 
 ---
 
-## Screen 100 candidates in 15 minutes
+## What is broad-interviewing?
 
-You're a startup CTO. You posted a role and got 200 applications. You can't interview all of them live.
-
-Share one interview code with all candidates. They complete it on their own time, using their own AI tools, on a real problem. Submissions arrive in your dashboard, automatically graded and ranked. You spend 15 minutes triaging: advance the top 10, reject the rest — done.
+The same way broadcasting reaches many listeners with one signal, broad-interviewing reaches many candidates with one interview. Share a code, and every candidate works the problem on their own time, with their own AI tools, on a real problem. You get back structured, graded, ranked results. They get back honest feedback. Both sides win.
 
 ```
 Create interview  →  Share code  →  Candidates work  →  Auto-grade  →  Triage  →  Hire
 ```
 
-The dashboard shows every submission sorted by score, flagged for anomalies (too fast, no iteration, uniform timing), with batch reject and advance actions. One code. Any number of candidates. The signal scales.
+**For the startup:** you posted a role and got 200 applications. You can't interview all of them live. With interviewsignal, you share one code, submissions arrive auto-graded and ranked, you spend 15 minutes triaging — advance the top 10, reject the rest, done.
+
+**For the candidate:** no scheduling, no whiteboard, no trick questions. You work the way you actually work — with AI assistance, on your own time. You get a session debrief from Claude immediately and your score once the HM grades. Every candidate gets the same shot regardless of timezone, schedule, or interview anxiety.
+
+**For everyone:** `pip install interviewsignal && interview install`. That's the entire setup. No platform to sign up for. No vendor contract. No procurement cycle. No setup cost.
 
 ---
 
@@ -58,7 +60,7 @@ You'll be asked for:
 - Score sharing (default: none — what candidates see after grading: none / overall / breakdown / breakdown_notes)
 - Auto-grade submissions? (default: no — requires `GRADING_API_KEY` on relay)
 
-You get back a code like `INT-4829-XK`. Share it with 5 candidates or 500 — they all get the same problem, submissions arrive in your dashboard, auto-graded and ranked.
+You get back a code like `INT-4829-XK`. That's your broad-interview — share it with 5 candidates or 500. They all get the same problem, they all get a fair shot, submissions arrive in your dashboard auto-graded and ranked.
 
 ### Candidate
 
@@ -343,5 +345,5 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for module responsibilities and [docs/rel
 ---
 
 <p align="center">
-  <em>Thought process, not puzzles. Pure signal.</em>
+  <em>Broad-interview, not broadcast-reject. Pure signal.</em>
 </p>
