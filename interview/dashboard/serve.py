@@ -859,6 +859,266 @@ def _build_flags_panel_html(flags: list[dict]) -> str:
     )
 
 
+# ─── Transcript renderer ─────────────────────────────────────────────────────
+
+import re as _re
+
+
+def _md_to_html(text: str) -> str:
+    """Convert markdown subset → safe HTML. Escapes first, then substitutes."""
+    fence_re = _re.compile(r"```[^\n]*\n(.*?)```", _re.DOTALL)
+    parts = fence_re.split(text)
+    result = []
+    for i, part in enumerate(parts):
+        if i % 2 == 1:
+            result.append("<pre><code>" + escape(part) + "</code></pre>")
+        else:
+            s = escape(part)
+            s = _re.sub(r"`([^`]+)`", lambda m: "<code>" + m.group(1) + "</code>", s)
+            s = _re.sub(r"\*\*([^*]+)\*\*", lambda m: "<strong>" + m.group(1) + "</strong>", s)
+            s = s.replace("\n", "<br>")
+            result.append(s)
+    return "".join(result)
+
+
+def _is_session_banner(text: str) -> bool:
+    """True if this assistant message is just re-displaying the session banner."""
+    return "━━━" in text and "INTERVIEW SESSION" in text
+
+
+def _tool_call_label(tool_name: str, tool_input: dict) -> str:
+    """Return 'ToolName(args)' summary string for a tool call."""
+    tn = escape(tool_name)
+    if tool_name == "Bash":
+        cmd = tool_input.get("command", "")
+        desc = tool_input.get("description", "")
+        display = desc if desc else cmd
+        if len(display) > 80:
+            display = display[:77] + "..."
+        return f"{tn}({escape(display)})"
+    if tool_name in ("Read", "Edit", "Write"):
+        fp = tool_input.get("file_path", "")
+        return f"{tn}({escape(fp.split('/')[-1] or fp)})"
+    if tool_name == "Grep":
+        return f"{tn}({escape(tool_input.get('pattern', ''))})"
+    if tool_name == "Glob":
+        return f"{tn}({escape(tool_input.get('pattern', ''))})"
+    first = next(iter(tool_input.values()), "") if tool_input else ""
+    return f"{tn}({escape(str(first)[:60])})"
+
+
+def _bash_output(response_summary: dict) -> str:
+    """Extract clean stdout+stderr from a Bash tool result."""
+    stdout = response_summary.get("stdout", "")
+    stderr = response_summary.get("stderr", "")
+    stdout = _re.sub(
+        r"\[hash:[0-9a-f]+, (\d+) chars\]",
+        lambda m: f"[output — {m.group(1)} chars, not captured]",
+        stdout,
+    )
+    lines = [l for l in stdout.splitlines() if not l.startswith("[interview: ")]
+    stdout = "\n".join(lines).strip()
+    parts = []
+    if stdout:
+        parts.append(stdout)
+    if stderr and stderr.strip():
+        parts.append("stderr: " + stderr.strip())
+    return "\n".join(parts) if parts else "(No output)"
+
+
+def _diff_html(file_path: str, structured_patch: list, prefix: str = "⎿") -> str:
+    """Render a structuredPatch list as a GitHub-style inline diff."""
+    filename = file_path.rsplit("/", 1)[-1] if "/" in file_path else file_path
+    rows = []
+    for hunk in structured_patch:
+        old_s = hunk.get("oldStart", 0)
+        old_l = hunk.get("oldLines", 0)
+        new_s = hunk.get("newStart", 0)
+        new_l = hunk.get("newLines", 0)
+        rows.append(
+            f'<div class="diff-hunk">@@ -{old_s},{old_l} +{new_s},{new_l} @@</div>'
+        )
+        for line in hunk.get("lines", []):
+            if line.startswith("+"):
+                rows.append(f'<div class="diff-add">+{escape(line[1:])}</div>')
+            elif line.startswith("-"):
+                rows.append(f'<div class="diff-del">-{escape(line[1:])}</div>')
+            else:
+                ctx = line[1:] if line.startswith(" ") else line
+                rows.append(f'<div class="diff-ctx"> {escape(ctx)}</div>')
+    return (
+        f'<div class="diff-block">'
+        f'<div class="diff-file">{escape(prefix)} {escape(filename)}</div>'
+        + "".join(rows)
+        + "</div>"
+    )
+
+
+def _render_tool_result(tool_name: str, response_summary: dict) -> str:
+    """Return HTML for a tool result (⎿ block)."""
+    if tool_name == "Bash":
+        output = _bash_output(response_summary)
+        return f'<div class="t-tool-result"><span class="t-arrow">⎿</span><span class="t-output">{escape(output)}</span></div>'
+    if tool_name == "Read":
+        fi = response_summary.get("file", {})
+        content = fi.get("content", response_summary.get("text", "(No content)"))
+        truncated = len(content) > 2000
+        shown = escape(content[:2000]) + (" …" if truncated else "")
+        return (
+            f'<div class="t-tool-result"><span class="t-arrow">⎿</span>'
+            f'<pre style="margin:4px 0;display:inline-block;vertical-align:top">'
+            f'<code>{shown}</code></pre></div>'
+        )
+    if tool_name in ("Write", "Edit"):
+        patch = response_summary.get("structuredPatch", [])
+        fp = response_summary.get("filePath", "")
+        if patch:
+            return f'<div class="t-tool-result">{_diff_html(fp, patch)}</div>'
+        # New file creation (no patch)
+        content = response_summary.get("content", "")
+        filename = fp.rsplit("/", 1)[-1] if "/" in fp else fp
+        shown = escape(content[:2000]) + (" …" if len(content) > 2000 else "")
+        return (
+            f'<div class="t-tool-result">'
+            f'<div class="diff-block">'
+            f'<div class="diff-file">⎿ {escape(filename)} (new file)</div>'
+            f'<pre style="margin:0;padding:8px"><code>{shown}</code></pre>'
+            f'</div></div>'
+        )
+    # Generic
+    return f'<div class="t-tool-result"><span class="t-arrow">⎿</span>{escape(str(response_summary)[:300])}</div>'
+
+
+def _render_event_group(events: list) -> list:
+    """Render a flat list of events (tool_call, tool_result, thinking) to HTML strings."""
+    parts = []
+    for ev in events:
+        etype = ev.get("type", "")
+        payload = ev.get("payload", {})
+        if etype == "thinking":
+            plan = escape(payload.get("plan", ""))
+            elapsed = payload.get("_elapsed_minutes", 0)
+            secs = round(elapsed * 60) if elapsed else 0
+            parts.append(
+                f'<details class="t-thinking">'
+                f'<summary>✻ Cogitated {secs}s</summary>'
+                f'<div style="padding:6px 0 0 12px;white-space:pre-wrap">{plan}</div>'
+                f'</details>'
+            )
+        elif etype == "tool_call":
+            label = _tool_call_label(payload.get("tool_name", ""), payload.get("tool_input", {}))
+            parts.append(f'<div class="t-tool-call">⏺ {label}</div>')
+        elif etype == "tool_result":
+            parts.append(_render_tool_result(payload.get("tool_name", ""), payload.get("response_summary", {})))
+    return parts
+
+
+def _render_transcript_html(events: list, problem: str = "") -> str:
+    """Render events.jsonl list as a structured conversation transcript."""
+    import datetime
+
+    parts = ['<div class="transcript">']
+
+    # ── Problem statement at top ──────────────────────────────────────────────
+    if problem:
+        parts.append(
+            f'<div class="t-problem">'
+            f'<div class="t-problem-label">Problem</div>'
+            f'<div class="t-problem-text">{escape(problem)}</div>'
+            f'</div>'
+        )
+
+    # ── Partition events into preamble + conversation ─────────────────────────
+    first_user_idx = next(
+        (i for i, e in enumerate(events) if e.get("type") == "user_prompt"), None
+    )
+    preamble   = events[:first_user_idx] if first_user_idx is not None else events
+    conv_events = events[first_user_idx:] if first_user_idx is not None else []
+
+    # ── Preamble (setup) section ──────────────────────────────────────────────
+    setup_items = [e for e in preamble if e.get("type") not in ("session_start",)]
+    if setup_items:
+        # Summary line: "Read, Write, Bash" etc.
+        tool_names = []
+        for e in setup_items:
+            if e.get("type") == "tool_call":
+                tn = e.get("payload", {}).get("tool_name", "")
+                inp = e.get("payload", {}).get("tool_input", {})
+                label = _tool_call_label(tn, inp)
+                tool_names.append(label)
+        summary = ", ".join(tool_names) if tool_names else f"{len(setup_items)} events"
+        inner = "\n".join(_render_event_group(setup_items))
+        parts.append(
+            f'<details class="t-setup">'
+            f'<summary>Session setup — {escape(summary)}</summary>'
+            f'<div class="t-setup-body">{inner}</div>'
+            f'</details>'
+        )
+
+    # ── Conversation turns ────────────────────────────────────────────────────
+    # Group: user_prompt → [interleaved tool_call/result/thinking] → assistant_message
+    turns: list = []  # list of (user_event, tool_events, assistant_event_or_None)
+    session_end_event = None
+    current_user = None
+    current_tools: list = []
+    for ev in conv_events:
+        t = ev.get("type", "")
+        if t == "user_prompt":
+            if current_user is not None:
+                turns.append((current_user, current_tools, None))
+            current_user = ev
+            current_tools = []
+        elif t == "assistant_message":
+            turns.append((current_user, list(current_tools), ev))
+            current_user = None
+            current_tools = []
+        elif t == "session_end":
+            if current_user is not None:
+                turns.append((current_user, current_tools, None))
+                current_user = None
+                current_tools = []
+            session_end_event = ev
+        elif t in ("tool_call", "tool_result", "thinking"):
+            current_tools.append(ev)
+    # Flush any unclosed turn
+    if current_user is not None:
+        turns.append((current_user, current_tools, None))
+
+    for user_ev, tool_evs, asst_ev in turns:
+        if user_ev is None:
+            continue
+        # User prompt
+        user_text = escape(user_ev.get("payload", {}).get("text", ""))
+        parts.append(f'<div class="t-user">❯ {user_text}</div>')
+
+        # Tool calls/results between user and assistant
+        parts.extend(_render_event_group(tool_evs))
+
+        # Assistant response — skip if it's just the session banner re-display
+        if asst_ev is not None:
+            text = asst_ev.get("payload", {}).get("text", "")
+            if not _is_session_banner(text):
+                parts.append(f'<div class="t-assistant"><span class="t-dot">⏺</span>{_md_to_html(text)}</div>')
+
+    # ── Session end ───────────────────────────────────────────────────────────
+    if session_end_event:
+        payload = session_end_event.get("payload", {})
+        elapsed = payload.get("elapsed_minutes", 0)
+        diff_summary = escape(payload.get("git_diff_summary", ""))
+        parts.append(
+            f'<div class="t-end">'
+            f'Submitted · {elapsed:.1f} min'
+            + (f' · {diff_summary}' if diff_summary else '')
+            + '</div>'
+        )
+
+    if len(parts) <= (2 if problem else 1):
+        parts.append('<div style="color:#555;font-size:13px">No session events recorded.</div>')
+
+    parts.append('</div>')
+    return "\n".join(parts)
+
+
 def _build_candidate_detail_html(code: str, cid: str = "") -> str:
     """Full candidate detail page: report + comments + decision buttons."""
     from interview.core.decisions import get_comments, get_decision, is_graded
@@ -888,16 +1148,35 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
         # Load or compute flags for local sessions
         session_flags = _load_local_flags(code)
 
-    # Embed the report via iframe
+    # Build report link (for "View generated report" fallback)
     report_iframe_src = (
         f"/report-raw?code={quote(code, safe='')}&cid={quote(cid, safe='')}"
         if cid else
         f"/report-raw?code={quote(code, safe='')}"
     )
-    report_iframe = (
-        f'<iframe src="{report_iframe_src}"'
-        f' style="width:100%;height:600px;border:none;border-radius:8px;background:#111"></iframe>'
-    )
+
+    # Load events + problem for transcript view
+    if relay_session:
+        _events = relay_session.get("events", [])
+        _manifest = relay_session.get("manifest", {}) or {}
+        _problem = _manifest.get("problem", "")
+    else:
+        _events_file = SESSIONS_DIR / code / "events.jsonl"
+        _events = []
+        if _events_file.exists():
+            for _line in _events_file.read_text().splitlines():
+                try:
+                    _events.append(json.loads(_line))
+                except Exception:
+                    pass
+        _mf_path = SESSIONS_DIR / code / "manifest.json"
+        _problem = ""
+        if _mf_path.exists():
+            try:
+                _problem = json.loads(_mf_path.read_text()).get("problem", "")
+            except Exception:
+                pass
+    transcript_html = _render_transcript_html(_events, problem=_problem)
 
     # Comments section
     comments_html = ""
@@ -1182,6 +1461,46 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
   .back-link {{ color: #60a5fa; text-decoration: none; font-size: 13px; margin-bottom: 24px; display: block; }}
   .reason-input {{ width: 100%; margin-top: 8px; background: #0a0a0a; border: 1px solid #333;
                    color: #e0e0e0; border-radius: 6px; padding: 8px; font-size: 13px; }}
+  .transcript {{ font-family: 'Menlo','Consolas','Monaco',monospace; font-size: 13px;
+                 line-height: 1.7; background: #0a0a0a; color: #d4d4d4; padding: 20px;
+                 border-radius: 6px; overflow-x: auto; max-height: 75vh; overflow-y: auto; }}
+  .t-problem {{ background: #0a1a0a; border: 1px solid #16a34a; border-radius: 6px;
+                padding: 14px 16px; margin-bottom: 6px; font-family: inherit; }}
+  .t-problem-label {{ font-size: 10px; color: #4ade80; text-transform: uppercase;
+                      letter-spacing: 1px; margin-bottom: 6px; }}
+  .t-problem-text {{ color: #e0e0e0; font-size: 14px; white-space: pre-wrap; }}
+  .t-setup {{ color: #444; font-size: 12px; margin: 8px 0; border-left: 2px solid #222;
+              padding-left: 10px; }}
+  .t-setup summary {{ cursor: pointer; list-style: none; }}
+  .t-setup summary::-webkit-details-marker {{ display: none; }}
+  .t-setup-body {{ padding-top: 6px; }}
+  .t-user {{ color: #f97316; white-space: pre-wrap; margin: 14px 0 6px 0;
+             font-weight: 600; }}
+  .t-assistant {{ color: #e0e0e0; margin: 6px 0 14px 0; padding-left: 18px;
+                  border-left: 2px solid #2a2a5a; }}
+  .t-dot {{ color: #60a5fa; margin-right: 6px; }}
+  .t-tool-call {{ color: #a78bfa; margin: 8px 0 2px 0; }}
+  .t-tool-result {{ color: #6b7280; margin: 0 0 8px 0; padding-left: 16px; }}
+  .t-arrow {{ margin-right: 4px; }}
+  .t-output {{ white-space: pre-wrap; }}
+  .t-thinking {{ color: #444; margin: 4px 0; font-size: 12px; }}
+  .t-thinking summary {{ list-style: none; cursor: pointer; }}
+  .t-thinking summary::-webkit-details-marker {{ display: none; }}
+  .t-end {{ color: #555; border-top: 1px solid #1a1a1a; margin-top: 16px;
+             padding-top: 12px; font-size: 12px; }}
+  .transcript code {{ background: #1a1a1a; padding: 1px 4px; border-radius: 3px; font-size: 12px; }}
+  .transcript pre {{ background: #111; border: 1px solid #1e1e1e; border-radius: 4px;
+                     padding: 10px; overflow-x: auto; margin: 4px 0; white-space: pre; }}
+  .transcript pre code {{ background: none; padding: 0; }}
+  .diff-block {{ border: 1px solid #222; border-radius: 4px; overflow: hidden;
+                 font-family: 'Menlo','Consolas','Monaco',monospace; font-size: 12px;
+                 margin: 4px 0; display: block; }}
+  .diff-file {{ background: #111; color: #888; padding: 4px 10px;
+                border-bottom: 1px solid #222; font-size: 11px; }}
+  .diff-hunk {{ background: #0c1a2e; color: #4a6fa5; padding: 2px 10px; font-size: 11px; }}
+  .diff-add {{ background: #0a1f0a; color: #4ade80; padding: 1px 10px; white-space: pre; }}
+  .diff-del {{ background: #1f0a0a; color: #f87171; padding: 1px 10px; white-space: pre; }}
+  .diff-ctx {{ background: #0a0a0a; color: #555; padding: 1px 10px; white-space: pre; }}
 </style>
 </head>
 <body>
@@ -1195,10 +1514,17 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
 
 <div class="layout">
   <div>
+    {identity_panel}
     {flags_panel_html}
     <div class="panel">
-      <div class="section-title">Session Report</div>
-      {report_iframe}
+      <div class="section-title" style="display:flex;align-items:center;justify-content:space-between">
+        Transcript
+        <a href="{report_iframe_src}" target="_blank"
+           style="font-size:11px;color:#555;text-decoration:none;font-weight:400">
+          View generated report →
+        </a>
+      </div>
+      {transcript_html}
     </div>
   </div>
 
@@ -1223,9 +1549,6 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
         <button class="btn btn-sm btn-reject" id="btn-reject" data-code="{safe_code}" {cid_attr} {'disabled' if not graded else ''}>✗ Reject</button>
       </div>
     </div>
-
-    <!-- Identity / Reveal -->
-    {identity_panel}
 
     <!-- Audit trail -->
     <div class="panel">

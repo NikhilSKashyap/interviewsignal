@@ -24,7 +24,7 @@ Extract `code` from the output. Use it for all subsequent commands.
 python -m interview.core.session seal
 ```
 
-Reads from the active session file — no `--code` needed. On success prints a JSON manifest. Extract `elapsed_minutes` and `code`.
+Reads from the active session file — no `--code` needed. On success prints a JSON manifest. Extract `elapsed_minutes`, `code`, and `github_repo_url` (may be null if OAuth wasn't used).
 
 ## Step 3 — Generate and send report
 
@@ -78,13 +78,14 @@ Display the debrief then the submission block. If `auto_graded: true` and a scor
 <debrief text>
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ✓ Submitted — <CODE>  |  <elapsed>min
+  Code shared with hiring manager:
+    https://github.com/...    ← github_repo_url from manifest (omit if null)
 
 <full verbatim output of `interview score <CODE>` here>
     ← omit entirely if auto_graded=false or score not shared
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-If `auto_graded: false` (or score not available), replace the score block with:
-```
-  Grading pending — run 'interview score <CODE>' once the HM has graded.
-```
+- Show the "Code shared" line only if `github_repo_url` is present in the manifest.
+- If `auto_graded: false` (or score not available), replace the score block with:
+  `Grading pending — run 'interview score <CODE>' once the HM has graded.`
