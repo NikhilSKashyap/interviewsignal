@@ -355,7 +355,7 @@ class RelayHandler(BaseHTTPRequestHandler):
         qs = urlencode({
             "client_id":    _github_client_id,
             "redirect_uri": redirect_uri,
-            "scope":        "read:user",
+            "scope":        "public_repo,read:user",  # public_repo: create repo + push; read:user: identity
             "state":        state,
         })
         self._json({"url": f"https://github.com/login/oauth/authorize?{qs}", "state": state})
