@@ -641,6 +641,7 @@ class RelayHandler(BaseHTTPRequestHandler):
                             candidate_name=candidate_name)
 
         # --- Auto-grading (best-effort, non-fatal) ---
+        auto_graded = False
         grading_api_key = os.environ.get("GRADING_API_KEY", "").strip()
         if grading_api_key:
             try:
@@ -663,6 +664,7 @@ class RelayHandler(BaseHTTPRequestHandler):
                         )
                         if grade:
                             _store.save_grade(hm_key, code, cid, grade, graded_by="auto")
+                            auto_graded = True
             except Exception as e:
                 print(f"[auto-grade] {code}/{cid}: {e}", flush=True)
         # --- end auto-grading ---
@@ -672,6 +674,7 @@ class RelayHandler(BaseHTTPRequestHandler):
             "code":         code,
             "cid":          cid,
             "submitted_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "auto_graded":  auto_graded,
         }, status=201)
 
     def _post_grade(self, hm_key: str, code: str, cid: str):

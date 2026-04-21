@@ -54,19 +54,21 @@ python -m interview.core.transport send --code <CODE>
 
 ## Step 5 — Fetch score (if auto-graded)
 
-Auto-grading runs synchronously on the relay — by the time submission succeeds, the score may already be available. Try:
+The relay response from Step 3's transport send includes `auto_graded: true/false`.
 
+**If `auto_graded` is true**: grading already completed on the relay. Run:
 ```bash
 interview score <CODE>
 ```
+Include the score in Step 6 if it returns one. If score sharing is "none", the command will say so — skip silently.
 
-- If it returns a score: include it in the final display (Step 6).
-- If it says "not graded yet" or "sharing not enabled": skip silently — just show the debrief.
-- If it errors (no relay, etc.): skip silently.
+**If `auto_graded` is false** (or transport send failed / fell back to email): do not run `interview score`. Instead note in Step 6 that grading is pending.
+
+The transport send command prints the raw relay response — check for `"auto_graded": true` in that output.
 
 ## Step 6 — Show result
 
-Display the debrief then the submission confirmation. If a score was returned in Step 5, include it:
+Display the debrief then the submission confirmation:
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -76,8 +78,9 @@ Display the debrief then the submission confirmation. If a score was returned in
 <debrief text>
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ✓ Submitted — <CODE>  |  <elapsed>min
-  Score: 7.8 / 10            ← only if score was returned in Step 5
+  Score: 7.8 / 10            ← only if auto_graded=true and score available
+  Grading pending            ← only if auto_graded=false
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-If the score was not available, omit the Score line entirely — do not show "not graded yet" in the final block.
+Show exactly one of "Score: X/10" or "Grading pending" — never both, never neither when relay was used.

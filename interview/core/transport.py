@@ -308,9 +308,10 @@ class RelayTransport(Transport):
             return False
 
         try:
-            self._request("POST", "/sessions", body=body, timeout=60)
+            result = self._request("POST", "/sessions", body=body, timeout=60)
             print(f"✓ Session submitted to relay: {self.relay_url}")
-            return True
+            # Return relay response dict so callers can inspect auto_graded flag
+            return result if isinstance(result, dict) else True
         except TransportError as e:
             err = str(e)
             if "github_auth_required" in err or "invalid_session_token" in err:
@@ -319,6 +320,12 @@ class RelayTransport(Transport):
                 print(f"✗ Relay submission blocked: GitHub authentication required.")
                 print(f"  Your session was started without GitHub auth.")
                 print(f"  Start a new session with /interview <CODE> to authenticate properly.")
+                return False
+            if "already_submitted" in err:
+                # This GitHub account already has a submission on the relay.
+                # Email fallback would create a duplicate under a different identity — block it.
+                print(f"✗ Already submitted: your GitHub account has already submitted for this interview.")
+                print(f"  Only one submission per interview is allowed.")
                 return False
             print(f"⚠ Relay submission failed: {e}")
             print(f"  Falling back to email...")
