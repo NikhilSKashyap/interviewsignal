@@ -595,9 +595,10 @@ class RelayHandler(BaseHTTPRequestHandler):
                 return self._error(403, "token_mismatch",
                                    "Session token was issued for a different interview code.")
             github_id = state_data.get("github_id")
-            if _store.check_github_duplicate(code, github_id):
-                return self._error(409, "already_submitted",
-                                   "This GitHub account has already submitted for this interview.")
+            # Re-submissions from the same session (e.g. debrief update) are allowed —
+            # the session_token is tied to this github_id at OAuth time (verified above),
+            # so this is the same candidate updating their session, not a new submission.
+            # Cross-account duplicates are already blocked at OAuth/session-start time.
             github_identity = {
                 "github_id":       github_id,
                 "github_username": state_data.get("github_username"),

@@ -321,12 +321,6 @@ class RelayTransport(Transport):
                 print(f"  Your session was started without GitHub auth.")
                 print(f"  Start a new session with /interview <CODE> to authenticate properly.")
                 return False
-            if "already_submitted" in err:
-                # This GitHub account already has a submission on the relay.
-                # Email fallback would create a duplicate under a different identity — block it.
-                print(f"✗ Already submitted: your GitHub account has already submitted for this interview.")
-                print(f"  Only one submission per interview is allowed.")
-                return False
             print(f"⚠ Relay submission failed: {e}")
             print(f"  Falling back to email...")
             return EmailTransport().send(code)
