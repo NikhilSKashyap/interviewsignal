@@ -68,7 +68,7 @@ Include the score in Step 6 if it returns one. If score sharing is "none", skip 
 
 ## Step 6 — Show result
 
-Display the debrief then the submission confirmation:
+Display the debrief then the submission block. If `auto_graded: true` and a score was returned in Step 5, include the **full verbatim output** of `interview score <CODE>` — overall score, all dimensions with scores and justifications, and summary. Do not truncate or summarise it.
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -78,9 +78,13 @@ Display the debrief then the submission confirmation:
 <debrief text>
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ✓ Submitted — <CODE>  |  <elapsed>min
-  Score: 7.8 / 10            ← only if auto_graded=true and score available
-  Grading pending            ← only if auto_graded=false
+
+<full verbatim output of `interview score <CODE>` here>
+    ← omit entirely if auto_graded=false or score not shared
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-Show exactly one of "Score: X/10" or "Grading pending" — never both, never neither when relay was used.
+If `auto_graded: false` (or score not available), replace the score block with:
+```
+  Grading pending — run 'interview score <CODE>' once the HM has graded.
+```
