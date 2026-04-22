@@ -1112,30 +1112,42 @@ def _render_transcript_html(events: list, manifest: dict | None = None, debrief:
         )
 
     # ── Conversation turns ────────────────────────────────────────────────────
-    # Group: user_prompt → [interleaved tool_call/result/thinking] → assistant_message
+    # Events in events.jsonl are NOT in display order: PreToolUse/PostToolUse fire
+    # during a turn, but the Stop hook logs user_prompt + assistant_message only at
+    # the END of the turn. So tool_call/tool_result for Turn N appear in the log
+    # BEFORE Turn N's user_prompt. We buffer them in `pending_tools` and attach
+    # them to the next user_prompt we encounter.
     turns: list = []  # list of (user_event, tool_events, assistant_event_or_None)
     session_end_event = None
     current_user = None
     current_tools: list = []
+    pending_tools: list = []  # tools seen after last assistant_message, before next user_prompt
     for ev in conv_events:
         t = ev.get("type", "")
         if t == "user_prompt":
             if current_user is not None:
                 turns.append((current_user, current_tools, None))
             current_user = ev
-            current_tools = []
+            # Tools logged before this user_prompt belong to this turn
+            current_tools = list(pending_tools)
+            pending_tools = []
         elif t == "assistant_message":
             turns.append((current_user, list(current_tools), ev))
             current_user = None
             current_tools = []
+            pending_tools = []
         elif t == "session_end":
             if current_user is not None:
                 turns.append((current_user, current_tools, None))
                 current_user = None
                 current_tools = []
+            pending_tools = []
             session_end_event = ev
         elif t in ("tool_call", "tool_result", "thinking"):
-            current_tools.append(ev)
+            if current_user is None:
+                pending_tools.append(ev)  # buffer until next user_prompt
+            else:
+                current_tools.append(ev)
     # Flush any unclosed turn
     if current_user is not None:
         turns.append((current_user, current_tools, None))
@@ -1167,6 +1179,27 @@ def _render_transcript_html(events: list, manifest: dict | None = None, debrief:
             + (f' · {diff_summary}' if diff_summary else '')
             + '</div>'
         )
+        # Show full git diff from manifest (start → submit)
+        git_diff = (manifest or {}).get("git_diff", "")
+        if git_diff and git_diff.strip():
+            diff_lines = []
+            for line in git_diff.splitlines():
+                if line.startswith("+++") or line.startswith("---"):
+                    diff_lines.append(f'<div class="diff-file" style="background:#0a0a0a">{escape(line)}</div>')
+                elif line.startswith("+"):
+                    diff_lines.append(f'<div class="diff-add">+{escape(line[1:])}</div>')
+                elif line.startswith("-"):
+                    diff_lines.append(f'<div class="diff-del">-{escape(line[1:])}</div>')
+                elif line.startswith("@@"):
+                    diff_lines.append(f'<div class="diff-hunk">{escape(line)}</div>')
+                else:
+                    diff_lines.append(f'<div class="diff-ctx"> {escape(line)}</div>')
+            parts.append(
+                f'<details class="t-gitdiff">'
+                f'<summary>Full diff (start → submit) · {escape(diff_summary)}</summary>'
+                f'<div class="diff-block" style="margin-top:6px">{"".join(diff_lines)}</div>'
+                f'</details>'
+            )
 
     # ── Debrief (Claude's session analysis) ──────────────────────────────────
     if debrief:
@@ -1549,6 +1582,9 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
   .t-thinking summary::-webkit-details-marker {{ display: none; }}
   .t-end {{ color: #555; border-top: 1px solid #1a1a1a; margin-top: 16px;
              padding-top: 12px; font-size: 12px; }}
+  .t-gitdiff {{ color: #444; font-size: 12px; margin-top: 8px; }}
+  .t-gitdiff summary {{ cursor: pointer; list-style: none; color: #555; }}
+  .t-gitdiff summary::-webkit-details-marker {{ display: none; }}
   .transcript code {{ background: #1a1a1a; padding: 1px 4px; border-radius: 3px; font-size: 12px; }}
   .transcript pre {{ background: #111; border: 1px solid #1e1e1e; border-radius: 4px;
                      padding: 10px; overflow-x: auto; margin: 4px 0; white-space: pre; }}
