@@ -22,7 +22,7 @@ trigger: /interview
 
 ## Flow 1 — Hiring Manager Setup (`/interview hm`)
 
-Ask five questions, one at a time:
+Ask three questions, one at a time:
 
 **1. Problem statement**
 "Paste your problem statement."
@@ -33,7 +33,7 @@ Ask five questions, one at a time:
 Show this exact text to the HM:
 
 ```
-Question 2 of 6 — Evaluation Criteria
+Question 2 of 3 — Evaluation Criteria
 
 How should this be evaluated? Type your rubric, or type NA to use the default:
 
@@ -66,61 +66,16 @@ Otherwise use whatever the HM typed.
 "Time limit? (e.g. '90 minutes', or Enter for none)"
 → Optional integer (minutes) or null.
 
-**4. Anonymize candidates?**
-"Should candidates appear anonymously until you decide to reveal them? (yes / no, default: no)"
-→ If yes: candidates appear as 'Candidate A', 'Candidate B' in the dashboard until manually unmasked.
-→ Default no — useful for small teams who already know who's interviewing.
-
-**5. Share AI score with candidate?**
-Present these options with examples so the HM can make an informed choice:
-
-```
-What should candidates see after grading? (default: none)
-
-  none             — Candidate sees only their session debrief. No score.
-
-  overall          — Candidate sees:
-                       Your score: 7.8 / 10
-
-  breakdown        — Candidate sees:
-                       Your score: 7.8 / 10
-                       ├ Problem understanding   8/10
-                       ├ Solution approach        8/10
-                       ├ Code quality             7/10
-                       └ AI collaboration         8/10
-
-  breakdown_notes  — Same as breakdown, plus the AI's written notes per
-                     dimension and an overall summary:
-                       Your score: 7.8 / 10
-                       ├ Problem understanding   8/10  "Correctly identified..."
-                       ├ Solution approach        8/10  "Clean decomposition..."
-                       ...
-                       Summary: Strong across the board, particularly...
-
-Note: Claude's session debrief (a reflection on what you did well and
-missed) is always shown to the candidate regardless of this setting.
-```
-
-→ Accept: none / overall / breakdown / breakdown_notes. Default: none.
-
-**6. Auto-grade submissions?**
-"Should submissions be graded automatically when candidates submit? You can still revise grades from the dashboard. (yes / no, default: no)"
-→ If yes: each submission is graded by AI immediately on arrival and appears in the dashboard with an "Auto" badge.
-→ Requires GRADING_API_KEY to be configured on the relay. Without it, this setting is silently ignored and you grade manually.
-
 Then run:
 
 ```bash
 python -m interview.core.setup create \
   --problem "PROBLEM TEXT HERE" \
   --rubric "RUBRIC TEXT HERE" \
-  --time-limit <MINUTES> \
-  --anonymize \
-  --sharing-score <none|overall|breakdown|breakdown_notes> \
-  --auto-grade
+  --time-limit <MINUTES>
 ```
 
-(Omit `--time-limit` if none given. Omit `--anonymize` if no. Use `--no-anonymize` explicitly if you want to be safe. Omit `--auto-grade` if no, or use `--no-auto-grade` explicitly.)
+(Omit `--time-limit` if none given.)
 
 Show the result:
 

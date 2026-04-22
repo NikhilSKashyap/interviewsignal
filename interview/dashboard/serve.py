@@ -1076,7 +1076,7 @@ def _render_preamble(manifest: dict) -> str:
     return "\n".join(parts)
 
 
-def _render_transcript_html(events: list, manifest: dict | None = None, debrief: str = "") -> str:
+def _render_transcript_html(events: list, manifest: dict | None = None) -> str:
     """Render events.jsonl list as a structured conversation transcript."""
     parts = ['<div class="transcript">']
 
@@ -1195,23 +1195,11 @@ def _render_transcript_html(events: list, manifest: dict | None = None, debrief:
                 else:
                     diff_lines.append(f'<div class="diff-ctx"> {escape(line)}</div>')
             parts.append(
-                f'<details class="t-gitdiff">'
+                f'<details class="t-gitdiff" open>'
                 f'<summary>Full diff (start → submit) · {escape(diff_summary)}</summary>'
                 f'<div class="diff-block" style="margin-top:6px">{"".join(diff_lines)}</div>'
                 f'</details>'
             )
-
-    # ── Debrief (Claude's session analysis) ──────────────────────────────────
-    if debrief:
-        bar = "━" * 55
-        debrief_header = f"{bar}\n  SESSION DEBRIEF\n  (Claude\u2019s analysis \u2014 not the hiring manager\u2019s evaluation)\n{bar}"
-        parts.append(
-            f'<div class="t-debrief">'
-            f'<pre style="margin:0 0 8px 0;white-space:pre-wrap;color:#555;'
-            f'font-family:inherit">{escape(debrief_header)}</pre>'
-            f'<div class="t-debrief-body">{_md_to_html(debrief)}</div>'
-            f'</div>'
-        )
 
     if len(parts) <= (2 if manifest else 1):
         parts.append('<div style="color:#555;font-size:13px">No session events recorded.</div>')
@@ -1249,11 +1237,10 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
         # Load or compute flags for local sessions
         session_flags = _load_local_flags(code)
 
-    # Load events + manifest + debrief for transcript view
+    # Load events + manifest for transcript view
     if relay_session:
         _events = relay_session.get("events", [])
         _manifest_dict = relay_session.get("manifest", {}) or {}
-        _debrief = relay_session.get("debrief", "") or ""
     else:
         _events_file = SESSIONS_DIR / code / "events.jsonl"
         _events = []
@@ -1270,9 +1257,7 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
                 _manifest_dict = json.loads(_mf_path.read_text())
             except Exception:
                 pass
-        _debrief_path = SESSIONS_DIR / code / "debrief.txt"
-        _debrief = _debrief_path.read_text().strip() if _debrief_path.exists() else ""
-    transcript_html = _render_transcript_html(_events, manifest=_manifest_dict, debrief=_debrief)
+    transcript_html = _render_transcript_html(_events, manifest=_manifest_dict)
 
     # Comments section
     comments_html = ""
@@ -1471,6 +1456,82 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
     # Flags panel
     flags_panel_html = _build_flags_panel_html(session_flags)
 
+    # Analysis panel — Claude's rubric-based grading analysis (HM-only, left column)
+    analysis_panel_html = ""
+    if graded and current_grading:
+        an_summary    = escape(current_grading.get("summary", ""))
+        an_dimensions = current_grading.get("dimensions", [])
+        an_standouts  = current_grading.get("standout_moments", [])
+        an_concerns   = current_grading.get("concerns", [])
+
+        # Dimension rows
+        dim_rows = ""
+        for dim in an_dimensions:
+            d_name  = escape(str(dim.get("name", "")))
+            d_score = dim.get("score")
+            d_just  = escape(str(dim.get("justification", "")))
+            score_pct = int((d_score / 10) * 100) if d_score is not None else 0
+            score_color = (
+                "#4ade80" if score_pct >= 70 else
+                "#fbbf24" if score_pct >= 40 else
+                "#f87171"
+            )
+            score_label = f"{d_score}/10" if d_score is not None else "—"
+            dim_rows += (
+                f'<div style="margin-bottom:12px">'
+                f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">'
+                f'<span style="font-size:12px;color:#ccc">{d_name}</span>'
+                f'<span style="font-size:12px;font-weight:600;color:{score_color}">{score_label}</span>'
+                f'</div>'
+                f'<div style="height:3px;background:#1a1a1a;border-radius:2px;margin-bottom:5px">'
+                f'<div style="height:3px;width:{score_pct}%;background:{score_color};border-radius:2px"></div>'
+                f'</div>'
+                f'<div style="font-size:11px;color:#555;line-height:1.5">{d_just}</div>'
+                f'</div>'
+            )
+
+        # Standout moments
+        standout_html = ""
+        if an_standouts:
+            items = "".join(
+                f'<li style="margin-bottom:4px">{escape(str(s))}</li>'
+                for s in an_standouts
+            )
+            standout_html = (
+                f'<div style="margin-top:14px">'
+                f'<div style="font-size:10px;color:#4ade80;text-transform:uppercase;'
+                f'letter-spacing:0.08em;margin-bottom:6px">Standout moments</div>'
+                f'<ul style="margin:0;padding-left:16px;font-size:12px;color:#888;line-height:1.6">'
+                f'{items}</ul></div>'
+            )
+
+        # Concerns
+        concerns_html = ""
+        if an_concerns:
+            items = "".join(
+                f'<li style="margin-bottom:4px">{escape(str(c))}</li>'
+                for c in an_concerns
+            )
+            concerns_html = (
+                f'<div style="margin-top:14px">'
+                f'<div style="font-size:10px;color:#f87171;text-transform:uppercase;'
+                f'letter-spacing:0.08em;margin-bottom:6px">Concerns</div>'
+                f'<ul style="margin:0;padding-left:16px;font-size:12px;color:#888;line-height:1.6">'
+                f'{items}</ul></div>'
+            )
+
+        analysis_panel_html = (
+            f'<div class="panel" id="analysis-panel">'
+            f'<div class="section-title">Claude\'s Analysis '
+            f'<span style="color:#555;font-size:10px;font-weight:400">· HM-only · rubric-based</span></div>'
+            + (f'<div style="font-size:13px;color:#b0b0b0;margin-bottom:16px;line-height:1.6">{an_summary}</div>'
+               if an_summary else '')
+            + dim_rows
+            + standout_html
+            + concerns_html
+            + '</div>'
+        )
+
     safe_code = escape(code)
     safe_cid = escape(cid) if cid else ""
     # Use JSON encoding for JS string literals to prevent JS injection
@@ -1617,6 +1678,7 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
       <div class="section-title">Transcript</div>
       {transcript_html}
     </div>
+    {analysis_panel_html}
   </div>
 
   <div>

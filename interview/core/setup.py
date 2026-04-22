@@ -45,10 +45,7 @@ def create_interview(
     cc_emails: list[str],
     candidate_email: str | None,
     time_limit_minutes: int | None,
-    anonymize: bool = False,
     audit_email: str | None = None,
-    sharing: dict | None = None,
-    auto_grade: bool = False,
 ) -> dict:
     ensure_dirs()
 
@@ -65,13 +62,9 @@ def create_interview(
     except Exception:
         pass
 
-    # Sharing config: what score information candidates can see after submission.
-    # Defaults to no sharing. HM can override per-code from dashboard.
-    # Debrief is always shown to candidates at submit time and always included
-    # in interview score output — not an HM toggle.
-    sharing_config = sharing or {
-        "score": "none",    # none | overall | breakdown | breakdown_notes
-    }
+    # Sharing config: candidates always see overall score + debrief.
+    # Debrief is always shown at submit time — not an HM toggle.
+    sharing_config = {"score": "overall"}
 
     payload = {
         "code": code,
@@ -81,7 +74,7 @@ def create_interview(
         "cc_emails": cc_emails,
         "candidate_email": candidate_email,
         "time_limit_minutes": time_limit_minutes,
-        "anonymize": anonymize,
+        "anonymize": False,
         "audit_email": audit_email,
         "created_at": created_at,
         "sharing": sharing_config,
@@ -92,7 +85,7 @@ def create_interview(
         # hm_key scopes the session to this HM on the relay (Model B)
         "relay_url": relay_url,
         "hm_key": hm_key,
-        "auto_grade": auto_grade,
+        "auto_grade": True,
     }
 
     # Save locally on HM's machine
@@ -161,15 +154,7 @@ def main():
     parser.add_argument("--cc-emails", default="")
     parser.add_argument("--candidate-email", default=None)
     parser.add_argument("--time-limit", type=int, default=None)
-    parser.add_argument("--anonymize", action="store_true", default=False)
-    parser.add_argument("--no-anonymize", dest="anonymize", action="store_false")
     parser.add_argument("--audit-email", default=None)
-    parser.add_argument("--auto-grade", action="store_true", default=False,
-                        help="Automatically grade submissions when they arrive (requires GRADING_API_KEY on relay)")
-    parser.add_argument("--no-auto-grade", dest="auto_grade", action="store_false")
-    parser.add_argument("--sharing-score", default="none",
-                        choices=["none", "overall", "breakdown", "breakdown_notes"],
-                        help="What score info candidates can see after submission")
     args = parser.parse_args()
 
     if args.problem:
@@ -187,10 +172,6 @@ def main():
         raise SystemExit("error: --rubric or --rubric-file is required")
     cc_emails = [e.strip() for e in args.cc_emails.split(",") if e.strip()]
 
-    sharing = {
-        "score": args.sharing_score,
-    }
-
     result = create_interview(
         problem=problem,
         rubric=rubric,
@@ -198,10 +179,7 @@ def main():
         cc_emails=cc_emails,
         candidate_email=args.candidate_email,
         time_limit_minutes=args.time_limit,
-        anonymize=args.anonymize,
         audit_email=args.audit_email,
-        sharing=sharing,
-        auto_grade=args.auto_grade,
     )
 
     relay_url = result["payload"].get("relay_url", "")

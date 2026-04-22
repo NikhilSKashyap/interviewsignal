@@ -56,9 +56,6 @@ You'll be asked for:
 - Problem statement
 - Grading rubric (plain language — "weight decomposition 40%, code quality 30%, tests 30%")
 - Time limit (optional)
-- Anonymize candidates? (default: no — candidates appear by name; yes shows "Candidate A/B/C" until you unmask)
-- Score sharing (default: none — what candidates see after grading: none / overall / breakdown / breakdown_notes)
-- Auto-grade submissions? (default: no — requires `GRADING_API_KEY` on relay)
 
 You get back a code like `INT-4829-XK`. That's your broad-interview — share it with 5 candidates or 500. They all get the same problem, they all get a fair shot, submissions arrive in your dashboard auto-graded and ranked.
 
