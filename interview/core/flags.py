@@ -50,37 +50,49 @@ def compute_flags(events: list[dict], manifest: dict) -> list[dict]:
 # ── individual flag detectors ─────────────────────────────────────────────────
 
 def _flag_too_fast(manifest: dict) -> list[dict]:
-    """Red if < 10 min; Yellow if < 20 % of time_limit_minutes (when set)."""
+    """Proportional thresholds against time_limit; absolute fallback when no limit set."""
     elapsed = manifest.get("elapsed_minutes")
     if elapsed is None:
         return []
 
     elapsed = float(elapsed)
-
-    # Hard red threshold
-    if elapsed < 10:
-        return [{
-            "id":       "too_fast",
-            "severity": "red",
-            "label":    "Completed too quickly",
-            "detail":   f"Session lasted {elapsed:.1f} min — under the 10-minute minimum.",
-        }]
-
-    # Proportional yellow (only when a time limit is set)
     time_limit = manifest.get("time_limit_minutes")
+
     if time_limit:
         time_limit = float(time_limit)
-        if time_limit > 0 and elapsed < 0.20 * time_limit:
-            pct = int(elapsed / time_limit * 100)
+        if time_limit <= 0:
+            return []
+        pct = elapsed / time_limit * 100
+        if pct < 10:
+            return [{
+                "id":       "too_fast",
+                "severity": "red",
+                "label":    "Completed very quickly",
+                "detail":   (
+                    f"Session lasted {elapsed:.1f} min — "
+                    f"{pct:.0f}% of the {time_limit:.0f}-minute limit."
+                ),
+            }]
+        if pct < 20:
             return [{
                 "id":       "too_fast",
                 "severity": "yellow",
                 "label":    "Completed unusually quickly",
                 "detail":   (
-                    f"Session lasted {elapsed:.1f} min ({pct}% of the "
-                    f"{time_limit:.0f}-minute limit)."
+                    f"Session lasted {elapsed:.1f} min — "
+                    f"{pct:.0f}% of the {time_limit:.0f}-minute limit."
                 ),
             }]
+        return []
+
+    # No time limit — flag only if genuinely very short (< 5 min)
+    if elapsed < 5:
+        return [{
+            "id":       "too_fast",
+            "severity": "yellow",
+            "label":    "Very short session",
+            "detail":   f"Session lasted {elapsed:.1f} min with no time limit set.",
+        }]
 
     return []
 

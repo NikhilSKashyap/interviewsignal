@@ -181,7 +181,7 @@ def _format_time(ts: float | str | None) -> str:
         return "—"
     if isinstance(ts, str):
         return ts[:16].replace("T", " ")
-    return time.strftime("%b %d, %H:%M", time.localtime(ts))
+    return time.strftime("%b %d, %H:%M %Z", time.localtime(ts))
 
 
 def _score_color(score) -> str:
@@ -307,7 +307,6 @@ def _build_candidate_row(r: dict) -> str:
       <td>{submitted}</td>
       <td>
         <a class="btn btn-sm" href="{view_url}" target="_blank">View</a>
-        <button class="btn btn-sm btn-grade" data-code="{code}" data-cid="{cid}">Grade</button>
         {reveal_btn}
       </td>
     </tr>"""
@@ -444,8 +443,6 @@ def _build_dashboard_html(reports: list[dict]) -> str:
    '<div class="received-hint"><strong>To add submissions:</strong> save <code>interview_report_*.json</code> email attachments to <code>~/.interview/received/</code> — they appear here automatically.</div>'}
 
   <div class="toolbar">
-    <button class="btn btn-primary" id="btn-grade-selected">Grade Selected</button>
-    <button class="btn" id="btn-grade-all">Grade All</button>
     <button class="btn" onclick="location.reload()">↻ Refresh</button>
   </div>
 
@@ -464,7 +461,7 @@ def _build_dashboard_html(reports: list[dict]) -> str:
   {'<div class="sel-bar" id="sel-bar">0 selected</div>' if reports else ''}
 
   {'<!-- Batch actions bar -->' if reports else ''}
-  {'<div class="batch-bar" id="batch-bar"><button class="btn btn-sm btn-grade" id="batch-grade">Grade Selected</button><button class="btn btn-sm btn-next" id="batch-advance">Advance Selected</button><button class="btn btn-sm btn-reject" id="batch-reject">Reject Selected</button><span style="margin-left:8px;color:#555;font-size:12px">|</span><label style="font-size:12px;color:#888;margin-left:8px">Reject below score:</label><input type="number" class="ctrl-input" id="batch-threshold" min="0" max="10" step="0.1" placeholder="e.g. 5"><button class="btn btn-sm btn-reject" id="batch-reject-below" style="margin-left:4px">Reject Below</button><span class="batch-progress" id="batch-progress"></span></div>' if reports else ''}
+  {'<div class="batch-bar" id="batch-bar"><button class="btn btn-sm btn-next" id="batch-advance">Advance Selected</button><button class="btn btn-sm btn-reject" id="batch-reject">Reject Selected</button><span style="margin-left:8px;color:#555;font-size:12px">|</span><label style="font-size:12px;color:#888;margin-left:8px">Reject below score:</label><input type="number" class="ctrl-input" id="batch-threshold" min="0" max="10" step="0.1" placeholder="e.g. 5"><button class="btn btn-sm btn-reject" id="batch-reject-below" style="margin-left:4px">Reject Below</button><span class="batch-progress" id="batch-progress"></span></div>' if reports else ''}
 
   {'<table id="candidates-table"><thead><tr><th><input type="checkbox" id="select-all"> Candidate</th><th>Score</th><th>Flags</th><th>Duration</th><th>Events</th><th>Submitted</th><th>Actions</th></tr></thead><tbody id="candidates-tbody">' + rows + '</tbody></table>'
    if reports else
@@ -676,29 +673,6 @@ def _build_dashboard_html(reports: list[dict]) -> str:
       batchBar.classList.remove('visible');
     }}
   }}
-
-  // ── Grade multiple ─────────────────────────────────────────────────────────
-  document.getElementById('btn-grade-selected').addEventListener('click', function() {{
-    const entries = [...document.querySelectorAll('.candidate-checkbox:checked')]
-      .map(cb => ({{code: cb.dataset.code, cid: cb.dataset.cid || ''}}));
-    if (!entries.length) {{ alert('Select at least one candidate.'); return; }}
-    gradeMultiple(entries);
-  }});
-  document.getElementById('btn-grade-all').addEventListener('click', function() {{
-    const entries = [...document.querySelectorAll('.candidate-checkbox')]
-      .map(cb => ({{code: cb.dataset.code, cid: cb.dataset.cid || ''}}));
-    gradeMultiple(entries);
-  }});
-  document.querySelectorAll('.btn-grade:not(#batch-grade)').forEach(btn =>
-    btn.addEventListener('click', () =>
-      gradeMultiple([{{code: btn.dataset.code, cid: btn.dataset.cid || ''}}]))
-  );
-  document.getElementById('batch-grade')?.addEventListener('click', function() {{
-    const entries = [...document.querySelectorAll('.candidate-checkbox:checked')]
-      .map(cb => ({{code: cb.dataset.code, cid: cb.dataset.cid || ''}}));
-    if (!entries.length) {{ alert('Select at least one candidate.'); return; }}
-    gradeMultiple(entries);
-  }});
 
   function gradeMultiple(entries) {{
     fetch('/grade', {{method:'POST', headers:{{'Content-Type':'application/json'}},
@@ -1416,43 +1390,6 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
       </div>
     </div>"""
 
-    # Sharing config (relay mode only)
-    sharing_panel_html = ""
-    if get_relay_url():
-        try:
-            from interview.core.transport import get_hm_key, get_relay_api_key
-            import urllib.request as _ureq
-            relay_url_val = get_relay_url()
-            token = get_hm_key() or get_relay_api_key()
-            sharing_req = _ureq.Request(
-                f"{relay_url_val}/sessions/{code}/{cid}/sharing",
-                headers={"Authorization": f"Bearer {token}"} if token else {},
-            )
-            with _ureq.urlopen(sharing_req, timeout=5) as resp:
-                sharing_data = json.loads(resp.read()).get("sharing", {})
-        except Exception:
-            sharing_data = {"score": "none"}
-
-        score_level = escape(sharing_data.get("score", "none"))
-        sharing_panel_html = f"""
-    <div class="panel" id="sharing-panel">
-      <div class="section-title">Candidate Score Sharing
-        <span style="color:#555;font-size:10px;font-weight:400"> — what candidates see via <code>interview score {escape(code)}</code></span>
-      </div>
-      <div style="margin-bottom:12px">
-        <label style="font-size:12px;color:#888;display:block;margin-bottom:6px">Score detail level</label>
-        <select id="sharing-score" style="background:#1a1a1a;border:1px solid #333;color:#ccc;padding:6px 10px;border-radius:6px;font-size:13px">
-          <option value="none" {'selected' if score_level == 'none' else ''}>None — candidates see nothing</option>
-          <option value="overall" {'selected' if score_level == 'overall' else ''}>Overall score only</option>
-          <option value="breakdown" {'selected' if score_level == 'breakdown' else ''}>Score breakdown by dimension</option>
-          <option value="breakdown_notes" {'selected' if score_level == 'breakdown_notes' else ''}>Breakdown + HM notes</option>
-        </select>
-      </div>
-      <p style="font-size:12px;color:#555;margin-bottom:12px">Claude's session debrief is always shared with candidates automatically — it's Claude's analysis of the session, not the HM's evaluation.</p>
-      <button class="btn btn-sm" id="btn-save-sharing" data-code="{escape(code)}">Save sharing settings</button>
-      <span id="sharing-saved" style="display:none;font-size:12px;color:#4ade80;margin-left:10px">Saved.</span>
-    </div>"""
-
     # Flags panel
     flags_panel_html = _build_flags_panel_html(session_flags)
 
@@ -1721,8 +1658,6 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
     </div>
 
     {grade_panel_html}
-
-    {sharing_panel_html}
   </div>
 </div>
 
@@ -1798,22 +1733,6 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
         btn.disabled = false;
         btn.textContent = 'Submit Revision';
       }});
-  }});
-
-  document.getElementById('btn-save-sharing')?.addEventListener('click', function() {{
-    const code  = this.dataset.code;
-    const score = document.getElementById('sharing-score').value;
-    fetch('/update-sharing', {{method:'POST', headers:{{'Content-Type':'application/json'}},
-      body: JSON.stringify({{code, sharing: {{score}}}})
-    }}).then(r => r.json()).then(d => {{
-      if (d.ok) {{
-        const saved = document.getElementById('sharing-saved');
-        saved.style.display = 'inline';
-        setTimeout(() => {{ saved.style.display = 'none'; }}, 2000);
-      }} else {{
-        alert('Error saving sharing settings: ' + d.error);
-      }}
-    }});
   }});
 
   document.getElementById('btn-verify')?.addEventListener('click', function() {{
