@@ -10,9 +10,9 @@ Candidate machine                   Relay (relay.interviewsignal.dev or self-hos
 ~/.interview/sessions/<code>/       /data/hms/<hm_key>/
   events.jsonl  (append-only,         sessions/<code>/<cid>/
                 hash-chained)           manifest.json, events.jsonl
-  manifest.json (sealed)               report.html, report.json, debrief.txt
-  report.html                          grading.json, grading_history.jsonl
-  report.json                          comments.jsonl, decision.json
+  manifest.json (sealed)               debrief.txt, flags.json
+  report.html   (local only)           grading.json, grading_history.jsonl
+  report.json   (local only)           comments.jsonl, decision.json
   debrief.txt                          audit.jsonl, meta.json
   active_session.json               interviews/<code>.json
                                     sharing/<code>.json
@@ -86,8 +86,8 @@ the last event hash. Returns a rich result dict used by the dashboard UI.
 ### `interview/core/report.py`
 Generates the HM-facing HTML report and machine-readable JSON from a sealed session.
 `generate_report(code)` reads manifest + events + grading and writes `report.html` (dark-mode,
-self-contained, no external resources) and `report.json` to the session directory. The HTML can
-be emailed and opened offline.
+self-contained, no external resources) and `report.json` to the session directory. Used by email
+mode for attachments. Not uploaded to the relay — the dashboard transcript view supersedes it.
 
 ### `interview/core/email_sender.py`
 SMTP send for email-mode (fallback transport). `send_report()` attaches `report.html` and sends
@@ -120,8 +120,10 @@ File-based multi-tenant session store. Layout: `/data/hms/<hm_key>/interviews/` 
 `/data/hms/<hm_key>/sessions/<code>/<cid>/`. All writes are atomic (write `.tmp`, rename).
 `record_reveal()` is a no-op — identity fields are always present in `meta.json` and returned
 by `get_session()`. `revise_grade()` archives the current grade to `grading_history.jsonl`
-before overwriting `grading.json`. Size limits: 200 MB request body, 100 MB per session, 20 MB
-per file. GitHub submissions tracked in `/data/github_submissions.json`.
+before overwriting `grading.json`. `get_session()` includes `debrief` (from `debrief.txt` if
+present). `_summarise_candidates()` reads `elapsed_minutes` from `meta.json` and `overall_score`
+from `grading.json` — no dependency on `report.json`. Size limits: 200 MB request body, 100 MB
+per session, 20 MB per file. GitHub submissions tracked in `/data/github_submissions.json`.
 
 ### `interview/dashboard/serve.py`
 Local HM dashboard at `http://localhost:7832`. Transport-aware: in relay mode reads from and
@@ -129,6 +131,12 @@ writes to relay; in email mode reads from `~/.interview/received/`. Routes: cand
 candidate detail, grade, comment, decision, audit, sharing panel, integrity verify. `_ensure_local_cache()` downloads `events.jsonl` and `manifest.json` from the relay to the local
 sessions directory so `grader.py` (which reads local files) can work normally. All responses
 carry `Cache-Control: no-store` to ensure fresh data on refresh.
+
+Candidate list (local mode) reads `manifest.json` + `grading.json` per session — no dependency
+on `report.json`. Transcript view renders the full terminal experience from manifest data:
+synthesized pre-session preamble (`_render_preamble()`) followed by events and the session
+debrief at the bottom. Debrief is loaded from `debrief.txt` locally or `relay_session["debrief"]`
+in relay mode.
 
 ### `interview/skills/interview/SKILL.md`
 The Claude Code skill file for `/interview`. Handles both HM setup (`/interview hm`) and
@@ -225,11 +233,11 @@ Candidate runs /interview <CODE>
     → captures git diff
     → writes manifest.json (final_hash, elapsed_minutes, etc.)
     → clears active_session.json
-  → report.generate_report()  →  writes report.html + report.json
+  → report.generate_report()  →  writes report.html + report.json  (local only; email attachments)
   → Claude writes debrief.txt  (reads events.jsonl, generates reflection)
   → RelayTransport.send()
-    → base64-encodes manifest, events, report, debrief
-    → POST /sessions  (relay creates <cid>/ directory, writes all files, writes meta.json)
+    → base64-encodes manifest, events, debrief  (report files NOT sent to relay)
+    → POST /sessions  (relay creates <cid>/ directory, writes files, writes meta.json)
   → candidate sees debrief in terminal + score link (if sharing enabled)
 ```
 

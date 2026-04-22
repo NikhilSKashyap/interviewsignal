@@ -129,7 +129,7 @@ Session starts                            ↓ auto-graded (if enabled)
 **On submit:**
 1. `session seal` — finalises hash chain, captures git diff (start → end)
 2. Git push — commits all changes to the candidate's `interview-{code}` repo (non-blocking)
-3. Push to relay — sealed session (events + manifest + report + debrief + repo URL) stored server-side
+3. Push to relay — sealed session (events + manifest + debrief) stored server-side
 4. Claude debrief — reads the event log, writes `debrief.txt`, shown to candidate immediately
 5. Auto-grade — if enabled and `GRADING_API_KEY` is configured on relay, grade runs immediately
 
@@ -316,7 +316,7 @@ All config stored in `~/.interview/config.json` (permissions: 600).
 
 ## Privacy
 
-Candidate sessions stored on relay: `events.jsonl`, `manifest.json`, `report.html`, `report.json`, `debrief.txt`, `flags.json`. Raw file contents are never stored.
+Candidate sessions stored on relay: `events.jsonl`, `manifest.json`, `debrief.txt`, `flags.json`. Raw file contents are never stored.
 
 Grading sends the session timeline and git diff to the configured AI endpoint using your own API key — interviewsignal never sees it.
 

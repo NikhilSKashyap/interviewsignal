@@ -234,7 +234,6 @@ class SessionStore:
             meta = self._load_json(cid_dir / "meta.json")
             if not meta:
                 continue
-            report   = self._load_json(cid_dir / "report.json") or {}
             grading  = self._load_json(cid_dir / "grading.json") or {}
             manifest = self._load_json(cid_dir / "manifest.json") or {}
             flags    = self._load_json(cid_dir / "flags.json") or []
@@ -249,9 +248,8 @@ class SessionStore:
             result.append({
                 "cid":             cid_dir.name,
                 "submitted_at":    meta.get("submitted_at"),
-                "elapsed_minutes": report.get("elapsed_minutes"),
-                # Grading result takes precedence over the pre-grading report stub
-                "overall_score":   grading.get("overall_score") or report.get("overall_score"),
+                "elapsed_minutes": meta.get("elapsed_minutes"),
+                "overall_score":   grading.get("overall_score"),
                 "event_count":     manifest.get("event_count"),
                 "graded":          meta.get("graded", False),
                 "graded_by":       meta.get("graded_by", grading.get("graded_by", "hm")),
@@ -378,7 +376,6 @@ class SessionStore:
         if not meta:
             return None
         manifest        = self._load_json(d / "manifest.json") or {}
-        report          = self._load_json(d / "report.json") or {}
         grading         = self._load_json(d / "grading.json")
         grading_history = self._load_jsonl(d / "grading_history.jsonl")
         comments        = self._load_jsonl(d / "comments.jsonl")
@@ -386,6 +383,8 @@ class SessionStore:
         audit           = self._load_jsonl(d / "audit.jsonl")
         flags           = self._load_json(d / "flags.json") or []
         events          = self._load_jsonl(d / "events.jsonl")
+        debrief_path    = d / "debrief.txt"
+        debrief         = debrief_path.read_text().strip() if debrief_path.exists() else ""
         return {
             "code":            code,
             "cid":             cid,
@@ -399,7 +398,7 @@ class SessionStore:
             "avatar_url":       meta.get("avatar_url"),
             "manifest":        manifest,
             "events":          events,
-            "report":          report,
+            "debrief":         debrief,
             "grading":         grading,
             "grading_history": grading_history,
             "comments":        comments,

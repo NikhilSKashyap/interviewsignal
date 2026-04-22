@@ -61,20 +61,29 @@ def _load_all_reports() -> list[dict]:
     if SESSIONS_DIR.exists():
         for session_dir in SESSIONS_DIR.iterdir():
             if session_dir.is_dir():
-                report_file = session_dir / "report.json"
-                if report_file.exists():
+                manifest_file = session_dir / "manifest.json"
+                if manifest_file.exists():
                     try:
-                        r = json.loads(report_file.read_text())
-                        r["_source"] = "local"
-                        manifest_file = session_dir / "manifest.json"
-                        manifest: dict = {}
-                        if manifest_file.exists():
-                            manifest = json.loads(manifest_file.read_text())
-                            r["_anonymize"] = manifest.get("anonymize", True)
-                        else:
-                            r["_anonymize"] = True
-                        # Load or compute flags for this local session
+                        manifest: dict = json.loads(manifest_file.read_text())
+                        grading_file = session_dir / "grading.json"
+                        grading: dict = {}
+                        if grading_file.exists():
+                            try:
+                                grading = json.loads(grading_file.read_text())
+                            except Exception:
+                                pass
                         session_code = session_dir.name
+                        r = {
+                            "code":            session_code,
+                            "started_at":      manifest.get("started_at"),
+                            "ended_at":        manifest.get("ended_at"),
+                            "elapsed_minutes": manifest.get("elapsed_minutes"),
+                            "overall_score":   grading.get("overall_score"),
+                            "event_count":     manifest.get("event_count"),
+                            "_source":         "local",
+                            "_anonymize":      manifest.get("anonymize", True),
+                        }
+                        # Load or compute flags for this local session
                         local_flags = _load_local_flags(session_code)
                         r["flag_count"] = len(local_flags)
                         if any(f.get("severity") == "red" for f in local_flags):
@@ -1013,20 +1022,67 @@ def _render_event_group(events: list) -> list:
     return parts
 
 
-def _render_transcript_html(events: list, problem: str = "") -> str:
-    """Render events.jsonl list as a structured conversation transcript."""
-    import datetime
+def _render_preamble(manifest: dict) -> str:
+    """Synthesize the pre-session terminal interaction from manifest fields."""
+    import datetime as _dt
+    code        = manifest.get("code", "")
+    started_at  = manifest.get("started_at", 0)
+    cand_name   = manifest.get("candidate_name") or ""
+    cand_email  = manifest.get("candidate_email") or ""
+    github_user = manifest.get("github_username") or ""
+    time_limit  = manifest.get("time_limit_minutes")
+    problem     = manifest.get("problem") or ""
 
+    parts = []
+    parts.append(f'<div class="t-user">❯ /interview {escape(code)}</div>')
+
+    # Name/email exchange — omit when GitHub OAuth handled identity
+    if not github_user:
+        if cand_name:
+            parts.append('<div class="t-assistant"><span class="t-dot">⏺</span>What\'s your name?</div>')
+            parts.append(f'<div class="t-user">❯ {escape(cand_name)}</div>')
+        if cand_email:
+            parts.append('<div class="t-assistant"><span class="t-dot">⏺</span>What\'s your email address?</div>')
+            parts.append(f'<div class="t-user">❯ {escape(cand_email)}</div>')
+
+    parts.append('<div class="t-assistant"><span class="t-dot">⏺</span>Starting your session now.</div>')
+
+    # Format started_at timestamp
+    if isinstance(started_at, (int, float)) and started_at:
+        started_str = _dt.datetime.fromtimestamp(started_at).strftime("%Y-%m-%d %H:%M")
+    else:
+        started_str = str(started_at)[:16].replace("T", " ")
+
+    bar = "━" * 55
+    banner_lines = [
+        bar,
+        f"  INTERVIEW SESSION \u2014 {code}",
+        f"  Started: {started_str}",
+    ]
+    if github_user:
+        banner_lines.append(f"  GitHub:  @{github_user}")
+    if time_limit:
+        banner_lines.append(f"  Time limit: {time_limit} minutes")
+    banner_lines += [bar, "", "  PROBLEM STATEMENT", ""]
+    for line in problem.split("\n"):
+        banner_lines.append(f"  {line}")
+    banner_lines += ["", bar, "  Session is recording. Type /submit when done.", bar]
+
+    banner_text = "\n".join(banner_lines)
+    parts.append(
+        f'<div class="t-banner"><pre style="margin:0;white-space:pre-wrap;'
+        f'color:#888;font-family:inherit">{escape(banner_text)}</pre></div>'
+    )
+    return "\n".join(parts)
+
+
+def _render_transcript_html(events: list, manifest: dict | None = None, debrief: str = "") -> str:
+    """Render events.jsonl list as a structured conversation transcript."""
     parts = ['<div class="transcript">']
 
-    # ── Problem statement at top ──────────────────────────────────────────────
-    if problem:
-        parts.append(
-            f'<div class="t-problem">'
-            f'<div class="t-problem-label">Problem</div>'
-            f'<div class="t-problem-text">{escape(problem)}</div>'
-            f'</div>'
-        )
+    # ── Pre-session preamble (synthesized from manifest) ──────────────────────
+    if manifest:
+        parts.append(_render_preamble(manifest))
 
     # ── Partition events into preamble + conversation ─────────────────────────
     first_user_idx = next(
@@ -1112,7 +1168,19 @@ def _render_transcript_html(events: list, problem: str = "") -> str:
             + '</div>'
         )
 
-    if len(parts) <= (2 if problem else 1):
+    # ── Debrief (Claude's session analysis) ──────────────────────────────────
+    if debrief:
+        bar = "━" * 55
+        debrief_header = f"{bar}\n  SESSION DEBRIEF\n  (Claude\u2019s analysis \u2014 not the hiring manager\u2019s evaluation)\n{bar}"
+        parts.append(
+            f'<div class="t-debrief">'
+            f'<pre style="margin:0 0 8px 0;white-space:pre-wrap;color:#555;'
+            f'font-family:inherit">{escape(debrief_header)}</pre>'
+            f'<div class="t-debrief-body">{_md_to_html(debrief)}</div>'
+            f'</div>'
+        )
+
+    if len(parts) <= (2 if manifest else 1):
         parts.append('<div style="color:#555;font-size:13px">No session events recorded.</div>')
 
     parts.append('</div>')
@@ -1148,18 +1216,11 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
         # Load or compute flags for local sessions
         session_flags = _load_local_flags(code)
 
-    # Build report link (for "View generated report" fallback)
-    report_iframe_src = (
-        f"/report-raw?code={quote(code, safe='')}&cid={quote(cid, safe='')}"
-        if cid else
-        f"/report-raw?code={quote(code, safe='')}"
-    )
-
-    # Load events + problem for transcript view
+    # Load events + manifest + debrief for transcript view
     if relay_session:
         _events = relay_session.get("events", [])
-        _manifest = relay_session.get("manifest", {}) or {}
-        _problem = _manifest.get("problem", "")
+        _manifest_dict = relay_session.get("manifest", {}) or {}
+        _debrief = relay_session.get("debrief", "") or ""
     else:
         _events_file = SESSIONS_DIR / code / "events.jsonl"
         _events = []
@@ -1170,13 +1231,15 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
                 except Exception:
                     pass
         _mf_path = SESSIONS_DIR / code / "manifest.json"
-        _problem = ""
+        _manifest_dict = {}
         if _mf_path.exists():
             try:
-                _problem = json.loads(_mf_path.read_text()).get("problem", "")
+                _manifest_dict = json.loads(_mf_path.read_text())
             except Exception:
                 pass
-    transcript_html = _render_transcript_html(_events, problem=_problem)
+        _debrief_path = SESSIONS_DIR / code / "debrief.txt"
+        _debrief = _debrief_path.read_text().strip() if _debrief_path.exists() else ""
+    transcript_html = _render_transcript_html(_events, manifest=_manifest_dict, debrief=_debrief)
 
     # Comments section
     comments_html = ""
@@ -1464,11 +1527,9 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
   .transcript {{ font-family: 'Menlo','Consolas','Monaco',monospace; font-size: 13px;
                  line-height: 1.7; background: #0a0a0a; color: #d4d4d4; padding: 20px;
                  border-radius: 6px; overflow-x: auto; max-height: 75vh; overflow-y: auto; }}
-  .t-problem {{ background: #0a1a0a; border: 1px solid #16a34a; border-radius: 6px;
-                padding: 14px 16px; margin-bottom: 6px; font-family: inherit; }}
-  .t-problem-label {{ font-size: 10px; color: #4ade80; text-transform: uppercase;
-                      letter-spacing: 1px; margin-bottom: 6px; }}
-  .t-problem-text {{ color: #e0e0e0; font-size: 14px; white-space: pre-wrap; }}
+  .t-banner {{ margin-bottom: 6px; }}
+  .t-debrief {{ border-top: 1px solid #1a1a1a; margin-top: 16px; padding-top: 14px; }}
+  .t-debrief-body {{ color: #b0b0b0; font-size: 13px; line-height: 1.7; padding-left: 4px; }}
   .t-setup {{ color: #444; font-size: 12px; margin: 8px 0; border-left: 2px solid #222;
               padding-left: 10px; }}
   .t-setup summary {{ cursor: pointer; list-style: none; }}
@@ -1517,13 +1578,7 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
     {identity_panel}
     {flags_panel_html}
     <div class="panel">
-      <div class="section-title" style="display:flex;align-items:center;justify-content:space-between">
-        Transcript
-        <a href="{report_iframe_src}" target="_blank"
-           style="font-size:11px;color:#555;text-decoration:none;font-weight:400">
-          View generated report →
-        </a>
-      </div>
+      <div class="section-title">Transcript</div>
       {transcript_html}
     </div>
   </div>

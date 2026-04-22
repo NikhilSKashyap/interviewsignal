@@ -294,8 +294,6 @@ class RelayTransport(Transport):
         file_map = {
             "manifest_json": "manifest.json",
             "events_jsonl":  "events.jsonl",
-            "report_html":   "report.html",
-            "report_json":   "report.json",
             "debrief_txt":   "debrief.txt",
         }
         for key, fname in file_map.items():
