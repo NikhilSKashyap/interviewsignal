@@ -31,9 +31,46 @@ RECEIVED_DIR  = INTERVIEW_DIR / "received"
 SESSIONS_DIR  = INTERVIEW_DIR / "sessions"
 PORT = 7832
 
+DEFAULT_RUBRIC = (
+    "Problem understanding (25%): Did the candidate correctly interpret the requirements? "
+    "Did they ask clarifying questions or surface edge cases before diving in?\n\n"
+    "Solution approach (25%): Did they break the problem down well? "
+    "Is the approach sound — not over-engineered, not under-thought?\n\n"
+    "Code quality (25%): Is the final code clean, readable, and correct? "
+    "Are edge cases handled?\n\n"
+    "AI collaboration (25%): Did they direct the AI effectively — precise prompts, "
+    "course-correcting mistakes, iterating rather than accepting the first output blindly?"
+)
+
 
 def ensure_dirs():
     RECEIVED_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _get_config() -> dict:
+    config_file = Path.home() / ".interview" / "config.json"
+    if config_file.exists():
+        try:
+            return json.loads(config_file.read_text())
+        except Exception:
+            pass
+    return {}
+
+
+def _save_config(updates: dict):
+    config_file = Path.home() / ".interview" / "config.json"
+    config_file.parent.mkdir(parents=True, exist_ok=True)
+    config = _get_config()
+    config.update(updates)
+    tmp = config_file.with_suffix(".tmp")
+    tmp.write_text(json.dumps(config, indent=2))
+    os.rename(tmp, config_file)
+    os.chmod(config_file, 0o600)
+
+
+def _is_config_complete() -> bool:
+    cfg = _get_config()
+    return bool(cfg.get("relay_url") and cfg.get("hm_key"))
 
 
 def _load_all_reports() -> list[dict]:
@@ -312,6 +349,201 @@ def _build_candidate_row(r: dict) -> str:
     </tr>"""
 
 
+WIZARD_CSS = """
+  .wizard-wrap { display:flex; justify-content:center; padding:60px 32px; }
+  .wizard-card { background:#111; border:1px solid #222; border-radius:12px;
+                 padding:40px; width:100%; max-width:520px; }
+  .wizard-card.wide { max-width:640px; }
+  .wizard-step { font-size:11px; color:#555; text-transform:uppercase;
+                 letter-spacing:0.1em; margin-bottom:12px; }
+  .wizard-card h2 { font-size:22px; font-weight:700; color:#fff; margin-bottom:12px; }
+  .wizard-card p { font-size:14px; color:#888; margin-bottom:24px; line-height:1.6; }
+  .wizard-card label { display:block; font-size:13px; color:#888;
+                       margin-bottom:6px; margin-top:16px; }
+  .wizard-card label:first-of-type { margin-top:0; }
+  .wizard-field { width:100%; background:#0a0a0a; border:1px solid #333; color:#e0e0e0;
+                  border-radius:6px; padding:10px 12px; font-size:14px; margin-bottom:20px;
+                  outline:none; box-sizing:border-box; font-family:inherit; }
+  .wizard-field:focus { border-color:#555; }
+  .wizard-field.textarea { resize:vertical; min-height:140px; font-size:13px; }
+  .wizard-field.number { width:120px; }
+  .wizard-btns { display:flex; gap:10px; margin-top:4px; }
+  .wizard-hint { font-size:12px; color:#555; margin-top:20px; }
+  .wizard-hint a { color:#60a5fa; text-decoration:none; }
+  .wizard-hint a:hover { text-decoration:underline; }
+  .wizard-error { background:#1f0d0d; border:1px solid #7f1d1d; color:#f87171;
+                  border-radius:6px; padding:10px 14px; font-size:13px; margin-bottom:16px; }
+  .success-code { font-size:32px; font-weight:700; color:#fbbf24;
+                  font-family:monospace; margin:16px 0; letter-spacing:2px; }
+  .install-block { background:#0a0a0a; border:1px solid #222; border-radius:6px;
+                   padding:16px; font-family:monospace; font-size:13px; color:#888;
+                   margin:16px 0; white-space:pre; }
+"""
+
+
+def _build_wizard_screen1_html(error: str = "") -> str:
+    err = f'<div class="wizard-error">{escape(error)}</div>' if error else ""
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Setup — interviewsignal</title>
+<style>{SHARED_CSS}{WIZARD_CSS}</style>
+</head>
+<body>
+<div class="topbar">
+  <h1>interviewsignal</h1>
+  <span class="tagline">Thought process, not puzzles.</span>
+</div>
+<div class="wizard-wrap">
+  <div class="wizard-card">
+    <div class="wizard-step">Step 1 of 3</div>
+    <h2>Welcome to interviewsignal</h2>
+    <p>You need a relay to collect candidate submissions. Deploy your own (~$5/mo on Railway) or self-host.</p>
+    {err}
+    <form method="POST" action="/setup/relay">
+      <label for="relay_url">Relay URL</label>
+      <input id="relay_url" name="relay_url" type="url" class="wizard-field"
+             placeholder="https://myrelay.up.railway.app" required autofocus>
+      <div class="wizard-btns">
+        <button type="submit" class="btn btn-primary">Connect →</button>
+      </div>
+    </form>
+    <p class="wizard-hint">Don't have a relay yet?
+      <a href="https://railway.app" target="_blank">Deploy on Railway →</a>
+    </p>
+  </div>
+</div>
+</body>
+</html>"""
+
+
+def _build_wizard_screen2_html(error: str = "") -> str:
+    err = f'<div class="wizard-error">{escape(error)}</div>' if error else ""
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Setup — interviewsignal</title>
+<style>{SHARED_CSS}{WIZARD_CSS}</style>
+</head>
+<body>
+<div class="topbar">
+  <h1>interviewsignal</h1>
+  <span class="tagline">Thought process, not puzzles.</span>
+</div>
+<div class="wizard-wrap">
+  <div class="wizard-card">
+    <div class="wizard-step">Step 2 of 3</div>
+    <h2>Grading setup</h2>
+    <p>To auto-grade submissions, enter your Anthropic API key. Grading runs locally — your key is never sent to the relay.</p>
+    {err}
+    <form method="POST" action="/setup/api-key">
+      <label for="api_key">Anthropic API key</label>
+      <input id="api_key" name="api_key" type="password" class="wizard-field"
+             placeholder="sk-ant-..." autocomplete="off" autofocus>
+      <div class="wizard-btns">
+        <button type="submit" name="action" value="save" class="btn btn-primary">Save →</button>
+        <button type="submit" name="action" value="skip" class="btn">Skip for now</button>
+      </div>
+    </form>
+    <p class="wizard-hint">Get your key at
+      <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com →</a>
+    </p>
+  </div>
+</div>
+</body>
+</html>"""
+
+
+def _build_create_interview_html(in_wizard: bool = False, error: str = "") -> str:
+    step_label = '<div class="wizard-step">Step 3 of 3</div>' if in_wizard else ""
+    wizard_input = '<input type="hidden" name="in_wizard" value="1">' if in_wizard else ""
+    heading = "Create your first interview" if in_wizard else "Create Interview"
+    cancel_btn = "" if in_wizard else '<a href="/" class="btn" style="margin-left:0">Cancel</a>'
+    err = f'<div class="wizard-error">{escape(error)}</div>' if error else ""
+    rubric_placeholder = escape(DEFAULT_RUBRIC)
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Create Interview — interviewsignal</title>
+<style>{SHARED_CSS}{WIZARD_CSS}</style>
+</head>
+<body>
+<div class="topbar">
+  <h1>interviewsignal</h1>
+  <span class="tagline">Thought process, not puzzles.</span>
+</div>
+<div class="wizard-wrap">
+  <div class="wizard-card wide">
+    {step_label}
+    <h2>{heading}</h2>
+    {err}
+    <form method="POST" action="/create-interview">
+      {wizard_input}
+      <label for="problem">Problem statement <span style="color:#ef4444">*</span></label>
+      <textarea id="problem" name="problem" class="wizard-field textarea" required autofocus
+                placeholder="Describe the problem the candidate should solve..."></textarea>
+      <label for="rubric">Grading rubric <span style="color:#ef4444">*</span></label>
+      <textarea id="rubric" name="rubric" class="wizard-field textarea"
+                placeholder="{rubric_placeholder}"></textarea>
+      <label for="time_limit">Time limit in minutes (optional)</label>
+      <input id="time_limit" name="time_limit" type="number" class="wizard-field number"
+             min="1" placeholder="e.g. 90">
+      <div class="wizard-btns">
+        <button type="submit" class="btn btn-primary">Create Interview →</button>
+        {cancel_btn}
+      </div>
+    </form>
+  </div>
+</div>
+</body>
+</html>"""
+
+
+def _build_create_success_html(code: str) -> str:
+    safe_code = escape(code)
+    install_lines = f"pip install interviewsignal && interview install\n/interview {code}"
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Interview Created — interviewsignal</title>
+<style>{SHARED_CSS}{WIZARD_CSS}</style>
+</head>
+<body>
+<div class="topbar">
+  <h1>interviewsignal</h1>
+  <span class="tagline">Thought process, not puzzles.</span>
+</div>
+<div class="wizard-wrap">
+  <div class="wizard-card">
+    <div style="color:#22c55e;font-size:28px;margin-bottom:8px">✓</div>
+    <h2>Interview created</h2>
+    <p>Share this code with your candidates:</p>
+    <div class="success-code" id="the-code">{safe_code}</div>
+    <p style="font-size:13px;color:#888;margin-bottom:8px">Candidate install command:</p>
+    <div class="install-block">{escape(install_lines)}</div>
+    <div class="wizard-btns" style="margin-top:24px">
+      <button class="btn btn-sm" onclick="copyCode()" style="margin-left:0">Copy Code</button>
+      <a href="/" class="btn btn-primary" style="margin-left:0">Go to Dashboard →</a>
+    </div>
+  </div>
+</div>
+<script>
+function copyCode() {{
+  navigator.clipboard.writeText('{safe_code}').then(function() {{
+    var btn = document.querySelector('.wizard-btns .btn');
+    btn.textContent = 'Copied!';
+    setTimeout(function() {{ btn.textContent = 'Copy Code'; }}, 2000);
+  }});
+}}
+</script>
+</body>
+</html>"""
+
+
 SHARED_CSS = """
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -428,7 +660,10 @@ def _build_dashboard_html(reports: list[dict]) -> str:
 <div class="topbar">
   <h1>interviewsignal</h1>
   <span class="tagline">Thought process, not puzzles.</span>
-  <a href="/audit">Audit Log ↗</a>
+  <div style="margin-left:auto;display:flex;gap:12px;align-items:center">
+    <a href="/create-interview" style="background:#1d4ed8;border:1px solid #1d4ed8;color:#fff;padding:6px 14px;border-radius:6px;font-size:13px;text-decoration:none;margin-left:0">+ Create Interview</a>
+    <a href="/audit" style="font-size:13px;color:#60a5fa;text-decoration:none;margin-left:0">Audit Log ↗</a>
+  </div>
 </div>
 <div class="main">
 
@@ -1892,11 +2127,23 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
         params = parse_qs(parsed.query)
 
         if path == "/" or path == "/dashboard":
+            if not _is_config_complete():
+                self._send_html(_build_wizard_screen1_html())
+                return
             reports = _load_all_reports()
             filter_code = params.get("filter", [""])[0]
             if filter_code:
                 reports = [r for r in reports if r.get("code") == filter_code]
             self._send_html(_build_dashboard_html(reports))
+
+        elif path == "/wizard":
+            self._send_html(_build_wizard_screen1_html())
+
+        elif path == "/create-interview":
+            if not _is_config_complete():
+                self._send_html(_build_wizard_screen1_html())
+                return
+            self._send_html(_build_create_interview_html())
 
         elif path == "/candidate":
             code = params.get("code", [""])[0]
@@ -1977,9 +2224,74 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
         path = parsed.path
 
         length = int(self.headers.get("Content-Length", 0))
-        body = json.loads(self.rfile.read(length)) if length else {}
+        raw_body = self.rfile.read(length) if length else b""
+        content_type = self.headers.get("Content-Type", "")
 
-        if path == "/grade":
+        if "application/x-www-form-urlencoded" in content_type:
+            form_data = parse_qs(raw_body.decode("utf-8"), keep_blank_values=True)
+            body = {k: v[0] if v else "" for k, v in form_data.items()}
+        else:
+            body = json.loads(raw_body) if raw_body else {}
+
+        if path == "/setup/relay":
+            relay_url = body.get("relay_url", "").strip().rstrip("/")
+            if not relay_url:
+                self._send_html(_build_wizard_screen1_html("Please enter a relay URL."))
+                return
+            if "://" not in relay_url:
+                relay_url = "https://" + relay_url
+            try:
+                from interview.core.transport import RelayTransport
+                hm_key = RelayTransport.register_hm(relay_url)
+                _save_config({"relay_url": relay_url, "hm_key": hm_key})
+                self._send_html(_build_wizard_screen2_html())
+            except Exception as e:
+                self._send_html(
+                    _build_wizard_screen1_html(f"Could not connect to relay — check the URL. ({e})")
+                )
+
+        elif path == "/setup/api-key":
+            action = body.get("action", "save")
+            api_key = body.get("api_key", "").strip()
+            if action == "save" and api_key:
+                _save_config({"anthropic_api_key": api_key})
+            self._send_html(_build_create_interview_html(in_wizard=True))
+
+        elif path == "/create-interview":
+            problem = body.get("problem", "").strip()
+            rubric = body.get("rubric", "").strip()
+            time_limit_raw = body.get("time_limit", "").strip()
+            in_wizard = bool(body.get("in_wizard", ""))
+
+            if not problem:
+                self._send_html(
+                    _build_create_interview_html(in_wizard=in_wizard, error="Problem statement is required.")
+                )
+                return
+            if not rubric:
+                rubric = DEFAULT_RUBRIC
+
+            time_limit = None
+            if time_limit_raw:
+                try:
+                    time_limit = int(time_limit_raw)
+                except ValueError:
+                    pass
+
+            try:
+                from interview.core.setup import create_interview
+                result = create_interview(
+                    problem=problem,
+                    rubric=rubric,
+                    time_limit_minutes=time_limit,
+                )
+                self._send_html(_build_create_success_html(result["code"]))
+            except Exception as e:
+                self._send_html(
+                    _build_create_interview_html(in_wizard=in_wizard, error=str(e))
+                )
+
+        elif path == "/grade":
             # Accept entries=[{code, cid}] (relay mode) or codes=[...] (legacy)
             entries = body.get("entries", [])
             if not entries and body.get("codes"):

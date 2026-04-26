@@ -23,22 +23,17 @@ Create interview  →  Share code  →  Candidates work  →  Auto-grade  →  T
 
 **For the candidate:** no scheduling, no whiteboard, no trick questions. You work the way you actually work — with AI assistance, on your own time. You get a session debrief from Claude immediately and your score once the HM grades. Every candidate gets the same shot regardless of timezone, schedule, or interview anxiety.
 
-**For everyone:** `pip install interviewsignal && interview install`. That's the entire setup. No platform to sign up for. No vendor contract. No procurement cycle. No setup cost.
+**For everyone:** `pip install interviewsignal`. That's the entire setup. No platform to sign up for. No vendor contract. No procurement cycle.
 
 ---
 
 ## Install
 
 ```bash
-pip install interviewsignal && interview install
+pip install interviewsignal
 ```
 
 Requires Python 3.10+ and [Claude Code](https://claude.ai/code) or [Codex](https://openai.com/codex).
-
-```bash
-interview configure-api-key    # Anthropic API key — for grading
-interview configure-relay      # relay URL — auto-registers your HM account
-```
 
 > **Enterprise / no personal API key?** See [Enterprise configuration](#enterprise-configuration) below.
 
@@ -48,16 +43,17 @@ interview configure-relay      # relay URL — auto-registers your HM account
 
 ### Hiring manager
 
-```
-/interview hm
+```bash
+interview dashboard
 ```
 
-You'll be asked for:
-- Problem statement
-- Grading rubric (plain language — "weight decomposition 40%, code quality 30%, tests 30%")
-- Time limit (optional)
+That's the only command you ever run. First launch opens a setup wizard in your browser:
 
-You get back a code like `INT-4829-XK`. That's your broad-interview — share it with 5 candidates or 500. They all get the same problem, they all get a fair shot, submissions arrive in your dashboard auto-graded and ranked.
+1. **Relay** — paste your relay URL, click Connect (auto-registers your account)
+2. **Grading** — enter your Anthropic API key, or skip to grade manually later
+3. **Create interview** — paste your problem, rubric, and optional time limit → get a code
+
+After setup, the dashboard is your home. Hit **+ Create Interview** any time to create another.
 
 ### Candidate
 
@@ -86,41 +82,48 @@ to see your score (if the HM has enabled sharing).
 
 ```bash
 interview dashboard              # → http://localhost:7832
-interview dashboard INT-4829-XK  # → filter to one interview's submissions
+interview dashboard INT-4829-XK  # → jump straight to one interview's submissions
 ```
 
 Submissions arrive sorted by score. Flags highlight anomalies — sessions that were too fast, showed no iteration, or had suspiciously uniform timing. Select candidates in bulk and advance or reject in one click. Click into any candidate to see the full transcript, dimension scores, and diff. Add comments. Record your decision.
 
-Use **Verify Chain** to confirm the session log is tamper-evident. Control what candidates see after grading with the **Score Sharing** panel. Claude's session debrief is always shared automatically regardless of this setting.
+Use **Verify Chain** to confirm the session log is tamper-evident.
 
 ---
 
 ## How it works
 
-interviewsignal installs as a skill into your AI coding assistant. It captures the full conversation — prompts, AI reasoning before each action, every tool call (reads, writes, bash commands) — and builds an append-only, hash-chained session log. On `/submit`, the log is sealed and pushed to the relay.
-
 ```
-Candidate side                          HM side
-─────────────────────────               ───────────────────────
-                                        interview configure-relay
-                                          ↓ gets unique hm_key
+HM side                                 Candidate side
+───────────────────────────             ─────────────────────────────
+interview dashboard
+  ↓ setup wizard (first run):
+      relay URL → registers hm_key
+      API key → saved locally
+      create interview form
+  ↓ code INT-4829-XK created
+  ↓ package pushed to relay
 
-/interview hm                           ← share code INT-4829-XK
-  ↓ creates interview
-  ↓ pushes package to relay
+                                        /interview INT-4829-XK
+                                          ↓ fetches problem from relay
+                                          ↓ relay auto-configured from package
+                                          ↓ GitHub OAuth (one account = one submission)
+                                          ↓ interview-{code} repo created
+                                          ↓ session recording starts
+                                              ↓ hooks capture every tool call
+                                              ↓ append-only events.jsonl
+                                              ↓ SHA-256 hash chain
+                                        /submit
+                                          ↓ session sealed
+                                          ↓ git push → interview-{code}
+                                          ↓ pushed to relay
+                                          ↓ Claude debrief written + shown
 
-/interview INT-4829-XK                  interview dashboard
-  ↓ fetches problem from relay            ↓ localhost:7832
-  ↓ relay auto-configured locally         ↓ submissions arrive, ranked
-Session starts                            ↓ auto-graded (if enabled)
-  ↓ hooks capture every tool call         ↓ flags highlight anomalies
-  ↓ append-only events.jsonl              ↓ batch advance / reject
-  ↓ hash chain (tamper-evident)           ↓ hire / next round / reject
-/submit
-  ↓ session sealed
-  ↓ git push → interview-{code} repo
-  ↓ pushed to relay
-  ↓ Claude debrief written + shown
+interview dashboard
+  ↓ submissions arrive, auto-graded
+  ↓ flags highlight anomalies
+  ↓ batch advance / reject
+  ↓ hire / next round / reject
 ```
 
 **On submit:**
@@ -136,15 +139,10 @@ Session starts                            ↓ auto-graded (if enabled)
 
 The relay stores interview packages and candidate sessions so HMs and candidates only need to share a short code — no file transfers, no email attachments.
 
-```bash
-interview configure-relay
-```
+The setup wizard handles relay configuration on first launch. For automation or scripting, you can also configure it directly:
 
-```
-How do you want to deliver interview sessions?
-──────────────────────────────────────────────
-  1. Your own relay  Railway / Render / self-hosted — private, ~$5/mo
-  2. Email only      SMTP — no server, reports arrive by email
+```bash
+interview configure-relay      # CLI alternative to the wizard
 ```
 
 ### Option 1 — Your own relay (~$5/mo, fully private)
@@ -155,7 +153,7 @@ After deploying:
 1. Set `RELAY_API_KEY` (any random string) in Railway → Variables
 2. Add a `/data` volume — this is where sessions are stored
 3. Copy your Railway URL (e.g. `https://myrelay.up.railway.app`)
-4. Run `interview configure-relay` → option 1 → paste URL
+4. Run `interview dashboard` and paste the URL into the setup wizard
 
 Optional — auto-grading on submission:
 ```
@@ -213,8 +211,6 @@ Every candidate session is append-only and SHA-256 hash-chained — any tamperin
 [2026-04-13T11:30:00Z] grade_revised   INT-4829-XK  hash=9f2c1a3b  7.7→8.2  reason="missed edge cases"
 ```
 
-Use `GET /audit/verify` to walk the full chain and confirm integrity.
-
 The session flags system detects common signal-noise issues: sessions completed in under 10 minutes (too fast), fewer than 3 tool calls (few interactions), no failed-then-fixed iteration pattern (no iteration), statistically uniform event timing (possible scripting), and zero prompts logged (no prompts). Flags appear as color-coded indicators in the dashboard — you decide what to do with them.
 
 ---
@@ -255,7 +251,7 @@ INTERVIEW_GRADING_MODEL=...     # model name override
 
 ## Platform support
 
-| Platform | Status | Install |
+| Platform | Status | Notes |
 |---|---|---|
 | Claude Code (Linux/Mac/Windows) | Supported | `interview install` |
 | Codex | Supported | `interview install --platform codex` |
@@ -291,20 +287,21 @@ Raw file contents are never stored — only paths, hashes, and command summaries
 ## Configuration reference
 
 ```bash
-# Grading
+# HM dashboard (primary — starts setup wizard on first run)
+interview dashboard            # → http://localhost:7832
+interview dashboard <CODE>     # jump straight to one interview's submissions
+
+# CLI alternatives for scripting / automation
+interview configure-relay      # relay URL + auto-register HM account
 interview configure-api-key    # Anthropic API key (direct access)
 interview configure-llm        # Enterprise: custom endpoint, proxy, format, extra headers
+interview configure-email      # SMTP fallback (email-only mode, no relay)
 
-# Delivery
-interview configure-relay      # Relay URL + auto-register HM account
-interview configure-email      # SMTP fallback (no relay)
-
-# Runtime
-interview dashboard            # Local HM dashboard at localhost:7832
-interview dashboard <CODE>     # Filter dashboard to one interview's submissions
-interview status               # Check active session
-interview score <CODE>         # Candidate: fetch your score from relay
-interview install --help       # Platform install options
+# Candidate
+interview install              # install hooks + skill for Claude Code
+interview install --platform codex
+interview status               # check active session
+interview score <CODE>         # fetch your score from relay
 ```
 
 All config stored in `~/.interview/config.json` (permissions: 600).
@@ -325,7 +322,7 @@ No telemetry. No analytics. No tracking.
 
 ## Built with
 
-Python stdlib only (no external dependencies for core or relay). Grading via [Anthropic Messages API](https://docs.anthropic.com/en/api) or any compatible endpoint. Dashboard is a self-contained local HTTP server. Reports are single-file HTML. Relay is a single-process stdlib HTTP server backed by flat files.
+Python stdlib only (no external dependencies for core or relay). Grading via [Anthropic Messages API](https://docs.anthropic.com/en/api) or any compatible endpoint. Dashboard is a self-contained local HTTP server. Relay is a single-process stdlib HTTP server backed by flat files.
 
 ---
 

@@ -68,10 +68,8 @@ def _install_claude(verbose=True):
     interview_entry = """
 ## interview skill
 - **interview** (`~/.claude/skills/interview/SKILL.md`) — AI-native interview platform.
-  - `/interview hm` — Hiring manager setup
   - `/interview <CODE>` — Candidate session (captures all activity)
   - `/submit` — Submit session and email report to HM
-  - `/interview dashboard` — HM candidate review dashboard
 When the user types `/interview` or `/submit`, invoke the Skill tool with `skill: "interview"` before doing anything else.
 """
     if claude_md.exists():
@@ -230,7 +228,7 @@ def cmd_install(args):
         return
 
     print(f"\n✓ interviewsignal installed.\n")
-    print(f"  Hiring manager: open Claude Code and type /interview hm")
+    print(f"  Hiring manager: run 'interview dashboard' to create interviews and review submissions")
     print(f"  Candidate:      open Claude Code and type /interview <CODE>\n")
 
 

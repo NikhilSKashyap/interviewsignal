@@ -41,12 +41,13 @@ def encode_package(payload: dict) -> str:
 def create_interview(
     problem: str,
     rubric: str,
-    hm_email: str,
-    cc_emails: list[str],
-    candidate_email: str | None,
-    time_limit_minutes: int | None,
+    hm_email: str = "",
+    cc_emails: list[str] | None = None,
+    candidate_email: str | None = None,
+    time_limit_minutes: int | None = None,
     audit_email: str | None = None,
 ) -> dict:
+    cc_emails = cc_emails or []
     ensure_dirs()
 
     code = generate_code()

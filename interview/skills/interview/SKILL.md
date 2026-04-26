@@ -1,6 +1,6 @@
 ---
 name: interview
-description: "AI-native interview platform. Type `/interview hm` to set up an interview as a hiring manager (define problem, rubric, generate candidate code). Type `/interview <CODE>` to start a candidate session — captures all prompts, responses, tool calls, and file changes. Type `/submit` to end the session, grade locally, and email the full thought-process audit to the hiring manager. Type `/interview dashboard` to open the local HM dashboard for reviewing and scoring candidates."
+description: "AI-native interview platform. Type `/interview <CODE>` to start a candidate session — captures all prompts, responses, tool calls, and file changes. Type `/submit` to end the session, seal the log, and send the full thought-process audit to the hiring manager."
 trigger: /interview
 ---
 
@@ -12,89 +12,19 @@ trigger: /interview
 
 | Command | Who | What |
 |---|---|---|
-| `/interview hm` | Hiring Manager | Set up interview: problem, rubric, time → get code |
 | `/interview <CODE>` | Candidate | Start session, see problem, begin capture |
 | `/submit` | Candidate | Seal session, push to GitHub, show eval |
-| `/interview dashboard` | Hiring Manager | Open local dashboard to review candidates |
 | `/interview status` | Candidate | Show current session status and elapsed time |
 
 ---
 
-## Flow 1 — Hiring Manager Setup (`/interview hm`)
+## Hiring Manager — `/interview hm`
 
-Ask three questions, one at a time:
-
-**1. Problem statement**
-"Paste your problem statement."
-→ Accept multiline. Store as-is.
-
-**2. Evaluation criteria**
-
-Show this exact text to the HM:
-
-```
-Question 2 of 3 — Evaluation Criteria
-
-How should this be evaluated? Type your rubric, or type NA to use the default:
-
-  Default rubric:
-  ┌─────────────────────────────────────────────────────────────────────┐
-  │ Problem understanding (25%): Did the candidate correctly interpret  │
-  │ the requirements? Did they ask clarifying questions or surface edge │
-  │ cases before diving in?                                             │
-  │                                                                     │
-  │ Solution approach (25%): Did they break the problem down well? Is  │
-  │ the approach sound — not over-engineered, not under-thought?        │
-  │                                                                     │
-  │ Code quality (25%): Is the final code clean, readable, and         │
-  │ correct? Are edge cases handled?                                    │
-  │                                                                     │
-  │ AI collaboration (25%): Did they direct the AI effectively —       │
-  │ precise prompts, course-correcting mistakes, iterating rather than  │
-  │ accepting the first output blindly?                                 │
-  └─────────────────────────────────────────────────────────────────────┘
-
-  Type NA to use the default above, or describe your own criteria:
-```
-
-If HM types "NA", "na", "default", or any blank-equivalent: use the default rubric text verbatim.
-Otherwise use whatever the HM typed.
-
-→ The rubric is a guide for the AI grader — plain language, any format. Weights are a hint, not a formula. The HM always has final say and can revise the grade from the dashboard.
-
-**3. Time limit**
-"Time limit? (e.g. '90 minutes', or Enter for none)"
-→ Optional integer (minutes) or null.
-
-Then run:
-
-```bash
-python -m interview.core.setup create \
-  --problem "PROBLEM TEXT HERE" \
-  --rubric "RUBRIC TEXT HERE" \
-  --time-limit <MINUTES>
-```
-
-(Omit `--time-limit` if none given.)
-
-Show the result:
-
-```
-✓ Interview created.
-
-  Code: INT-4829-XK
-
-Share this with your candidate:
-
-  pip install interviewsignal && interview install
-  /interview INT-4829-XK
-
-To review submissions: interview dashboard
-```
+Interview creation has moved to the dashboard. Run `interview dashboard` in your terminal to create interviews, review submissions, and manage grading — all in the browser.
 
 ---
 
-## Flow 2 — Candidate Session (`/interview <CODE>`)
+## Flow — Candidate Session (`/interview <CODE>`)
 
 First, ask the candidate for their identity (two questions, one at a time):
 
@@ -164,19 +94,9 @@ If time limit exceeded:
 
 ---
 
-## Flow 3 — Submit (`/submit`)
+## Submit (`/submit`)
 
 See the `/submit` skill — it handles seal, push, report, and debrief.
-
----
-
-## Flow 4 — HM Dashboard (`/interview dashboard`)
-
-```bash
-python -m interview.dashboard.serve
-```
-
-Opens `http://localhost:7832`.
 
 ---
 
