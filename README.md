@@ -89,7 +89,7 @@ Use **Verify Chain** to confirm the session log is tamper-evident. Control what 
 
 ## How it works
 
-interviewsignal installs as a skill into your AI coding assistant. It captures the full conversation — prompts, AI reasoning before each action, every tool call (reads, writes, bash commands) — and builds an append-only, hash-chained session log. On `/submit`, the log is sealed and pushed to the relay.
+interviewsignal installs as a skill into your AI coding assistant. It captures the full conversation — prompts, AI reasoning before each action, every tool call (reads, writes, bash commands) — and builds an append-only, hash-chained session log. After each turn, it silently commits any changed files to the local repo, so the candidate's `interview-{code}` GitHub repo shows a step-by-step commit history. On `/submit`, the log is sealed and pushed to the relay.
 
 ```
 HM side                                 Candidate side
@@ -111,8 +111,9 @@ interview dashboard
                                               ↓ hooks capture every tool call
                                               ↓ append-only events.jsonl
                                               ↓ SHA-256 hash chain
+                                              ↓ silent commit after each turn
                                         /submit
-                                          ↓ session sealed
+                                          ↓ session sealed + commit log captured
                                           ↓ git push → interview-{code}
                                           ↓ pushed to relay
                                           ↓ score + summary shown (if auto-graded)
@@ -124,10 +125,13 @@ interview dashboard
   ↓ hire / next round / reject
 ```
 
+**During session (after each turn):**
+- Silent `git add -A && git commit` — captures code state after every candidate prompt; commit message is timestamp + prompt snippet; skips if nothing changed
+
 **On submit:**
-1. `session seal` — finalises hash chain, captures git diff (start → end)
-2. Git push — commits all changes to the candidate's `interview-{code}` repo (non-blocking)
-3. Push to relay — sealed session (events + manifest) stored server-side
+1. `session seal` — finalises hash chain, captures git diff (start → end) and full per-prompt commit log
+2. Git push — pushes entire commit history to the candidate's `interview-{code}` repo (non-blocking)
+3. Push to relay — sealed session (events + manifest + commit log) stored server-side
 4. Auto-grade — if enabled and `GRADING_API_KEY` is configured on relay, grade runs immediately; overall score + summary shown to candidate in terminal
 
 ---
@@ -270,9 +274,11 @@ INTERVIEW_GRADING_MODEL=...     # model name override
 | File edits | Path + change summary |
 | Git state | Branch + commit at start and end |
 | Git diff | Full diff (start → submit) |
-| GitHub repo | Auto-created `interview-{code}` repo; code pushed on submit |
+| Per-prompt commits | Silent commit after each turn; timestamp + prompt snippet as message |
+| Commit log | Full commit history (hash, timestamp, message, files changed) in manifest |
+| GitHub repo | Auto-created `interview-{code}` repo; full commit history pushed on submit |
 | Timestamps | Millisecond precision on every event |
-| Session flags | Quality + tamper signals (too fast, no iteration, uniform timing, hooks gap, diff mismatch, prompt ratio) |
+| Session flags | Quality + tamper signals (too fast, no iteration, uniform timing, hooks gap, diff/commit mismatch, prompt ratio) |
 
 The session log is append-only and hash-chained. Any tampering breaks the chain. The dashboard includes a **Verify Chain** button.
 
