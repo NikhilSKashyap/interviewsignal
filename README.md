@@ -21,16 +21,16 @@ Create interview  →  Share code  →  Candidates work  →  Auto-grade  →  T
 
 **For the startup:** you posted a role and got 200 applications. You can't interview all of them live. With interviewsignal, you share one code, submissions arrive auto-graded and ranked, you spend 15 minutes triaging — advance the top 10, reject the rest, done.
 
-**For the candidate:** no scheduling, no whiteboard, no trick questions. You work the way you actually work — with AI assistance, on your own time. You get your score immediately after auto-grading and honest feedback once the HM shares it. Every candidate gets the same shot regardless of timezone, schedule, or interview anxiety.
+**For the candidate:** no scheduling, no whiteboard, no trick questions. You work the way you actually work — with AI assistance, on your own time. You get your score once the HM grades. Every candidate gets the same shot regardless of timezone, schedule, or interview anxiety.
 
-**For everyone:** `pip install interviewsignal`. That's the entire setup. No platform to sign up for. No vendor contract. No procurement cycle.
+**For everyone:** `pip install interviewsignal && interview install`. That's the entire setup. No platform to sign up for. No vendor contract. No procurement cycle. No setup cost.
 
 ---
 
 ## Install
 
 ```bash
-pip install interviewsignal
+pip install interviewsignal && interview install
 ```
 
 Requires Python 3.10+ and [Claude Code](https://claude.ai/code) or [Codex](https://openai.com/codex).
@@ -47,13 +47,9 @@ Requires Python 3.10+ and [Claude Code](https://claude.ai/code) or [Codex](https
 interview dashboard
 ```
 
-That's the only command you ever run. First launch opens a setup wizard in your browser:
+First launch opens a setup wizard in your browser — relay URL, API key, create your first interview. Three screens and you're live.
 
-1. **Relay** — paste your relay URL, click Connect (auto-registers your account)
-2. **Grading** — enter your Anthropic API key, or skip to grade manually later
-3. **Create interview** — paste your problem, rubric, and optional time limit → get a code
-
-After setup, the dashboard is your home. Hit **+ Create Interview** any time to create another.
+The interview form asks for three things: problem statement, grading rubric, and an optional time limit. You get back a code like `INT-4829-XK`. That's your broad-interview — share it with 5 candidates or 500. They all get the same problem, submissions arrive auto-graded and ranked. Hit **+ Create Interview** to create more.
 
 ### Candidate
 
@@ -70,13 +66,13 @@ When done:
 /submit
 ```
 
-The session is sealed and pushed to the relay. Once auto-graded you'll see your overall score and a one-line summary immediately. For the full score breakdown run:
+The session is sealed, pushed to the relay, and auto-graded. You'll see your overall score and a one-line summary in the terminal. Once graded, you can also run:
 
 ```bash
 interview score INT-4829-XK
 ```
 
-(if the HM has enabled sharing).
+to see your score (if the HM has enabled sharing).
 
 ### Hiring manager — review
 
@@ -85,13 +81,15 @@ interview dashboard              # → http://localhost:7832
 interview dashboard INT-4829-XK  # → jump straight to one interview's submissions
 ```
 
-Submissions arrive sorted by score. Flags highlight anomalies — sessions that were too fast, showed no iteration, or had suspiciously uniform timing. Select candidates in bulk and advance or reject in one click. Click into any candidate to see the full transcript, dimension scores, and diff. Add comments. Record your decision.
+Submissions arrive sorted by score. Flags highlight anomalies — sessions that were too fast, showed no iteration, had suspiciously uniform timing, or show signs of tampered hooks (gaps in the event stream, code changes that don't match the tool log). Select candidates in bulk and advance or reject in one click. Click into any candidate to see the full transcript, dimension scores, and diff. Add comments. Record your decision.
 
-Use **Verify Chain** to confirm the session log is tamper-evident.
+Use **Verify Chain** to confirm the session log is tamper-evident. Control what candidates see after grading with the **Score Sharing** panel.
 
 ---
 
 ## How it works
+
+interviewsignal installs as a skill into your AI coding assistant. It captures the full conversation — prompts, AI reasoning before each action, every tool call (reads, writes, bash commands) — and builds an append-only, hash-chained session log. On `/submit`, the log is sealed and pushed to the relay.
 
 ```
 HM side                                 Candidate side
@@ -210,7 +208,7 @@ Every candidate session is append-only and SHA-256 hash-chained — any tamperin
 [2026-04-13T11:30:00Z] grade_revised   INT-4829-XK  hash=9f2c1a3b  7.7→8.2  reason="missed edge cases"
 ```
 
-The session flags system detects common signal-noise issues: sessions completed in under 10 minutes (too fast), fewer than 3 tool calls (few interactions), no failed-then-fixed iteration pattern (no iteration), statistically uniform event timing (possible scripting), and zero prompts logged (no prompts). Flags appear as color-coded indicators in the dashboard — you decide what to do with them.
+The session flags system detects signal-noise issues at two levels. Quality flags catch sessions completed in under 10 minutes (too fast), fewer than 3 tool calls (few interactions), no failed-then-fixed iteration pattern (no iteration), statistically uniform event timing (possible scripting), and zero prompts logged (no prompts). Tamper detection flags catch large gaps in the event stream where hooks may have been disabled (hooks gap), code changes in the git diff that don't match the Write/Edit tool calls in the log (diff mismatch), and tool calls with no corresponding user prompts (selective suppression). Candidates control their own machine — security is detection, not prevention. A sparse or gapped session is its own red flag. Flags appear as color-coded indicators in the dashboard — you decide what to do with them.
 
 ---
 
@@ -274,7 +272,7 @@ INTERVIEW_GRADING_MODEL=...     # model name override
 | Git diff | Full diff (start → submit) |
 | GitHub repo | Auto-created `interview-{code}` repo; code pushed on submit |
 | Timestamps | Millisecond precision on every event |
-| Session flags | Anomaly signals computed on submission (too fast, no iteration, uniform timing, etc.) |
+| Session flags | Quality + tamper signals (too fast, no iteration, uniform timing, hooks gap, diff mismatch, prompt ratio) |
 
 The session log is append-only and hash-chained. Any tampering breaks the chain. The dashboard includes a **Verify Chain** button.
 
