@@ -43,6 +43,7 @@ stdout on PreToolUse injects content back into the AI context.
 
 import datetime
 import json
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -260,6 +261,28 @@ def _find_conv_file(session_id: str) -> "Path | None":
     return None
 
 
+def _silent_git_commit(user_text: str):
+    """
+    Stage and commit any changed files after each turn.
+    Non-blocking: 2-second timeout per subprocess. Skips if nothing changed.
+    Commit message: HH:MM:SS — first 60 chars of the candidate's prompt.
+    """
+    try:
+        subprocess.run(["git", "add", "-A"], timeout=2, capture_output=True)
+        # diff --cached returns 1 when there are staged changes, 0 when clean
+        result = subprocess.run(
+            ["git", "diff", "--cached", "--quiet"], timeout=2, capture_output=True
+        )
+        if result.returncode == 0:
+            return  # nothing staged
+        ts = time.strftime("%H:%M:%S")
+        snippet = user_text[:60].replace("\n", " ").strip() if user_text else ""
+        msg = f"{ts} — {snippet}" if snippet else ts
+        subprocess.run(["git", "commit", "-m", msg], timeout=2, capture_output=True)
+    except Exception:
+        pass
+
+
 def handle_stop(data: dict) -> int:
     """
     Stop hook — fires when Claude finishes a response turn.
@@ -354,6 +377,10 @@ def handle_stop(data: dict) -> int:
     if session:
         session["last_stop_ts"] = time.time()
         ACTIVE_SESSION_FILE.write_text(json.dumps(session, indent=2))
+
+    # Silent per-prompt commit — non-blocking, skips if nothing changed
+    prompt_text = user_msgs[-1][1] if user_msgs else ""
+    _silent_git_commit(prompt_text)
 
     return 0
 

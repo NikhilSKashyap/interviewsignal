@@ -97,6 +97,46 @@ def _get_git_diff(base_commit: str | None) -> str:
         return ""
 
 
+def _get_git_commit_log(base_commit: str | None) -> list[dict]:
+    """
+    Extract the per-prompt commit log from base_commit to HEAD.
+    Returns a list of {hash, timestamp, message, files_changed} dicts,
+    newest-first. Empty list if no git repo or no commits since base.
+    """
+    if not base_commit:
+        return []
+    try:
+        out = subprocess.check_output(
+            ["git", "log", f"{base_commit}..HEAD", "--format=%H\t%ai\t%s"],
+            stderr=subprocess.DEVNULL,
+        ).decode().strip()
+        if not out:
+            return []
+        commits = []
+        for line in out.splitlines():
+            parts = line.split("\t", 2)
+            if len(parts) != 3:
+                continue
+            commit_hash, timestamp, message = parts
+            try:
+                files_out = subprocess.check_output(
+                    ["git", "diff-tree", "--no-commit-id", "-r", "--name-only", commit_hash],
+                    stderr=subprocess.DEVNULL,
+                ).decode().strip()
+                files_changed = [f for f in files_out.splitlines() if f]
+            except Exception:
+                files_changed = []
+            commits.append({
+                "hash":          commit_hash[:8],
+                "timestamp":     timestamp.strip(),
+                "message":       message.strip(),
+                "files_changed": files_changed,
+            })
+        return commits
+    except Exception:
+        return []
+
+
 def _create_github_repo(github_token: str, code: str) -> str | None:
     """
     Create a public GitHub repo for this interview session via the GitHub API.
@@ -535,9 +575,10 @@ def seal_session(code: str) -> dict:
         if not push_ok:
             session["github_repo_url"] = None
 
-    # Final git diff
+    # Final git diff + per-prompt commit log
     git_base = session.get("git_base_commit")
     git_diff = _get_git_diff(git_base)
+    commit_log = _get_git_commit_log(git_base)
     final_git = _get_git_snapshot()
 
     git_diff_note = ""
@@ -581,6 +622,7 @@ def seal_session(code: str) -> dict:
         "elapsed_minutes":   elapsed_minutes,
         "git_base_commit":   session.get("git_base_commit"),
         "git_diff":          git_diff,
+        "commit_log":        commit_log,
         "event_count":       len(events),
         "final_hash":        events[-1]["hash"] if events else "",
         "sealed":            True,

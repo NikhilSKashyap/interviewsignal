@@ -65,6 +65,11 @@ def compute_flags(events: list[dict], manifest: dict) -> list[dict]:
     except Exception:
         pass
 
+    try:
+        flags.extend(_flag_commit_event_mismatch(events, manifest))
+    except Exception:
+        pass
+
     return flags
 
 
@@ -425,6 +430,68 @@ def _flag_prompt_event_ratio(events: list[dict], manifest: dict) -> list[dict]:
             "detail":   (
                 f"{tool_calls} tool calls but only {prompts} prompt(s) "
                 f"(ratio 1:{ratio}). Some prompts may not have been captured."
+            ),
+        }]
+
+    return []
+
+
+def _flag_commit_event_mismatch(events: list[dict], manifest: dict) -> list[dict]:
+    """
+    Cross-check the per-prompt commit log against Write/Edit tool calls.
+
+    Direction 1 — session commits exist but zero Write/Edit tool calls:
+      Code was committed but no file writes were recorded through the AI
+      assistant. Candidate likely wrote code directly outside the AI tool.
+
+    Direction 2 — Write/Edit tool calls exist but no session commits:
+      AI was used to write files but no per-prompt commits were created.
+      Suggests the Stop hook was disabled after session start.
+    """
+    commit_log = manifest.get("commit_log", [])
+
+    # Filter out the initial "session start" commit
+    session_commits = [
+        c for c in commit_log
+        if "session start" not in c.get("message", "")
+    ]
+
+    # Count Write/Edit tool calls
+    write_edit_count = 0
+    for e in events:
+        if e.get("type") != "tool_call":
+            continue
+        payload = e.get("payload", {})
+        tool_name = payload.get("tool_name", "") if isinstance(payload, dict) else ""
+        if not tool_name:
+            tool_name = e.get("tool_name", "")
+        tl = tool_name.lower()
+        if "write" in tl or "edit" in tl:
+            write_edit_count += 1
+
+    # Direction 1: commits with no AI file writes → worked outside AI assistant
+    if session_commits and write_edit_count == 0:
+        return [{
+            "id":       "commit_event_mismatch",
+            "severity": "red",
+            "label":    "Code committed outside AI assistant",
+            "detail":   (
+                f"{len(session_commits)} commit(s) recorded but zero Write/Edit "
+                "tool calls in the session log. Candidate likely wrote code "
+                "directly outside the AI assistant."
+            ),
+        }]
+
+    # Direction 2: AI file writes with no per-prompt commits → hook commits missing
+    if write_edit_count >= 3 and not session_commits:
+        return [{
+            "id":       "commit_event_mismatch",
+            "severity": "yellow",
+            "label":    "Per-prompt commits missing",
+            "detail":   (
+                f"{write_edit_count} Write/Edit tool call(s) recorded but no "
+                "per-prompt commits found in session. Stop hook may have been "
+                "disabled after session start."
             ),
         }]
 
