@@ -643,9 +643,6 @@ def _build_dashboard_html(
                     padding: 16px; margin-bottom: 24px; font-size: 13px; color: #888; }}
   .received-hint strong {{ color: #ccc; }}
   code {{ font-family: monospace; font-size: 12px; color: #555; }}
-  .audit-link {{ font-size: 11px; color: #444; margin-left: auto; }}
-  .audit-link a {{ color: #444; text-decoration: none; }}
-  .audit-link a:hover {{ color: #888; }}
   /* Sort + filter controls */
   .controls-row {{ display: flex; gap: 12px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }}
   .controls-row label {{ font-size: 12px; color: #888; }}
@@ -691,7 +688,6 @@ def _build_dashboard_html(
   <span class="tagline">Thought process, not puzzles.</span>
   <div style="margin-left:auto;display:flex;gap:12px;align-items:center">
     <a href="/create-interview" style="background:#1d4ed8;border:1px solid #1d4ed8;color:#fff;padding:6px 14px;border-radius:6px;font-size:13px;text-decoration:none;margin-left:0">+ Create Interview</a>
-    <a href="/audit" style="font-size:13px;color:#60a5fa;text-decoration:none;margin-left:0">Audit Log ↗</a>
   </div>
 </div>
 <div class="main">
@@ -1475,7 +1471,6 @@ def _render_transcript_html(events: list, manifest: dict | None = None) -> str:
 def _build_candidate_detail_html(code: str, cid: str = "") -> str:
     """Full candidate detail page: report + comments + decision buttons."""
     from interview.core.decisions import get_comments, get_decision, is_graded
-    from interview.core.audit import read_events as read_audit_events
 
     # In relay mode with cid, fetch all state from the relay session object
     relay_session = None
@@ -1487,7 +1482,6 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
         raw_comments    = relay_session.get("comments", [])
         decision_obj    = relay_session.get("decision")
         graded          = relay_session.get("grading") is not None
-        audit_events    = relay_session.get("audit_entries", [])
         current_grading = relay_session.get("grading") or {}
         grading_history = relay_session.get("grading_history", [])
         session_flags   = relay_session.get("flags", [])
@@ -1495,7 +1489,6 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
         raw_comments    = get_comments(code)
         decision_obj    = get_decision(code)
         graded          = is_graded(code)
-        audit_events    = read_audit_events(code)
         current_grading = {}
         grading_history = []
         # Load or compute flags for local sessions
@@ -1552,30 +1545,6 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
           <span style="color:#555;font-size:12px;margin-left:12px">{recorded}</span>
         </div>
         <div style="color:#888;font-size:13px;margin-top:8px">Reason: {decision_reason}</div>"""
-
-    # Audit trail
-    audit_rows = ""
-    for e in audit_events:
-        etype = e.get("type", "")
-        ts = escape(e.get("ts") or e.get("timestamp_iso", ""))
-        h = escape(e.get("hash", "")[:8])
-        color_map = {
-            "grade_recorded":     "#fbbf24",
-            "grade_revised":      "#f97316",
-            "identity_revealed":  "#60a5fa",
-            "comment_added":      "#a78bfa",
-            "decision_recorded":  "#4ade80",
-            "next_round_scheduled": "#60a5fa",
-        }
-        color = color_map.get(etype, "#555")
-        audit_rows += (
-            f'<div class="audit-row">'
-            f'<span style="color:{color}">{escape(etype)}</span>'
-            f'<span class="audit-ts">{ts}</span>'
-            f'<span class="audit-hash">{h}</span>'
-            f'</div>'
-        )
-
 
     # Grade panel (relay mode — when we have grading data)
     grade_panel_html = ""
@@ -1838,10 +1807,6 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
   textarea:focus {{ outline: none; border-color: #555; }}
   .decision-btns {{ display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }}
   .current-decision {{ font-size: 14px; font-weight: 600; margin-bottom: 8px; }}
-  .audit-row {{ display: grid; grid-template-columns: 1fr 160px 80px; font-size: 11px;
-                font-family: monospace; padding: 4px 0; border-bottom: 1px solid #1a1a1a; }}
-  .audit-ts {{ color: #555; }}
-  .audit-hash {{ color: #333; }}
   .back-link {{ color: #60a5fa; text-decoration: none; font-size: 13px; margin-bottom: 24px; display: block; }}
   .reason-input {{ width: 100%; margin-top: 8px; background: #0a0a0a; border: 1px solid #333;
                    color: #e0e0e0; border-radius: 6px; padding: 8px; font-size: 13px; }}
@@ -1911,7 +1876,7 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
   <div>
     <!-- Comments -->
     <div class="panel">
-      <div class="section-title">Comments <span style="color:#555;font-size:10px">(append-only · audited)</span></div>
+      <div class="section-title">Comments <span style="color:#555;font-size:10px">(append-only)</span></div>
       <div id="comments-list">{comments_html}</div>
       <textarea id="comment-input" placeholder="Add a note... (cannot be edited or deleted)"></textarea>
       <button class="btn btn-sm" style="margin-top:8px" id="btn-add-comment" data-code="{safe_code}" {cid_attr}>Add Comment</button>
@@ -1928,12 +1893,6 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
         <button class="btn btn-sm btn-next" id="btn-next" data-code="{safe_code}" {cid_attr} {'disabled' if not graded else ''}>→ Next Round</button>
         <button class="btn btn-sm btn-reject" id="btn-reject" data-code="{safe_code}" {cid_attr} {'disabled' if not graded else ''}>✗ Reject</button>
       </div>
-    </div>
-
-    <!-- Audit trail -->
-    <div class="panel">
-      <div class="section-title">Audit Trail <a href="/audit?code={quote(code, safe='')}" style="font-size:10px;color:#444;font-weight:400;float:right">full log ↗</a></div>
-      {audit_rows if audit_rows else '<div style="color:#555;font-size:12px">No HM actions recorded yet.</div>'}
     </div>
 
     <!-- Session integrity -->
@@ -1971,7 +1930,7 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
     document.getElementById(id)?.addEventListener('click', function() {{
       const decision = {{'btn-hire':'hire','btn-next':'next_round','btn-reject':'reject'}}[id];
       const reason = document.getElementById('decision-reason').value.trim();
-      if (!confirm('Record decision: ' + decision.toUpperCase() + '?\\nThis will be audit-logged.')) return;
+      if (!confirm('Record decision: ' + decision.toUpperCase() + '?')) return;
       fetch('/record-decision', {{method:'POST', headers:{{'Content-Type':'application/json'}},
         body: JSON.stringify({{code: _code, cid: _cid, decision, reason}})}})
         .then(r => r.json()).then(d => {{
@@ -2079,74 +2038,6 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
 </html>"""
 
 
-def _build_audit_log_html(code: str | None = None) -> str:
-    """Full audit log viewer — all events or filtered to one interview."""
-    from interview.core.audit import read_events, verify_chain
-
-    events = read_events(code)
-    ok, msg = verify_chain()
-
-    rows = ""
-    for e in events:
-        etype = escape(e["type"])
-        ts = escape(e.get("timestamp_iso", ""))
-        ecode_raw = e.get("code", "")
-        ecode = escape(ecode_raw)
-        h = escape(e.get("hash", ""))
-        prev = escape(e.get("prev_hash", "")[:8])
-        payload_str = escape(json.dumps(e.get("payload", {}))[:120])
-        color_map = {
-            "grade_recorded":     "#fbbf24", "grade_revised": "#f97316",
-            "identity_revealed":  "#60a5fa",
-            "comment_added":      "#a78bfa", "decision_recorded": "#4ade80",
-            "next_round_scheduled": "#60a5fa", "report_opened": "#555",
-        }
-        color = color_map.get(e["type"], "#555")
-        rows += f"""<tr>
-          <td style="color:{color};font-weight:600">{etype}</td>
-          <td><a href="/candidate?code={quote(ecode_raw, safe='')}" style="color:#60a5fa;text-decoration:none">{ecode}</a></td>
-          <td style="color:#888">{ts}</td>
-          <td style="color:#444;font-size:11px">{prev}…→{h[:8]}</td>
-          <td style="color:#555;font-size:11px;font-family:monospace">{payload_str}</td>
-        </tr>"""
-
-    integrity_color = "#22c55e" if ok else "#ef4444"
-    integrity_icon = "✓" if ok else "✗"
-
-    return f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>Audit Log — interviewsignal</title>
-<style>
-  {SHARED_CSS}
-  table {{ width: 100%; border-collapse: collapse; font-size: 12px; }}
-  th {{ text-align: left; color: #555; font-size: 11px; text-transform: uppercase;
-        letter-spacing: 0.06em; padding: 8px 12px; border-bottom: 1px solid #222; }}
-  td {{ padding: 8px 12px; border-bottom: 1px solid #111; vertical-align: top; }}
-  .integrity {{ padding: 12px 20px; border-radius: 8px; margin-bottom: 24px;
-                border: 1px solid; font-size: 13px; }}
-  .integrity.ok {{ background: #0d1f0d; border-color: #166534; color: #4ade80; }}
-  .integrity.fail {{ background: #1f0d0d; border-color: #7f1d1d; color: #f87171; }}
-</style>
-</head>
-<body>
-<div class="topbar">
-  <h1>interviewsignal</h1>
-  <span class="tagline">Audit Log{' — ' + code if code else ''}</span>
-  <a href="/">← Dashboard</a>
-</div>
-<div class="main">
-  <div class="integrity {'ok' if ok else 'fail'}">
-    {integrity_icon} Chain integrity: {msg}
-  </div>
-  {'<p style="color:#555;font-size:13px;padding:32px 0">No audit events recorded yet.</p>' if not events else
-   '<table><thead><tr><th>Event</th><th>Interview</th><th>Timestamp</th><th>Hash chain</th><th>Payload</th></tr></thead><tbody>' + rows + '</tbody></table>'}
-</div>
-</body>
-</html>"""
-
-
 class DashboardHandler(http.server.BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass  # Suppress request logs
@@ -2176,7 +2067,6 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
             pass
 
     def do_GET(self):
-        from interview.core import audit as audit_mod
         parsed = urlparse(self.path)
         path = parsed.path
         params = parse_qs(parsed.query)
@@ -2229,10 +2119,6 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
             if not code:
                 self._send_html("<p>No code specified.</p>", 400)
                 return
-            # Log report_opened audit event (once per session via simple dedup)
-            existing = audit_mod.read_events(code)
-            if not any(e["type"] == "report_opened" for e in existing):
-                audit_mod.append("report_opened", code, {})
             self._send_html(_build_candidate_detail_html(code, cid))
 
         elif path == "/report-raw":
@@ -2286,15 +2172,10 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
                     result["graded_at"]    = relay_session.get("graded_at")
             self._send_json(result)
 
-        elif path == "/audit":
-            code = params.get("code", [""])[0] or None
-            self._send_html(_build_audit_log_html(code))
-
         else:
             self._send_html("<p>Not found.</p>", 404)
 
     def do_POST(self):
-        from interview.core import audit as audit_mod
         from interview.core.decisions import (
             add_comment, record_decision, record_reveal, save_grade
         )

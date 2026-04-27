@@ -119,7 +119,7 @@ class EmailTransport(Transport):
     - send()           → SMTP via email_sender.send_report()
     - list_sessions()  → reads ~/.interview/received/*.json
     - get_session()    → reads ~/.interview/received/<code>.json
-    - post_action()    → applies locally via decisions / audit modules
+    - post_action()    → applies locally via decisions module
     """
 
     def send(self, code: str) -> bool:

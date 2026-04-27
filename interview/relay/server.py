@@ -266,9 +266,6 @@ class RelayHandler(BaseHTTPRequestHandler):
             if action == "sharing":
                 return self._get_sharing(hm_key, parts[1])
 
-        if parts == ["audit", "verify"]:
-            return self._get_audit_verify(hm_key)
-
         self._error(404, "not_found", f"No route for GET {self.path}")
 
     def do_POST(self):
@@ -497,9 +494,6 @@ class RelayHandler(BaseHTTPRequestHandler):
         if data is None:
             return self._error(404, "file_not_found", f"{filename} not found for {code}/{cid}.")
         self._text(data, content_type)
-
-    def _get_audit_verify(self, hm_key: str):
-        self._json(_store.verify_all_chains(hm_key))
 
     def _get_sharing(self, hm_key: str, code: str):
         """GET /sessions/{code}/<anything>/sharing — return current sharing config."""

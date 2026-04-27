@@ -71,7 +71,7 @@ def record_decision(
 ) -> dict:
     """
     Record a hiring decision for a candidate.
-    Overwrites any previous decision (but the audit log preserves history).
+    Overwrites any previous decision.
     """
     decision = decision.strip().lower()
     if decision not in VALID_DECISIONS:
@@ -118,10 +118,7 @@ def is_graded(code: str) -> bool:
 
 
 def save_grade(code: str, grading: dict) -> dict:
-    """
-    Save AI grading result and log the audit event.
-    This is what unlocks the Reveal button.
-    """
+    """Save AI grading result."""
     grading_file = SESSIONS_DIR / code / "grading.json"
     grading_file.parent.mkdir(parents=True, exist_ok=True)
     grading["graded_at_ms"] = int(time.time() * 1000)

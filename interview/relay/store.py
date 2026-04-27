@@ -14,8 +14,8 @@ Layout under <data_dir>:
         <code>/
           <cid>/               — cid = sha256(candidate_email)[:12]
             manifest.json, events.jsonl, report.html, report.json
-            grading.json, comments.jsonl, decision.json
-            audit.jsonl, meta.json
+            grading.json, grading_history.jsonl, comments.jsonl, decision.json
+            flags.json, meta.json
 
 All writes are atomic (write .tmp → rename).
 Single-process assumption: HTTPServer is single-threaded; no file locking needed.
@@ -276,26 +276,6 @@ class SessionStore:
             json.dumps(meta, indent=2),
         )
 
-    # ─── audit ────────────────────────────────────────────────────────────────
-
-    def _last_audit_hash(self, hm_key: str, code: str, cid: str) -> str:
-        entries = self._load_jsonl(self._session_dir(hm_key, code, cid) / "audit.jsonl")
-        return entries[-1]["hash"] if entries else "0" * 16
-
-    def append_audit(self, hm_key: str, code: str, cid: str, event_type: str, extra: dict | None = None):
-        prev_hash = self._last_audit_hash(hm_key, code, cid)
-        entry = {
-            "type":      event_type,
-            "code":      code,
-            "cid":       cid,
-            "ts":        time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "prev_hash": prev_hash,
-            **(extra or {}),
-        }
-        entry["hash"] = self._hash_chain(prev_hash, entry)
-        self._append_jsonl(self._session_dir(hm_key, code, cid) / "audit.jsonl", entry)
-        return entry
-
     # ─── sessions ─────────────────────────────────────────────────────────────
 
     def session_exists(self, hm_key: str, code: str, cid: str) -> bool:
@@ -346,7 +326,6 @@ class SessionStore:
         if candidate_name:
             meta["candidate_name"] = candidate_name
         self._save_meta(hm_key, code, cid, meta)
-        self.append_audit(hm_key, code, cid, "session_submitted")
 
         # Compute and persist quality flags
         try:
@@ -380,7 +359,6 @@ class SessionStore:
         grading_history = self._load_jsonl(d / "grading_history.jsonl")
         comments        = self._load_jsonl(d / "comments.jsonl")
         decision        = self._load_json(d / "decision.json")
-        audit           = self._load_jsonl(d / "audit.jsonl")
         flags           = self._load_json(d / "flags.json") or []
         events          = self._load_jsonl(d / "events.jsonl")
         debrief_path    = d / "debrief.txt"
@@ -403,7 +381,6 @@ class SessionStore:
             "grading_history": grading_history,
             "comments":        comments,
             "decision":        decision,
-            "audit_entries":   audit,
             "flags":           flags,
         }
 
@@ -527,23 +504,10 @@ class SessionStore:
         return {"score": "none"}
 
     def save_sharing_config(self, hm_key: str, code: str, config: dict) -> dict:
-        """Persist an HM sharing override for this code. Audit-logged globally."""
+        """Persist an HM sharing override for this code."""
         override_path = self._sharing_override_path(hm_key, code)
         override_path.parent.mkdir(parents=True, exist_ok=True)
         self._write_atomic(override_path, json.dumps(config, indent=2))
-        # Append to a per-code sharing audit log (not per-cid)
-        audit_path = self._hm_dir(hm_key) / "sharing" / f"{code}_audit.jsonl"
-        entries = self._load_jsonl(audit_path)
-        prev_hash = entries[-1]["hash"] if entries else "0" * 16
-        entry = {
-            "type":      "sharing_updated",
-            "code":      code,
-            "ts":        time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "config":    config,
-            "prev_hash": prev_hash,
-        }
-        entry["hash"] = self._hash_chain(prev_hash, entry)
-        self._append_jsonl(audit_path, entry)
         return config
 
     def get_score_response(self, hm_key: str, code: str, cid: str) -> dict | None:
@@ -578,8 +542,6 @@ class SessionStore:
             result["debrief"] = debrief_bytes.decode()
 
         return result
-
-    # ─── audit verification ───────────────────────────────────────────────────
 
     # ─── GitHub OAuth state storage ───────────────────────────────────────────
 
@@ -626,31 +588,3 @@ class SessionStore:
         subs.setdefault(code, {})[str(github_id)] = cid
         self._write_atomic(self._github_subs_path(), json.dumps(subs, indent=2))
 
-    # ─── audit verification ───────────────────────────────────────────────────
-
-    def verify_all_chains(self, hm_key: str) -> dict:
-        broken = []
-        total = 0
-        sessions_dir = self._sessions_dir(hm_key)
-        if not sessions_dir.exists():
-            return {"ok": True, "entries": 0, "message": "No sessions."}
-        for code_dir in sessions_dir.iterdir():
-            if not code_dir.is_dir():
-                continue
-            for cid_dir in code_dir.iterdir():
-                if not cid_dir.is_dir():
-                    continue
-                entries = self._load_jsonl(cid_dir / "audit.jsonl")
-                prev = "0" * 16
-                for i, entry in enumerate(entries):
-                    total += 1
-                    stored_hash = entry.get("hash", "")
-                    check_entry = {k: v for k, v in entry.items() if k != "hash"}
-                    expected = self._hash_chain(prev, check_entry)
-                    if stored_hash != expected:
-                        label = f"{code_dir.name}/{cid_dir.name} entry {i}"
-                        broken.append(f"{label}: expected {expected}, got {stored_hash}")
-                    prev = stored_hash
-        if broken:
-            return {"ok": False, "entries": total, "message": f"Hash mismatch: {broken[0]}"}
-        return {"ok": True, "entries": total, "message": "Chain intact."}

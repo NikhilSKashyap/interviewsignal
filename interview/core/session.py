@@ -451,7 +451,6 @@ def start_session(code: str, candidate_email: str | None = None, candidate_name:
         "candidate_name":     resolved_candidate_name,
         "hm_email":           interview.get("hm_email", ""),
         "cc_emails":          interview.get("cc_emails", []),
-        "audit_email":        interview.get("audit_email"),
         "time_limit_minutes": interview.get("time_limit_minutes"),
         "anonymize":          interview.get("anonymize", False),
         # NOTE: rubric intentionally NOT stored — the HM's rubric must never
