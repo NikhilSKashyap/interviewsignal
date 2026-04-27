@@ -21,7 +21,7 @@ Create interview  →  Share code  →  Candidates work  →  Auto-grade  →  T
 
 **For the startup:** you posted a role and got 200 applications. You can't interview all of them live. With interviewsignal, you share one code, submissions arrive auto-graded and ranked, you spend 15 minutes triaging — advance the top 10, reject the rest, done.
 
-**For the candidate:** no scheduling, no whiteboard, no trick questions. You work the way you actually work — with AI assistance, on your own time. You get a session debrief from Claude immediately and your score once the HM grades. Every candidate gets the same shot regardless of timezone, schedule, or interview anxiety.
+**For the candidate:** no scheduling, no whiteboard, no trick questions. You work the way you actually work — with AI assistance, on your own time. You get your score immediately after auto-grading and honest feedback once the HM shares it. Every candidate gets the same shot regardless of timezone, schedule, or interview anxiety.
 
 **For everyone:** `pip install interviewsignal`. That's the entire setup. No platform to sign up for. No vendor contract. No procurement cycle.
 
@@ -70,13 +70,13 @@ When done:
 /submit
 ```
 
-The session is sealed, pushed to the relay, and Claude writes a session debrief — an honest reflection on what you did well, what you missed, and how you used the AI. It's shown in the terminal immediately. Once graded, you can also run:
+The session is sealed and pushed to the relay. Once auto-graded you'll see your overall score and a one-line summary immediately. For the full score breakdown run:
 
 ```bash
 interview score INT-4829-XK
 ```
 
-to see your score (if the HM has enabled sharing).
+(if the HM has enabled sharing).
 
 ### Hiring manager — review
 
@@ -117,7 +117,7 @@ interview dashboard
                                           ↓ session sealed
                                           ↓ git push → interview-{code}
                                           ↓ pushed to relay
-                                          ↓ Claude debrief written + shown
+                                          ↓ score + summary shown (if auto-graded)
 
 interview dashboard
   ↓ submissions arrive, auto-graded
@@ -129,9 +129,8 @@ interview dashboard
 **On submit:**
 1. `session seal` — finalises hash chain, captures git diff (start → end)
 2. Git push — commits all changes to the candidate's `interview-{code}` repo (non-blocking)
-3. Push to relay — sealed session (events + manifest + debrief) stored server-side
-4. Claude debrief — reads the event log, writes `debrief.txt`, shown to candidate immediately
-5. Auto-grade — if enabled and `GRADING_API_KEY` is configured on relay, grade runs immediately
+3. Push to relay — sealed session (events + manifest) stored server-side
+4. Auto-grade — if enabled and `GRADING_API_KEY` is configured on relay, grade runs immediately; overall score + summary shown to candidate in terminal
 
 ---
 
@@ -275,7 +274,6 @@ INTERVIEW_GRADING_MODEL=...     # model name override
 | Git diff | Full diff (start → submit) |
 | GitHub repo | Auto-created `interview-{code}` repo; code pushed on submit |
 | Timestamps | Millisecond precision on every event |
-| Session debrief | Claude's post-session reflection (written on /submit, stored as debrief.txt) |
 | Session flags | Anomaly signals computed on submission (too fast, no iteration, uniform timing, etc.) |
 
 The session log is append-only and hash-chained. Any tampering breaks the chain. The dashboard includes a **Verify Chain** button.
@@ -310,7 +308,7 @@ All config stored in `~/.interview/config.json` (permissions: 600).
 
 ## Privacy
 
-Candidate sessions stored on relay: `events.jsonl`, `manifest.json`, `debrief.txt`, `flags.json`. Raw file contents are never stored.
+Candidate sessions stored on relay: `events.jsonl`, `manifest.json`, `flags.json`. Raw file contents are never stored.
 
 Grading sends the session timeline and git diff to the configured AI endpoint using your own API key — interviewsignal never sees it.
 
@@ -328,7 +326,7 @@ Python stdlib only (no external dependencies for core or relay). Grading via [An
 
 ## Contributing
 
-**Prompts** — the debrief and grading instructions are open and community-editable. See [`prompts/debrief.md`](prompts/debrief.md) for contribution guidelines. Good prompts improve what every candidate sees after every interview.
+**Prompts** — the grading instructions are open and community-editable. The full interview skill is in [`interview/skills/interview/SKILL.md`](interview/skills/interview/SKILL.md).
 
 **Worked examples** — run a real session, save output to `worked/{slug}/`, write an honest `review.md`, open a PR.
 
