@@ -3,6 +3,10 @@ interview.core.flags
 --------------------
 Compute session quality flags from existing event data.
 Pure functions — no side effects, no network calls, stdlib only.
+
+Two categories of flags:
+  1. Session quality  — too_fast, few_interactions, no_iteration, uniform_timing, no_prompts
+  2. Tamper detection — hooks_gap, diff_event_mismatch, heartbeat_gap, prompt_event_ratio
 """
 
 import statistics
@@ -19,6 +23,7 @@ def compute_flags(events: list[dict], manifest: dict) -> list[dict]:
     """
     flags: list[dict] = []
 
+    # Session quality flags
     try:
         flags.extend(_flag_too_fast(manifest))
     except Exception:
@@ -41,6 +46,22 @@ def compute_flags(events: list[dict], manifest: dict) -> list[dict]:
 
     try:
         flags.extend(_flag_no_prompts(events))
+    except Exception:
+        pass
+
+    # Tamper detection flags
+    try:
+        flags.extend(_flag_hooks_gap(events, manifest))
+    except Exception:
+        pass
+
+    try:
+        flags.extend(_flag_diff_event_mismatch(events, manifest))
+    except Exception:
+        pass
+
+    try:
+        flags.extend(_flag_prompt_event_ratio(events, manifest))
     except Exception:
         pass
 
@@ -233,4 +254,178 @@ def _flag_no_prompts(events: list[dict]) -> list[dict]:
             "label":    "No prompts or thinking recorded",
             "detail":   "No user_prompt or thinking events found in the session log.",
         }]
+    return []
+
+
+# ── tamper detection flags ───────────────────────────────────────────────────
+
+def _flag_hooks_gap(events: list[dict], manifest: dict) -> list[dict]:
+    """
+    Detect long gaps in the event stream that suggest hooks were disabled
+    mid-session. If the session ran for N minutes but has a gap > 33% of
+    total elapsed time with no events, flag it.
+
+    Red   if largest gap > 50% of elapsed time.
+    Yellow if largest gap > 33% of elapsed time.
+    """
+    elapsed = manifest.get("elapsed_minutes")
+    if not elapsed or float(elapsed) < 5:
+        return []  # too short to judge
+
+    elapsed_ms = float(elapsed) * 60 * 1000
+
+    timestamps = []
+    for e in events:
+        ts = e.get("timestamp_ms") or e.get("timestamp")
+        if ts is not None:
+            # Normalise: if timestamp is in seconds (< 1e12), convert to ms
+            ts = float(ts)
+            if ts < 1e12:
+                ts = ts * 1000
+            timestamps.append(ts)
+
+    if len(timestamps) < 3:
+        return []  # not enough events to compute gaps
+
+    timestamps.sort()
+    gaps = [timestamps[i + 1] - timestamps[i] for i in range(len(timestamps) - 1)]
+    max_gap = max(gaps)
+
+    gap_pct = max_gap / elapsed_ms if elapsed_ms > 0 else 0
+    gap_minutes = max_gap / 60000
+
+    if gap_pct > 0.50:
+        return [{
+            "id":       "hooks_gap",
+            "severity": "red",
+            "label":    "Large gap in event stream",
+            "detail":   (
+                f"Longest gap between events: {gap_minutes:.1f} min "
+                f"({gap_pct:.0%} of {float(elapsed):.0f}-min session). "
+                "Hooks may have been disabled mid-session."
+            ),
+        }]
+    if gap_pct > 0.33:
+        return [{
+            "id":       "hooks_gap",
+            "severity": "yellow",
+            "label":    "Notable gap in event stream",
+            "detail":   (
+                f"Longest gap between events: {gap_minutes:.1f} min "
+                f"({gap_pct:.0%} of {float(elapsed):.0f}-min session)."
+            ),
+        }]
+    return []
+
+
+def _flag_diff_event_mismatch(events: list[dict], manifest: dict) -> list[dict]:
+    """
+    Cross-check git diff size against recorded Write/Edit tool calls.
+    If the diff shows significant code changes but the event log has very few
+    file-modifying tool calls, the candidate likely worked outside the AI
+    assistant or disabled hooks during coding.
+
+    Uses git_diff_summary from manifest ("N lines changed") and counts
+    tool_call events with tool_name containing Write or Edit.
+
+    Red   if diff >= 100 lines but < 3 write/edit tool calls.
+    Yellow if diff >= 50 lines but < 3 write/edit tool calls.
+    """
+    diff_summary = manifest.get("git_diff_summary", "")
+    diff_note = manifest.get("git_diff_note", "")
+
+    # Skip if no diff data or no changes
+    if not diff_summary or diff_note in ("no-git-repo", "no-changes"):
+        return []
+
+    # Parse "N lines changed" from summary
+    diff_lines = 0
+    try:
+        parts = diff_summary.split()
+        if parts and parts[0].isdigit():
+            diff_lines = int(parts[0])
+    except (ValueError, IndexError):
+        return []
+
+    if diff_lines < 50:
+        return []
+
+    # Count Write and Edit tool calls in events
+    write_edit_count = 0
+    for e in events:
+        if e.get("type") != "tool_call":
+            continue
+        payload = e.get("payload", {})
+        tool_name = payload.get("tool_name", "") if isinstance(payload, dict) else ""
+        if not tool_name:
+            tool_name = e.get("tool_name", "")
+        tool_lower = tool_name.lower()
+        if "write" in tool_lower or "edit" in tool_lower:
+            write_edit_count += 1
+
+    if write_edit_count >= 3:
+        return []
+
+    if diff_lines >= 100:
+        return [{
+            "id":       "diff_event_mismatch",
+            "severity": "red",
+            "label":    "Code changes don't match event log",
+            "detail":   (
+                f"Git diff shows {diff_lines} lines changed but only "
+                f"{write_edit_count} Write/Edit tool call(s) recorded. "
+                "Candidate may have worked outside the AI assistant or "
+                "hooks were disabled during coding."
+            ),
+        }]
+    return [{
+        "id":       "diff_event_mismatch",
+        "severity": "yellow",
+        "label":    "Code changes may not match event log",
+        "detail":   (
+            f"Git diff shows {diff_lines} lines changed but only "
+            f"{write_edit_count} Write/Edit tool call(s) recorded."
+        ),
+    }]
+
+
+def _flag_prompt_event_ratio(events: list[dict], manifest: dict) -> list[dict]:
+    """
+    Check ratio of user prompts to tool calls. In a normal AI-assisted session,
+    user prompts drive tool calls — roughly 1 prompt per 2-8 tool calls.
+    If there are many tool calls but zero or very few prompts, the prompt
+    capture may have been tampered with or hooks partially disabled.
+
+    Yellow if tool_calls >= 10 and prompts == 0.
+    Yellow if tool_calls >= 20 and prompt ratio < 1:20.
+    """
+    tool_calls = sum(1 for e in events if e.get("type") == "tool_call")
+    prompts = sum(1 for e in events if e.get("type") == "user_prompt")
+
+    if tool_calls < 10:
+        return []
+
+    if prompts == 0:
+        return [{
+            "id":       "prompt_event_ratio",
+            "severity": "yellow",
+            "label":    "Tool calls with no prompts",
+            "detail":   (
+                f"{tool_calls} tool calls recorded but zero user prompts. "
+                "Prompt capture may have been disabled."
+            ),
+        }]
+
+    if tool_calls >= 20 and prompts * 20 < tool_calls:
+        ratio = tool_calls // prompts if prompts > 0 else tool_calls
+        return [{
+            "id":       "prompt_event_ratio",
+            "severity": "yellow",
+            "label":    "Unusually low prompt-to-tool ratio",
+            "detail":   (
+                f"{tool_calls} tool calls but only {prompts} prompt(s) "
+                f"(ratio 1:{ratio}). Some prompts may not have been captured."
+            ),
+        }]
+
     return []
