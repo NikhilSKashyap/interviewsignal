@@ -1,6 +1,6 @@
 ---
 name: submit
-description: "End an active interviewsignal session: seal the log, push to GitHub, generate the report, send to the hiring manager, and show the candidate their session debrief."
+description: "End an active interviewsignal session: seal the log, push to GitHub, send to the hiring manager, and show the candidate their score summary."
 trigger: /submit
 ---
 
@@ -35,47 +35,24 @@ python -m interview.core.transport send --code <CODE>
 
 Uses relay if configured, falls back to email. If neither is configured, prints the file path — not a failure.
 
-## Step 4 — Generate session debrief
-
-Use the **Read tool** (not Bash) to read `~/.interview/sessions/<CODE>/events.jsonl`. Write an honest debrief to `~/.interview/sessions/<CODE>/debrief.txt` using the **Write tool**.
-
-Frame it as a direct reflection addressed to the candidate. Cover:
-1. What they did well — specific moments where their thinking was strong
-2. What they missed or underexplored — gaps, tests not written, etc.
-3. How they used the AI — high-leverage prompts vs. just asking it to write code
-4. One concrete thing to do differently next time
-
-Under 300 words. Honest and constructive. No scores or rankings — just observations.
-
-Then re-send to include the debrief:
-```bash
-python -m interview.core.transport send --code <CODE>
-```
-
-## Step 5 — Fetch score (if auto-graded)
-
-The transport send output (from Step 3 or Step 4's re-send) includes a line:
+The transport send output includes:
 - `auto_graded: true` — grading completed on the relay synchronously
 - `auto_graded: false` — grading was skipped (not enabled, no API key, etc.)
+
+## Step 4 — Fetch score (if auto-graded)
 
 **If output contains `auto_graded: true`**: run:
 ```bash
 interview score <CODE>
 ```
-Include the score in Step 6 if it returns one. If score sharing is "none", skip silently.
 
-**If output contains `auto_graded: false`** or no `auto_graded` line (old relay): show "Grading pending" in Step 6.
+**If output contains `auto_graded: false`** or no `auto_graded` line: show "Grading pending" in Step 5.
 
-## Step 6 — Show result
+## Step 5 — Show result
 
-Display the debrief then the submission block. If `auto_graded: true` and a score was returned in Step 5, include the **full verbatim output** of `interview score <CODE>` — overall score, all dimensions with scores and justifications, and summary. Do not truncate or summarise it.
+Display the submission block. If `auto_graded: true` and a score was returned in Step 4, include the **full verbatim output** of `interview score <CODE>`.
 
 ```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  SESSION DEBRIEF — <CODE>
-  (Claude's analysis — not the hiring manager's evaluation)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-<debrief text>
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ✓ Submitted — <CODE>  |  <elapsed>min
   Code shared with hiring manager:

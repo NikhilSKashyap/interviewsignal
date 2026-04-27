@@ -576,7 +576,11 @@ SHARED_CSS = """
 """
 
 
-def _build_dashboard_html(reports: list[dict]) -> str:
+def _build_dashboard_html(
+    reports: list[dict],
+    all_codes: list[str] | None = None,
+    current_code: str = "",
+) -> str:
     labeled_reports = _apply_labels(reports)
     rows = "\n".join(_build_candidate_row(r) for r in labeled_reports)
     count = len(reports)
@@ -587,6 +591,31 @@ def _build_dashboard_html(reports: list[dict]) -> str:
 
     # Default sort: score descending if any graded, else submission time descending
     default_sort = "score-desc" if graded_count > 0 else "submitted-desc"
+
+    # Interview code selector tabs
+    code_tabs_html = ""
+    if all_codes:
+        pills = []
+        for c in all_codes:
+            safe_c = escape(c)
+            active = (c == current_code)
+            style = (
+                "background:#1d4ed8;border-color:#1d4ed8;color:#fff;"
+                if active else
+                "background:#1a1a1a;border-color:#333;color:#888;"
+            )
+            pills.append(
+                f'<a href="/?filter={quote(c, safe="")}" '
+                f'style="display:inline-block;padding:4px 12px;border-radius:6px;border:1px solid;'
+                f'font-size:12px;font-family:monospace;text-decoration:none;{style}">'
+                f'{safe_c}</a>'
+            )
+        code_tabs_html = (
+            f'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:24px">'
+            f'<span style="font-size:12px;color:#555;margin-right:4px">Interview:</span>'
+            + "".join(pills)
+            + '</div>'
+        )
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -666,6 +695,8 @@ def _build_dashboard_html(reports: list[dict]) -> str:
   </div>
 </div>
 <div class="main">
+
+  {code_tabs_html}
 
   <div class="stats">
     <div class="stat"><div class="stat-val">{count}</div><div class="stat-label">Candidates</div></div>
@@ -1099,9 +1130,19 @@ def _md_to_html(text: str) -> str:
     return "".join(result)
 
 
-def _is_session_banner(text: str) -> bool:
-    """True if this assistant message is just re-displaying the session banner."""
-    return "━━━" in text and "INTERVIEW SESSION" in text
+def _strip_session_banner(text: str) -> str:
+    """Strip the session banner prefix from an assistant message.
+
+    Returns the text after the last ━━━ line, or the original text unchanged
+    if no banner is present.  Returns "" if the message is nothing but a banner.
+    """
+    if "━━━" not in text or "INTERVIEW SESSION" not in text:
+        return text
+    last_bar = text.rfind("━━━")
+    newline_after = text.find("\n", last_bar)
+    if newline_after == -1:
+        return ""
+    return text[newline_after + 1:].strip()
 
 
 def _tool_call_label(tool_name: str, tool_input: dict) -> str:
@@ -1294,11 +1335,25 @@ def _render_transcript_html(events: list, manifest: dict | None = None) -> str:
         parts.append(_render_preamble(manifest))
 
     # ── Partition events into preamble + conversation ─────────────────────────
-    first_user_idx = next(
-        (i for i, e in enumerate(events) if e.get("type") == "user_prompt"), None
+    # Only put session_start (and its immediate tool_result) into preamble.
+    # Tool calls logged BEFORE the first user_prompt belong to the first working
+    # turn (PreToolUse fires before the Stop hook logs user_prompt), so they must
+    # stay in conv_events where the pending_tools buffer attaches them correctly.
+    session_start_idx = next(
+        (i for i, e in enumerate(events) if e.get("type") == "session_start"), None
     )
-    preamble   = events[:first_user_idx] if first_user_idx is not None else events
-    conv_events = events[first_user_idx:] if first_user_idx is not None else []
+    if session_start_idx is not None:
+        preamble_end = session_start_idx + 1
+        if preamble_end < len(events) and events[preamble_end].get("type") == "tool_result":
+            preamble_end += 1
+        preamble = events[:preamble_end]
+        conv_events = events[preamble_end:]
+    else:
+        first_user_idx = next(
+            (i for i, e in enumerate(events) if e.get("type") == "user_prompt"), None
+        )
+        preamble = events[:first_user_idx] if first_user_idx is not None else events
+        conv_events = events[first_user_idx:] if first_user_idx is not None else []
 
     # ── Preamble (setup) section ──────────────────────────────────────────────
     setup_items = [e for e in preamble if e.get("type") not in ("session_start",)]
@@ -1371,10 +1426,10 @@ def _render_transcript_html(events: list, manifest: dict | None = None) -> str:
         # Tool calls/results between user and assistant
         parts.extend(_render_event_group(tool_evs))
 
-        # Assistant response — skip if it's just the session banner re-display
+        # Assistant response — strip session banner prefix; skip if nothing remains
         if asst_ev is not None:
-            text = asst_ev.get("payload", {}).get("text", "")
-            if not _is_session_banner(text):
+            text = _strip_session_banner(asst_ev.get("payload", {}).get("text", ""))
+            if text:
                 parts.append(f'<div class="t-assistant"><span class="t-dot">⏺</span>{_md_to_html(text)}</div>')
 
     # ── Session end ───────────────────────────────────────────────────────────
@@ -2130,11 +2185,34 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
             if not _is_config_complete():
                 self._send_html(_build_wizard_screen1_html())
                 return
-            reports = _load_all_reports()
+            all_reports = _load_all_reports()
+
+            # Collect unique codes sorted by most recent submission
+            code_times: dict[str, float] = {}
+            for r in all_reports:
+                c = r.get("code", "")
+                if not c:
+                    continue
+                t = r.get("submitted_at") or r.get("ended_at") or 0
+                if isinstance(t, str):
+                    try:
+                        import datetime as _dt
+                        t = _dt.datetime.fromisoformat(t.replace("Z", "+00:00")).timestamp()
+                    except Exception:
+                        t = 0
+                if float(t) > code_times.get(c, 0.0):
+                    code_times[c] = float(t)
+            all_codes = sorted(code_times.keys(), key=lambda c: code_times[c], reverse=True)
+
             filter_code = params.get("filter", [""])[0]
-            if filter_code:
-                reports = [r for r in reports if r.get("code") == filter_code]
-            self._send_html(_build_dashboard_html(reports))
+            if not filter_code and all_codes:
+                filter_code = all_codes[0]  # default to most recent interview
+
+            reports = (
+                [r for r in all_reports if r.get("code") == filter_code]
+                if filter_code else all_reports
+            )
+            self._send_html(_build_dashboard_html(reports, all_codes=all_codes, current_code=filter_code))
 
         elif path == "/wizard":
             self._send_html(_build_wizard_screen1_html())
@@ -2238,8 +2316,9 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
             if not relay_url:
                 self._send_html(_build_wizard_screen1_html("Please enter a relay URL."))
                 return
-            if "://" not in relay_url:
-                relay_url = "https://" + relay_url
+            if not relay_url.startswith("https://"):
+                self._send_html(_build_wizard_screen1_html("Enter a valid URL starting with https://"))
+                return
             try:
                 from interview.core.transport import RelayTransport
                 hm_key = RelayTransport.register_hm(relay_url)

@@ -640,40 +640,9 @@ def cmd_score(args):
     if overall is not None:
         print(f"\n  Overall: {overall}/10\n")
 
-    dimensions = result.get("dimensions", [])
-    if dimensions:
-        print(f"  Dimensions:")
-        for d in dimensions:
-            name = d.get("name", "")
-            score = d.get("score", "—")
-            just = d.get("justification", "")
-            print(f"    {name}: {score}/10")
-            if just:
-                print(f"      {just}")
-        print()
-
     summary = result.get("summary", "")
     if summary:
-        print(f"  Summary:\n    {summary}\n")
-
-    standouts = result.get("standout_moments", [])
-    if standouts:
-        print(f"  Standout moments:")
-        for s in standouts:
-            print(f"    • {s}")
-        print()
-
-    concerns = result.get("concerns", [])
-    if concerns:
-        print(f"  Concerns:")
-        for c in concerns:
-            print(f"    • {c}")
-        print()
-
-    debrief = result.get("debrief", "")
-    if debrief:
-        print(f"  Session debrief (Claude's analysis — not the hiring manager's evaluation):")
-        print(f"{debrief}\n")
+        print(f"  {summary}\n")
 
     print(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
 
