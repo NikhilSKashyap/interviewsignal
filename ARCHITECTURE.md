@@ -10,11 +10,11 @@ Candidate machine                   Relay (relay.interviewsignal.dev or self-hos
 ~/.interview/sessions/<code>/       /data/hms/<hm_key>/
   events.jsonl  (append-only,         sessions/<code>/<cid>/
                 hash-chained)           manifest.json, events.jsonl
-  manifest.json (sealed)               debrief.txt, flags.json
-  report.html   (local only)           grading.json, grading_history.jsonl
+  manifest.json (sealed)               flags.json, grading.json
+  report.html   (local only)           grading_history.jsonl
   report.json   (local only)           comments.jsonl, decision.json
-  debrief.txt                          audit.jsonl, meta.json
-  active_session.json               interviews/<code>.json
+  active_session.json                  audit.jsonl, meta.json
+                                    interviews/<code>.json
                                     sharing/<code>.json
 
                                     HM dashboard (localhost:7832)
@@ -53,6 +53,25 @@ Transport abstraction. `get_transport()` reads `~/.interview/config.json` and re
 sessions must go through this factory — never SMTP or direct file reads outside this layer.
 `RelayTransport` uses stdlib `urllib` only. Auth is `Bearer <hm_key>` for HM routes; open
 routes (interview fetch, score fetch) send no auth header.
+
+### `interview/core/flags.py`
+Session quality and tamper detection flags. `compute_flags(events, manifest)` runs all checks
+and returns a list of flag dicts (each with `id`, `severity` `"red"|"yellow"`, `label`, `detail`).
+All functions are pure — no side effects, no network calls.
+
+**Session quality flags** — computed from session statistics:
+- `too_fast`: elapsed time below threshold (< 10 min by default)
+- `few_interactions`: fewer than 3 tool calls
+- `no_iteration`: no failed-then-retried tool pattern
+- `uniform_timing`: event intervals statistically too uniform (possible scripting)
+- `no_prompts`: zero user_prompt or thinking events
+
+**Tamper detection flags** — cross-check event log against external signals:
+- `hooks_gap`: longest gap between events > 33% of elapsed time (red if > 50%); suggests hooks disabled mid-session
+- `diff_event_mismatch`: git diff line count vs Write/Edit tool call count mismatch; catches code written outside the AI assistant
+- `prompt_event_ratio`: many tool calls but zero or near-zero prompts; signals partial hook disable
+
+All checks wrapped in `try/except` — a failing check produces no flag rather than crashing.
 
 ### `interview/core/grader.py`
 AI grading via the Anthropic Messages API (zero external dependencies — `urllib` only).
@@ -132,22 +151,38 @@ candidate detail, grade, comment, decision, audit, sharing panel, integrity veri
 sessions directory so `grader.py` (which reads local files) can work normally. All responses
 carry `Cache-Control: no-store` to ensure fresh data on refresh.
 
-Candidate list (local mode) reads `manifest.json` + `grading.json` per session — no dependency
-on `report.json`. Transcript view renders the full terminal experience from manifest data:
-synthesized pre-session preamble (`_render_preamble()`) followed by events and the session
-debrief at the bottom. Debrief is loaded from `debrief.txt` locally or `relay_session["debrief"]`
-in relay mode.
+**First-run setup wizard.** On launch, `_is_config_complete()` checks for `relay_url` and
+`anthropic_api_key`. If either is missing, the dashboard shows a 3-screen wizard: (1) relay URL
+entry with https:// validation, (2) Anthropic API key, (3) Create Interview form. Subsequent
+launches skip the wizard and land directly on the candidate list. `+ Create Interview` in the
+topbar is always available for additional interviews.
+
+**Interview code selector.** `GET /` accepts a `?filter=<code>` param. The candidate list
+defaults to the most recently created interview code and renders pill tabs for switching between
+codes. `_build_dashboard_html(reports, all_codes, current_code)` builds the selector.
+
+**Transcript rendering.** `_render_transcript_html(events, manifest)` builds the full terminal
+experience from the event log. Preamble boundary: only the `session_start` event (and its
+immediate `tool_result`, if any) are collapsed into "Session setup" — all other pre-user-prompt
+events stay in `conv_events` where the `pending_tools` buffer attaches them to the correct turn.
+`_strip_session_banner()` strips the session banner prefix from assistant messages, showing any
+content that follows the last ━━━ line.
+
+Candidate list reads `manifest.json` + `grading.json` per session — no dependency on
+`report.json`.
 
 ### `interview/skills/interview/SKILL.md`
-The Claude Code skill file for `/interview`. Handles both HM setup (`/interview hm`) and
-candidate session start (`/interview <CODE>`). Step 0 detects relay mode and skips email
-questions accordingly. HM flow: 5 questions (problem, rubric, time limit, anonymize, score
-sharing). Candidate flow: asks name + email, starts session, shows problem statement.
+The Claude Code skill file for `/interview`. Candidate-only — HM setup has moved to the
+dashboard browser wizard. Step 0 detects relay mode. Candidate flow: asks name + email, calls
+`python -m interview.core.session start`, shows the problem statement. Typing `/interview hm`
+redirects to `interview dashboard`.
 
 ### `interview/skills/submit/SKILL.md`
-The Claude Code skill file for `/submit`. Seals the session, generates the report, writes the
-debrief, pushes to relay (or email fallback), and displays the debrief and score link to the
-candidate.
+The Claude Code skill file for `/submit`. Five steps: (1) check active session, (2) seal via
+`python -m interview.core.session seal`, (3) generate report + send via transport, (4) fetch
+score if `auto_graded: true`, (5) show result block. Debrief generation is not part of the flow —
+candidates see overall score + 1-line summary only. Full dimension breakdown is HM-only in the
+dashboard.
 
 ---
 
@@ -184,10 +219,19 @@ wires up the `interview` remote. On `/submit`, `seal_session()` calls `_git_push
 which embeds the token in the remote URL for the push and clears it immediately after. All git
 and API operations are wrapped in `try/except` — failure is non-blocking.
 
-**Session debrief.** Claude writes `debrief.txt` at `/submit` time based on the session events.
-The debrief is stored in the session directory and uploaded to the relay as part of the session
-payload. It is always included in the score response when score sharing is enabled — it is not
-an HM toggle.
+**Debrief removed from /submit.** Claude no longer generates `debrief.txt` at submit time.
+The Read tool permission prompt during `/submit` created a tamper vector (candidate could deny
+it). Candidates now see overall score + 1-line summary from `interview score`. Full dimension
+breakdown and the analysis panel are HM-only in the dashboard. The relay still accepts
+`debrief.txt` uploads for backwards compatibility.
+
+**Setup wizard is first-run only.** `_is_config_complete()` checks for `relay_url` +
+`anthropic_api_key` on every dashboard launch. Once both are set the wizard never shows again.
+Config is stored in `~/.interview/config.json` (permissions: 600).
+
+**Flags run at submit time.** `flags.compute_flags(events, manifest)` is called during the
+relay's `POST /sessions` handler and the result is written to `flags.json` alongside the session
+files. Dashboard reads flags from the relay session summary and displays them as colored badges.
 
 **Hash chain.** Every event in `events.jsonl` stores `prev_hash` and `hash`, where
 `hash = sha256(prev_hash + json(body))[:16]`. The first event has `prev_hash = ""`. The relay
@@ -206,8 +250,8 @@ the primary mechanism for capturing what the candidate actually typed.
 ### HM creates interview → relay → candidate fetches
 
 ```
-/interview hm
-  → setup.create_interview()
+interview dashboard  (first run: setup wizard → relay URL → API key → create interview form)
+  → setup.create_interview(problem, rubric, time_limit_minutes)
     → generates code INT-XXXX-XX
     → embeds relay_url + hm_key in payload
     → stores ~/.interview/created/<code>.json
@@ -224,7 +268,7 @@ Candidate runs /interview <CODE>
     → session_start event logged
 ```
 
-### Candidate /submit → seal → git push → relay → debrief
+### Candidate /submit → seal → git push → relay → score
 
 ```
 /submit
@@ -234,11 +278,10 @@ Candidate runs /interview <CODE>
     → writes manifest.json (final_hash, elapsed_minutes, etc.)
     → clears active_session.json
   → report.generate_report()  →  writes report.html + report.json  (local only; email attachments)
-  → Claude writes debrief.txt  (reads events.jsonl, generates reflection)
   → RelayTransport.send()
-    → base64-encodes manifest, events, debrief  (report files NOT sent to relay)
-    → POST /sessions  (relay creates <cid>/ directory, writes files, writes meta.json)
-  → candidate sees debrief in terminal + score link (if sharing enabled)
+    → base64-encodes manifest + events  (report files NOT sent to relay; no debrief.txt)
+    → POST /sessions  (relay creates <cid>/ directory, writes files, runs flags, writes meta.json)
+  → if auto_graded: interview score <CODE>  →  candidate sees overall score + summary
 ```
 
 ### HM grades from dashboard → relay stores grade → candidate fetches score
