@@ -179,6 +179,15 @@ class RelayHandler(BaseHTTPRequestHandler):
             return token
         return None
 
+    def _auth_matches_hm(self, hm_key: str) -> bool:
+        """True when the bearer token is this HM's key or the master relay key."""
+        token = self._bearer()
+        if not token:
+            return False
+        if _relay_api_key and hmac.compare_digest(token, _relay_api_key):
+            return True
+        return hmac.compare_digest(token, hm_key) and _store.hm_exists(token)
+
     # ── response helpers ──────────────────────────────────────────────────────
 
     def _json(self, data, status: int = 200):
@@ -275,6 +284,11 @@ class RelayHandler(BaseHTTPRequestHandler):
         if parts == ["register"]:
             return self._post_register()
 
+        # Candidate submissions use a per-interview submit_token in the body.
+        # HM/admin bearer auth is still accepted for trusted server-side flows.
+        if parts == ["sessions"]:
+            return self._post_session()
+
         # Auth-gated routes
         hm_key = self._auth_hm()
         if hm_key is None:
@@ -282,9 +296,6 @@ class RelayHandler(BaseHTTPRequestHandler):
 
         if parts == ["interviews"]:
             return self._post_interview(hm_key)
-
-        if parts == ["sessions"]:
-            return self._post_session(hm_key)
 
         if len(parts) == 4 and parts[0] == "sessions":
             action = parts[3]
@@ -542,7 +553,7 @@ class RelayHandler(BaseHTTPRequestHandler):
     # Base64 adds ~33% overhead; 200 MB gives headroom above the 100 MB session limit.
     _MAX_SESSION_BODY = 200 * 1024 * 1024
 
-    def _post_session(self, hm_key: str):
+    def _post_session(self):
         # Check Content-Length BEFORE reading the body to prevent OOM on huge requests.
         try:
             body_len = int(self.headers.get("Content-Length", 0))
@@ -567,8 +578,15 @@ class RelayHandler(BaseHTTPRequestHandler):
         if owner is None:
             return self._error(404, "interview_not_found",
                                f"Interview {code} not registered. HM must push /interviews first.")
-        if owner != hm_key:
-            return self._error(403, "forbidden", "This code belongs to a different HM.")
+        hm_key = owner
+        if not self._auth_matches_hm(owner):
+            submit_token = body.get("submit_token", "").strip()
+            if not _store.verify_submit_token(owner, code, submit_token):
+                return self._error(
+                    401,
+                    "unauthorized",
+                    "Valid submit_token for this interview or hm_key required.",
+                )
 
         # ── GitHub identity resolution ─────────────────────────────────────────
         github_identity: dict | None = None

@@ -283,6 +283,8 @@ class RelayTransport(Transport):
             return EmailTransport().send(code)
 
         body: dict = {"code": code, "candidate_email": candidate_email}
+        if manifest.get("submit_token"):
+            body["submit_token"] = manifest["submit_token"]
         if manifest.get("session_token"):
             body["session_token"] = manifest["session_token"]
         if manifest.get("github_repo_url"):
