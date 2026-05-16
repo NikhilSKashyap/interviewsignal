@@ -462,15 +462,23 @@ def start_session(code: str, candidate_email: str | None = None, candidate_name:
             else:
                 print(f" ⚠  (repo creation failed — session continues)")
 
-    # Resolve candidate identity — GitHub takes priority, fall back to args
+    # Resolve candidate identity — GitHub > args > local config > interview package
+    _cfg = {}
+    if CONFIG_FILE.exists():
+        try:
+            _cfg = json.loads(CONFIG_FILE.read_text())
+        except Exception:
+            pass
     resolved_candidate_email = (
         (github_auth.get("github_email") if github_auth else None)
         or candidate_email
+        or _cfg.get("candidate_email")
         or interview.get("candidate_email")
     )
     resolved_candidate_name = (
         (github_auth.get("github_name") if github_auth else None)
         or candidate_name
+        or _cfg.get("candidate_name")
     )
 
     git_snapshot = _get_git_snapshot()

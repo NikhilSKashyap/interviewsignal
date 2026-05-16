@@ -407,6 +407,45 @@ def cmd_install(args):
         return
     installer()
 
+    # Collect candidate identity once — stored in config so /interview needs no prompting
+    config_file = INTERVIEW_DIR / "config.json"
+    config = {}
+    if config_file.exists():
+        try:
+            config = json.loads(config_file.read_text())
+        except Exception:
+            pass
+
+    existing_name = config.get("candidate_name", "")
+    existing_email = config.get("candidate_email", "")
+
+    print()
+    if existing_name and existing_email:
+        print(f"  Identity: {existing_name} <{existing_email}>")
+        update = input("  Update? [y/N] ").strip().lower()
+        if update != "y":
+            print()
+            print(f"\n✓ interviewsignal installed.\n")
+            print(f"  Hiring manager: run 'interview dashboard' to create interviews and review submissions")
+            print(f"  Candidate:      open Claude Code and type /interview <CODE>\n")
+            return
+
+    print("  To skip the name/email prompt during interviews, we'll save your identity now.")
+    name = input("  Your name: ").strip()
+    email = input("  Your email: ").strip()
+
+    if name or email:
+        if name:
+            config["candidate_name"] = name
+        if email:
+            config["candidate_email"] = email
+        INTERVIEW_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = config_file.with_suffix(".tmp")
+        tmp.write_text(json.dumps(config, indent=2))
+        tmp.rename(config_file)
+        os.chmod(config_file, 0o600)
+        print(f"  ✓ Identity saved.")
+
     print(f"\n✓ interviewsignal installed.\n")
     print(f"  Hiring manager: run 'interview dashboard' to create interviews and review submissions")
     print(f"  Candidate:      open Claude Code and type /interview <CODE>\n")
