@@ -33,7 +33,7 @@ Create interview  →  Share code  →  Candidates work  →  Auto-grade  →  T
 pip install interviewsignal && interview install
 ```
 
-Requires Python 3.10+ and [Claude Code](https://claude.ai/code) or [Codex](https://openai.com/codex).
+Requires Python 3.10+ and one of the [supported platforms](#platform-support).
 
 > **Enterprise / no personal API key?** See [Enterprise configuration](#enterprise-configuration) below.
 
@@ -252,13 +252,15 @@ INTERVIEW_GRADING_MODEL=...     # model name override
 
 ## Platform support
 
-| Platform | Status | Notes |
-|---|---|---|
-| Claude Code (Linux/Mac/Windows) | Supported | `interview install` |
-| Codex | Supported | `interview install --platform codex` |
-| Cursor | Coming soon | — |
-| Gemini CLI | Coming soon | — |
-| Aider | Coming soon | — |
+| Platform | Install | Hooks | Activity capture |
+|---|---|---|---|
+| Claude Code | `interview install` | PreToolUse / PostToolUse / Stop | Full — prompts, tool calls, reasoning |
+| Codex | `interview install --platform codex` | PreToolUse | Full |
+| Gemini CLI | `interview install --platform gemini` | preToolUse / postToolUse | Full |
+| Cursor | `interview install --platform cursor` | None | Limited — skill instructions only |
+| Aider | `interview install --platform aider` | None | Limited — skill instructions only |
+
+Cursor and Aider don't support lifecycle hooks, so activity capture is limited to what the candidate voluntarily records. For full capture, use Claude Code, Codex, or Gemini CLI.
 
 ---
 
@@ -300,10 +302,13 @@ interview configure-llm        # Enterprise: custom endpoint, proxy, format, ext
 interview configure-email      # SMTP fallback (email-only mode, no relay)
 
 # Candidate
-interview install              # install hooks + skill for Claude Code
-interview install --platform codex
-interview status               # check active session
-interview score <CODE>         # fetch your score from relay
+interview install                        # Claude Code (default)
+interview install --platform codex       # Codex
+interview install --platform cursor      # Cursor
+interview install --platform gemini      # Gemini CLI
+interview install --platform aider       # Aider
+interview status                         # check active session
+interview score <CODE>                   # fetch your score from relay
 ```
 
 All config stored in `~/.interview/config.json` (permissions: 600).

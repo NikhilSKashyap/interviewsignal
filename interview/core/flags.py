@@ -281,10 +281,14 @@ def _flag_hooks_gap(events: list[dict], manifest: dict) -> list[dict]:
 
     timestamps = []
     for e in events:
-        ts = e.get("timestamp_ms") or e.get("timestamp")
+        ts_ms = e.get("timestamp_ms")
+        if ts_ms is not None:
+            timestamps.append(float(ts_ms))
+            continue
+        ts = e.get("timestamp")
         if ts is not None:
-            # Normalise: if timestamp is in seconds (< 1e12), convert to ms
             ts = float(ts)
+            # Normalise seconds → ms (timestamp field is Unix epoch in seconds)
             if ts < 1e12:
                 ts = ts * 1000
             timestamps.append(ts)

@@ -1412,6 +1412,27 @@ def _render_transcript_html(events: list, manifest: dict | None = None) -> str:
     if current_user is not None:
         turns.append((current_user, current_tools, None))
 
+    # If the first assistant message is the session banner, surface its content
+    # as an intro block before the turns rather than as a reply to the first prompt.
+    # This fixes a Stop-hook timing issue where the banner and the first user_prompt
+    # land in the same Stop call, causing the banner text to appear as a response.
+    intro_text = ""
+    for i, (user_ev, tool_evs, asst_ev) in enumerate(turns):
+        if asst_ev is None:
+            continue
+        raw = asst_ev.get("payload", {}).get("text", "")
+        stripped = _strip_session_banner(raw)
+        if stripped != raw:  # banner was present
+            intro_text = stripped
+            turns[i] = (user_ev, tool_evs, None)
+        break  # only inspect the first turn that has an assistant message
+
+    if intro_text:
+        parts.append(
+            f'<div class="t-assistant"><span class="t-dot">⏺</span>'
+            f'{_md_to_html(intro_text)}</div>'
+        )
+
     for user_ev, tool_evs, asst_ev in turns:
         if user_ev is None:
             continue

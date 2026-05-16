@@ -40,7 +40,20 @@ PLATFORMS = {
         "agents_md": Path("AGENTS.md"),
         "hooks_json": Path(".codex") / "hooks.json",
     },
-    # More platforms: cursor, gemini, aider — Phase 2
+    "cursor": {
+        "name": "Cursor",
+        "cursorrules": Path(".cursorrules"),
+    },
+    "gemini": {
+        "name": "Gemini CLI",
+        "gemini_md": Path("GEMINI.md"),
+        "settings_json": Path(".gemini") / "settings.json",
+    },
+    "aider": {
+        "name": "Aider",
+        "config_yml": Path(".aider.conf.yml"),
+        "conventions_md": Path("CONVENTIONS.md"),
+    },
 }
 
 
@@ -214,18 +227,185 @@ Type `$submit` to end the session and send the report.
         print(f"  ✓ Codex hooks installed: {hooks_file}")
 
 
+def _install_cursor(verbose=True):
+    """Install skill instructions for Cursor via .cursorrules."""
+    cursorrules = PLATFORMS["cursor"]["cursorrules"]
+    entry = """
+# interviewsignal — AI-native interview platform
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# When the user types `/interview <CODE>`, start an interview session:
+#   1. Run: python -m interview.core.session start --code <CODE>
+#   2. Read ~/.interview/active/meta.json for the problem statement
+#   3. Present the problem and begin the session
+#   4. All candidate work happens in the current project directory
+#
+# When the user types `/submit`, end the session:
+#   1. Run: python -m interview.core.session seal
+#   2. Run: python -m interview.core.transport submit
+#   3. Show the candidate their score summary
+#
+# IMPORTANT: Capture all tool use (file writes, edits, terminal commands)
+# by noting them in the session. The interview system tracks candidate
+# thought process through their interaction with the AI assistant.
+#
+# Permissions needed:
+#   - Read/Write ~/.interview/*
+#   - Run python -m interview.core.* commands
+#   - Run git commands (init, add, commit, push, remote)
+"""
+    if cursorrules.exists():
+        content = cursorrules.read_text()
+        if "interviewsignal" not in content:
+            cursorrules.write_text(content + entry)
+            if verbose:
+                print(f"  ✓ .cursorrules updated: {cursorrules}")
+        else:
+            if verbose:
+                print(f"  ✓ .cursorrules already configured")
+    else:
+        cursorrules.write_text(entry)
+        if verbose:
+            print(f"  ✓ .cursorrules created: {cursorrules}")
+
+    if verbose:
+        print(f"\n  ⚠  Cursor does not support lifecycle hooks.")
+        print(f"     Activity capture is limited — candidate prompts and tool calls")
+        print(f"     won't be logged automatically. For full capture, use Claude Code.")
+
+
+def _install_gemini(verbose=True):
+    """Install skill + hooks for Gemini CLI via GEMINI.md + .gemini/settings.json."""
+    # 1. GEMINI.md — project-level instructions
+    gemini_md = PLATFORMS["gemini"]["gemini_md"]
+    entry = """
+## interview skill
+- **interview** — AI-native interview platform (interviewsignal).
+  - `/interview <CODE>` — Start a candidate session (captures all activity)
+  - `/submit` — Seal session and submit report to hiring manager
+
+When the user types `/interview`, run:
+  `python -m interview.core.session start --code <CODE>`
+then read ~/.interview/active/meta.json for the problem.
+
+When the user types `/submit`, run:
+  `python -m interview.core.session seal`
+  `python -m interview.core.transport submit`
+"""
+    if gemini_md.exists():
+        content = gemini_md.read_text()
+        if "interviewsignal" not in content and "interview skill" not in content:
+            gemini_md.write_text(content + entry)
+            if verbose:
+                print(f"  ✓ GEMINI.md updated: {gemini_md}")
+        else:
+            if verbose:
+                print(f"  ✓ GEMINI.md already configured")
+    else:
+        gemini_md.write_text(entry)
+        if verbose:
+            print(f"  ✓ GEMINI.md created: {gemini_md}")
+
+    # 2. .gemini/settings.json — hooks for activity capture
+    settings_dir = Path(".gemini")
+    settings_dir.mkdir(exist_ok=True)
+    settings_json = PLATFORMS["gemini"]["settings_json"]
+
+    settings = {}
+    if settings_json.exists():
+        try:
+            settings = json.loads(settings_json.read_text())
+        except Exception:
+            pass
+
+    hook_cmd = f"{sys.executable} -m interview.hooks.claude_hook"
+    hooks = settings.setdefault("hooks", {})
+    hooks["preToolUse"] = {"command": f"{hook_cmd} pre"}
+    hooks["postToolUse"] = {"command": f"{hook_cmd} post"}
+
+    settings_json.write_text(json.dumps(settings, indent=2))
+    if verbose:
+        print(f"  ✓ Hooks installed: {settings_json}")
+
+
+def _install_aider(verbose=True):
+    """Install skill instructions for Aider via .aider.conf.yml + CONVENTIONS.md."""
+    # 1. CONVENTIONS.md — Aider reads this via the `read:` directive
+    conventions = PLATFORMS["aider"]["conventions_md"]
+    entry = """
+## interviewsignal — AI-native interview platform
+
+When the user types `/interview <CODE>`, start an interview session:
+  1. Run: python -m interview.core.session start --code <CODE>
+  2. Read ~/.interview/active/meta.json for the problem statement
+  3. Present the problem and begin the session
+
+When the user types `/submit`, end the session:
+  1. Run: python -m interview.core.session seal
+  2. Run: python -m interview.core.transport submit
+  3. Show the candidate their score summary
+
+All candidate work happens in the current project directory. Track file
+writes, edits, and terminal commands — the interview system captures
+thought process through AI assistant interaction.
+"""
+    if conventions.exists():
+        content = conventions.read_text()
+        if "interviewsignal" not in content:
+            conventions.write_text(content + entry)
+            if verbose:
+                print(f"  ✓ CONVENTIONS.md updated: {conventions}")
+        else:
+            if verbose:
+                print(f"  ✓ CONVENTIONS.md already configured")
+    else:
+        conventions.write_text(entry)
+        if verbose:
+            print(f"  ✓ CONVENTIONS.md created: {conventions}")
+
+    # 2. .aider.conf.yml — tell Aider to load CONVENTIONS.md
+    config_yml = PLATFORMS["aider"]["config_yml"]
+    config_lines = []
+    has_read = False
+    if config_yml.exists():
+        content = config_yml.read_text()
+        config_lines = content.splitlines()
+        for line in config_lines:
+            if line.strip().startswith("read:") or "CONVENTIONS.md" in line:
+                has_read = True
+                break
+
+    if not has_read:
+        config_lines.append("read: [CONVENTIONS.md]")
+        config_yml.write_text("\n".join(config_lines) + "\n")
+        if verbose:
+            print(f"  ✓ .aider.conf.yml updated: {config_yml}")
+    else:
+        if verbose:
+            print(f"  ✓ .aider.conf.yml already configured")
+
+    if verbose:
+        print(f"\n  ⚠  Aider does not support lifecycle hooks.")
+        print(f"     Activity capture is limited — candidate prompts and tool calls")
+        print(f"     won't be logged automatically. For full capture, use Claude Code.")
+
+
 def cmd_install(args):
     platform_name = args.platform or "claude"
     print(f"\nInstalling interviewsignal for {PLATFORMS.get(platform_name, {}).get('name', platform_name)}...\n")
 
-    if platform_name == "claude":
-        _install_claude()
-    elif platform_name == "codex":
-        _install_codex()
-    else:
-        print(f"  Platform '{platform_name}' not yet supported. Coming soon.")
-        print(f"  Supported: claude, codex")
+    installers = {
+        "claude": _install_claude,
+        "codex": _install_codex,
+        "cursor": _install_cursor,
+        "gemini": _install_gemini,
+        "aider": _install_aider,
+    }
+    installer = installers.get(platform_name)
+    if not installer:
+        print(f"  Platform '{platform_name}' not recognized.")
+        print(f"  Supported: {', '.join(installers.keys())}")
         return
+    installer()
 
     print(f"\n✓ interviewsignal installed.\n")
     print(f"  Hiring manager: run 'interview dashboard' to create interviews and review submissions")
