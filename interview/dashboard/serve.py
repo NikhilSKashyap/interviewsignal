@@ -783,7 +783,7 @@ def _build_dashboard_html(
   {'<div class="controls-row"><label>Sort by:</label><select class="ctrl-select" id="sort-select"><option value="score-desc">Score ↓</option><option value="score-asc">Score ↑</option><option value="submitted-desc">Submitted (newest)</option><option value="submitted-asc">Submitted (oldest)</option><option value="duration">Session duration</option><option value="flags">Flag severity (red first)</option></select></div>' if reports else ''}
 
   {'<!-- Filter controls -->' if reports else ''}
-  {'<div class="controls-row"><label>Status:</label><select class="ctrl-select" id="filter-status"><option value="all">All</option><option value="graded">Graded</option><option value="pending">Pending</option><option value="decided">Decided</option></select><label style="margin-left:8px">Flags:</label><select class="ctrl-select" id="filter-flags"><option value="all">All</option><option value="clean">Clean only</option><option value="flagged">Flagged only</option></select><label style="margin-left:8px">Score:</label><input type="number" class="ctrl-input" id="filter-score-min" min="0" max="10" step="0.1" placeholder="min"><span style="color:#3f3f46;font-size:12px">–</span><input type="number" class="ctrl-input" id="filter-score-max" min="0" max="10" step="0.1" placeholder="max"><button class="btn btn-sm" id="btn-apply-filter" style="margin-left:4px">Apply</button></div>' if reports else ''}
+  {'<div class="controls-row"><label>Status:</label><select class="ctrl-select" id="filter-status"><option value="all">All</option><option value="graded">Graded</option><option value="pending">Pending</option><option value="yes">✓ Yes</option><option value="maybe">→ Maybe</option><option value="no">✗ No</option></select><label style="margin-left:8px">Flags:</label><select class="ctrl-select" id="filter-flags"><option value="all">All</option><option value="clean">Clean only</option><option value="flagged">Flagged only</option></select><label style="margin-left:8px">Score:</label><input type="number" class="ctrl-input" id="filter-score-min" min="0" max="10" step="0.1" placeholder="min"><span style="color:#3f3f46;font-size:12px">–</span><input type="number" class="ctrl-input" id="filter-score-max" min="0" max="10" step="0.1" placeholder="max"><button class="btn btn-sm" id="btn-apply-filter" style="margin-left:4px">Apply</button></div>' if reports else ''}
 
   {'<!-- Summary bar -->' if reports else ''}
   {'<div class="summary-bar" id="summary-bar"><span id="sb-total">0 submissions</span><span class="sep">|</span><span id="sb-graded">0 graded</span><span class="sep">|</span><span id="sb-pending">0 pending</span><span class="sep">|</span><span id="sb-avg">avg score —</span><span class="sep">|</span><span id="sb-yes" style="color:#22c55e">0 yes</span><span class="sep">|</span><span id="sb-maybe" style="color:#818cf8">0 maybe</span><span class="sep">|</span><span id="sb-no" style="color:#ef4444">0 no</span></div>' if reports else ''}
@@ -881,7 +881,11 @@ def _build_dashboard_html(
 
     return rows.filter(row => {{
       // Status filter
-      if (status !== 'all' && row.dataset.status !== status) return false;
+      if (status === 'graded' && row.dataset.status !== 'graded' && row.dataset.status !== 'decided') return false;
+      if (status === 'pending' && row.dataset.status !== 'pending') return false;
+      if (status === 'yes'   && row.dataset.decision !== 'yes')   return false;
+      if (status === 'maybe' && row.dataset.decision !== 'maybe') return false;
+      if (status === 'no'    && row.dataset.decision !== 'no')    return false;
       // Flags filter
       if (flags === 'clean' && row.dataset.flagSeverity !== 'none') return false;
       if (flags === 'flagged' && row.dataset.flagSeverity === 'none') return false;
