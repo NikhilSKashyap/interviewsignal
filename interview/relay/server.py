@@ -744,9 +744,9 @@ class RelayHandler(BaseHTTPRequestHandler):
             return self._error(404, "session_not_found", f"No session for {code}/{cid}.")
         body = self._read_body() or {}
         decision = body.get("decision", "")
-        if decision not in ("hire", "next_round", "reject"):
+        if decision not in ("yes", "maybe", "no"):
             return self._error(400, "invalid_payload",
-                               "decision must be 'hire', 'next_round', or 'reject'.")
+                               "decision must be 'yes', 'maybe', or 'no'.")
         try:
             self._json(_store.save_decision(hm_key, code, cid, decision, body.get("reason", "")))
         except StoreError as e:
