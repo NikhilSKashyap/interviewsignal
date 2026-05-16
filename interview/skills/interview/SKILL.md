@@ -26,38 +26,15 @@ Interview creation has moved to the dashboard. Run `interview dashboard` in your
 
 ## Flow — Candidate Session (`/interview <CODE>`)
 
-First, ask the candidate for their identity (two questions, one at a time):
-
-**1.** "What's your name?"
-**2.** "What's your email address?"
-
-Then run:
+Run exactly this command, substituting the real code:
 
 ```bash
-python -m interview.core.session start \
-  --code INT-4829-XK \
-  --candidate-name "NAME HERE" \
-  --candidate-email "EMAIL HERE"
+python -m interview.core.session start --code INT-4829-XK
 ```
 
-This:
-1. Fetches the interview package (validates the code)
-2. Auto-configures relay transport from the package — no setup needed
-3. GitHub OAuth — if relay has GitHub configured, opens browser for login. One account = one submission.
-4. Initialises git in the working directory if not already a repo
-5. Creates a public GitHub repo `interview-{code}` and adds it as the `interview` remote (if OAuth succeeded)
-6. Starts session recording
+The script handles everything: name, email, GitHub OAuth, session start, and prints the problem statement. Do not ask the candidate for anything before running it.
 
-If the candidate already submitted (duplicate GitHub account):
-```
-✗ @username has already submitted for INT-4829-XK.
-  Each GitHub account can only submit once per interview.
-```
-Stop — do not start the session.
-
-The command prints the session header and full problem statement to the terminal. Do not reprint or summarise it.
-
-**Stop here. Output nothing. Do not analyse the problem, suggest an approach, ask clarifying questions, or run any further commands. Wait silently for the candidate's first message.**
+**Once the command exits: output nothing. Do not summarise, analyse, or comment on the problem. Wait silently for the candidate's first message.**
 
 ---
 
