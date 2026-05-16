@@ -276,7 +276,7 @@ def _silent_git_commit(user_text: str):
         if result.returncode == 0:
             return  # nothing staged
         ts = time.strftime("%H:%M:%S")
-        snippet = user_text[:60].replace("\n", " ").strip() if user_text else ""
+        snippet = user_text[:120].replace("\n", " ").strip() if user_text else ""
         msg = f"{ts} — {snippet}" if snippet else ts
         subprocess.run(["git", "commit", "-m", msg], timeout=2, capture_output=True)
     except Exception:

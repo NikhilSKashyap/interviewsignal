@@ -2472,6 +2472,7 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
                     **current_grading,
                     "overall_score": float(new_overall),
                     "reason":        reason,
+                    "graded_by":     "hm",
                 }
                 # Remove graded_at — relay will set a fresh one
                 revised.pop("graded_at", None)

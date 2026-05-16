@@ -58,7 +58,7 @@ pip install interviewsignal && interview install
 /interview INT-4829-XK
 ```
 
-You'll be asked for your name and email. If the relay has GitHub OAuth configured, a browser tab opens for login — one account, one submission — and GitHub identity takes priority. The problem appears once auth completes. A GitHub repo (`interview-{code}`) is created automatically and a git remote named `interview` is wired up in your working directory. Work normally — ask the AI questions, write code, run tests. The session records everything automatically.
+`interview install` asks for your name and email once and saves them. After that, `/interview CODE` is fully automatic — the session starts, GitHub OAuth opens a browser tab if configured (one account, one submission), and the problem appears with no further prompts from you. The problem appears once auth completes. A GitHub repo (`interview-{code}`) is created automatically and a git remote named `interview` is wired up in your working directory. Work normally — ask the AI questions, write code, run tests. The session records everything automatically.
 
 When done:
 
