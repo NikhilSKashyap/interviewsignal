@@ -81,7 +81,7 @@ interview dashboard              # → http://localhost:7832
 interview dashboard INT-4829-XK  # → jump straight to one interview's submissions
 ```
 
-Submissions arrive sorted by score. Flags highlight anomalies — sessions that were too fast, showed no iteration, had suspiciously uniform timing, or show signs of tampered hooks (gaps in the event stream, code changes that don't match the tool log). Select candidates in bulk and advance or reject in one click. Click into any candidate to see the full transcript, dimension scores, and diff. Add comments. Record your decision.
+Submissions arrive sorted by score. Flags highlight anomalies — sessions that were too fast, showed no iteration, had suspiciously uniform timing, or show signs of tampered hooks (gaps in the event stream, code changes that don't match the tool log). Select candidates in bulk and advance or reject in one click. Click into any candidate to see the full transcript, dimension scores, and diff. Add comments. Record your decision. Export filtered candidates as CSV.
 
 Use **Verify Chain** to confirm the session log is tamper-evident. Control what candidates see after grading with the **Score Sharing** panel.
 

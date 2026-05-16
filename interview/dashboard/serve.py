@@ -287,7 +287,7 @@ def _build_candidate_row(r: dict) -> str:
     decision_badge = ""
     if decision_obj:
         d = decision_obj["decision"]
-        d_color = {"hire": "#22c55e", "next_round": "#60a5fa", "reject": "#ef4444"}.get(d, "#888")
+        d_color = {"hire": "#22c55e", "next_round": "#818cf8", "reject": "#ef4444"}.get(d, "#71717a")
         d_label = {"hire": "✓ Hired", "next_round": "→ Next Round", "reject": "✗ Rejected"}.get(d, d)
         decision_badge = f' <span style="color:{d_color};font-size:11px;font-weight:600">{d_label}</span>'
 
@@ -318,30 +318,53 @@ def _build_candidate_row(r: dict) -> str:
     if graded_by == "auto":
         graded_by_badge = (
             ' <span title="Auto-graded on submission" '
-            'style="font-size:10px;color:#60a5fa;background:#0c1a2e;'
-            'border:1px solid #1e40af;border-radius:10px;padding:1px 6px;'
+            'style="font-size:10px;color:#818cf8;background:#1e1b4b;'
+            'border:1px solid #312e81;border-radius:10px;padding:1px 6px;'
             'vertical-align:middle">Auto</span>'
         )
     elif graded_by == "hm" and r.get("graded"):
         graded_by_badge = (
             ' <span title="Graded by hiring manager" '
-            'style="font-size:10px;color:#a3a3a3;background:#1a1a1a;'
-            'border:1px solid #333;border-radius:10px;padding:1px 6px;'
+            'style="font-size:10px;color:#a1a1aa;background:#16161a;'
+            'border:1px solid #27272a;border-radius:10px;padding:1px 6px;'
             'vertical-align:middle">HM</span>'
         )
 
     score_data = score if score is not None else ""
+
+    # Avatar initial (first letter of label)
+    initial = label[0].upper() if label else "?"
+    avatar_bg = "#3730a3" if label.startswith("@") else "#27272a"
+
+    # Score ring HTML
+    if score is not None:
+        score_ring = (
+            f'<span class="score-ring" style="color:{score_col};border-color:{score_col}">'
+            f'{score}</span>'
+        )
+    else:
+        score_ring = '<span class="score-ring" style="color:#3f3f46;border-color:#27272a">—</span>'
+
+    decision_str = ""
+    if decision_obj:
+        decision_str = decision_obj.get("decision", "")
+    elif r.get("decision"):
+        decision_str = r.get("decision", "")
+
     return f"""
-    <tr data-code="{code}" data-cid="{cid}" data-score="{score_data}" data-submitted="{submitted_ts}" data-duration="{elapsed_float}" data-flag-severity="{flag_severity}" data-status="{row_status}">
+    <tr data-code="{code}" data-cid="{cid}" data-score="{score_data}" data-submitted="{submitted_ts}" data-duration="{elapsed_float}" data-flag-severity="{flag_severity}" data-status="{row_status}" data-label="{escape(label)}" data-decision="{decision_str}" data-flagcount="{flag_count}" data-flagsev="{flag_severity}">
       <td class="td-label">
         <input type="checkbox" class="candidate-checkbox" data-code="{code}" data-cid="{cid}">
+        <span style="display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;
+                      border-radius:50%;background:{avatar_bg};color:#a1a1aa;font-size:12px;font-weight:600;
+                      flex-shrink:0">{initial}</span>
         <span class="display-label">{label}</span>{decision_badge}
       </td>
-      <td><span class="score-badge" style="color:{score_col}">{score_str}</span>{graded_by_badge}</td>
+      <td>{score_ring}{graded_by_badge}</td>
       <td>{flag_indicator}</td>
-      <td>{elapsed} min</td>
-      <td>{event_count}</td>
-      <td>{submitted}</td>
+      <td style="color:#71717a;font-family:'JetBrains Mono',monospace;font-size:12px">{elapsed}<span style="color:#3f3f46"> min</span></td>
+      <td style="color:#52525b;font-family:'JetBrains Mono',monospace;font-size:12px">{event_count}</td>
+      <td style="color:#52525b;font-size:12px">{submitted}</td>
       <td>
         <a class="btn btn-sm" href="{view_url}" target="_blank">View</a>
         {reveal_btn}
@@ -351,33 +374,36 @@ def _build_candidate_row(r: dict) -> str:
 
 WIZARD_CSS = """
   .wizard-wrap { display:flex; justify-content:center; padding:60px 32px; }
-  .wizard-card { background:#111; border:1px solid #222; border-radius:12px;
-                 padding:40px; width:100%; max-width:520px; }
+  .wizard-card { background:#111113; border:1px solid #1e1e22; border-radius:16px;
+                 padding:40px; width:100%; max-width:520px;
+                 box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
   .wizard-card.wide { max-width:640px; }
-  .wizard-step { font-size:11px; color:#555; text-transform:uppercase;
-                 letter-spacing:0.1em; margin-bottom:12px; }
-  .wizard-card h2 { font-size:22px; font-weight:700; color:#fff; margin-bottom:12px; }
-  .wizard-card p { font-size:14px; color:#888; margin-bottom:24px; line-height:1.6; }
-  .wizard-card label { display:block; font-size:13px; color:#888;
-                       margin-bottom:6px; margin-top:16px; }
+  .wizard-step { font-size:10px; color:#52525b; text-transform:uppercase;
+                 letter-spacing:0.12em; margin-bottom:14px; font-weight:600; }
+  .wizard-card h2 { font-size:22px; font-weight:700; color:#fff; margin-bottom:12px;
+                    letter-spacing:-0.02em; }
+  .wizard-card p { font-size:14px; color:#71717a; margin-bottom:24px; line-height:1.6; }
+  .wizard-card label { display:block; font-size:13px; color:#71717a;
+                       margin-bottom:6px; margin-top:16px; font-weight:500; }
   .wizard-card label:first-of-type { margin-top:0; }
-  .wizard-field { width:100%; background:#0a0a0a; border:1px solid #333; color:#e0e0e0;
-                  border-radius:6px; padding:10px 12px; font-size:14px; margin-bottom:20px;
-                  outline:none; box-sizing:border-box; font-family:inherit; }
-  .wizard-field:focus { border-color:#555; }
+  .wizard-field { width:100%; background:#0a0a0b; border:1px solid #27272a; color:#e4e4e7;
+                  border-radius:8px; padding:10px 14px; font-size:14px; margin-bottom:20px;
+                  outline:none; box-sizing:border-box; font-family:inherit;
+                  transition: border-color 0.15s; }
+  .wizard-field:focus { border-color:#4f46e5; }
   .wizard-field.textarea { resize:vertical; min-height:140px; font-size:13px; }
-  .wizard-field.number { width:120px; }
+  .wizard-field.number { width:120px; font-family:'JetBrains Mono',monospace; }
   .wizard-btns { display:flex; gap:10px; margin-top:4px; }
-  .wizard-hint { font-size:12px; color:#555; margin-top:20px; }
-  .wizard-hint a { color:#60a5fa; text-decoration:none; }
+  .wizard-hint { font-size:12px; color:#52525b; margin-top:20px; }
+  .wizard-hint a { color:#818cf8; text-decoration:none; }
   .wizard-hint a:hover { text-decoration:underline; }
-  .wizard-error { background:#1f0d0d; border:1px solid #7f1d1d; color:#f87171;
-                  border-radius:6px; padding:10px 14px; font-size:13px; margin-bottom:16px; }
+  .wizard-error { background:#1c1015; border:1px solid #7f1d1d; color:#f87171;
+                  border-radius:8px; padding:10px 14px; font-size:13px; margin-bottom:16px; }
   .success-code { font-size:32px; font-weight:700; color:#fbbf24;
-                  font-family:monospace; margin:16px 0; letter-spacing:2px; }
-  .install-block { background:#0a0a0a; border:1px solid #222; border-radius:6px;
-                   padding:16px; font-family:monospace; font-size:13px; color:#888;
-                   margin:16px 0; white-space:pre; }
+                  font-family:'JetBrains Mono',monospace; margin:16px 0; letter-spacing:2px; }
+  .install-block { background:#0a0a0b; border:1px solid #1e1e22; border-radius:8px;
+                   padding:16px; font-family:'JetBrains Mono',monospace; font-size:13px;
+                   color:#71717a; margin:16px 0; white-space:pre; }
 """
 
 
@@ -523,7 +549,7 @@ def _build_create_success_html(code: str) -> str:
     <h2>Interview created</h2>
     <p>Share this code with your candidates:</p>
     <div class="success-code" id="the-code">{safe_code}</div>
-    <p style="font-size:13px;color:#888;margin-bottom:8px">Candidate install command:</p>
+    <p style="font-size:13px;color:#71717a;margin-bottom:8px">Candidate install command:</p>
     <div class="install-block">{escape(install_lines)}</div>
     <div class="wizard-btns" style="margin-top:24px">
       <button class="btn btn-sm" onclick="copyCode()" style="margin-left:0">Copy Code</button>
@@ -546,33 +572,58 @@ function copyCode() {{
 
 SHARED_CSS = """
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-         background: #0f0f0f; color: #e0e0e0; }
-  .topbar { background: #111; border-bottom: 1px solid #222;
-            padding: 16px 32px; display: flex; align-items: center; gap: 16px; }
-  .topbar h1 { font-size: 18px; font-weight: 700; color: #fff; }
-  .topbar .tagline { font-size: 12px; color: #666; }
-  .topbar a { margin-left: auto; font-size: 13px; color: #60a5fa; text-decoration: none; }
-  .main { padding: 32px; max-width: 1100px; margin: 0 auto; }
-  .btn { background: #1a1a1a; border: 1px solid #333; color: #ccc; padding: 6px 14px;
-         border-radius: 6px; cursor: pointer; font-size: 13px; text-decoration: none;
-         transition: all 0.15s; display: inline-block; }
-  .btn:hover { background: #252525; border-color: #555; color: #fff; }
-  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-  .btn-primary { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
-  .btn-primary:hover { background: #2563eb; }
-  .btn-sm { padding: 4px 10px; font-size: 12px; }
+  body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+         background: #0a0a0b; color: #e0e0e0; line-height: 1.5;
+         -webkit-font-smoothing: antialiased; }
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  /* ─── Topbar ─── */
+  .topbar { background: linear-gradient(180deg, #111113 0%, #0e0e10 100%);
+            border-bottom: 1px solid #1e1e22;
+            padding: 14px 32px; display: flex; align-items: center; gap: 14px; }
+  .topbar h1 { font-size: 17px; font-weight: 700; color: #fff;
+               letter-spacing: -0.02em; }
+  .topbar h1 .logo-accent { color: #818cf8; }
+  .topbar .tagline { font-size: 11px; color: #52525b; font-weight: 500;
+                     letter-spacing: 0.03em; text-transform: uppercase; }
+  .topbar a { margin-left: auto; font-size: 13px; color: #818cf8; text-decoration: none; }
+
+  /* ─── Layout ─── */
+  .main { padding: 28px 32px; max-width: 1140px; margin: 0 auto; }
+
+  /* ─── Buttons ─── */
+  .btn { background: #16161a; border: 1px solid #27272a; color: #a1a1aa; padding: 7px 16px;
+         border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500;
+         text-decoration: none; transition: all 0.15s ease; display: inline-block;
+         font-family: inherit; }
+  .btn:hover { background: #1c1c21; border-color: #3f3f46; color: #e4e4e7; }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn-primary { background: #4f46e5; border-color: #4f46e5; color: #fff; }
+  .btn-primary:hover { background: #5b52f0; border-color: #5b52f0; }
+  .btn-sm { padding: 5px 12px; font-size: 12px; }
   .btn-grade { border-color: #854d0e; color: #fbbf24; }
   .btn-hire { border-color: #166534; color: #4ade80; }
-  .btn-next { border-color: #1e40af; color: #60a5fa; }
+  .btn-next { border-color: #1e40af; color: #818cf8; }
   .btn-reject { border-color: #7f1d1d; color: #f87171; }
-  .badge-pending { background: #2d1a00; border: 1px solid #854d0e; color: #fbbf24;
-                   font-size: 10px; padding: 2px 7px; border-radius: 10px;
-                   margin-right: 6px; vertical-align: middle; }
-  .score-badge { font-weight: 700; font-size: 15px; }
-  .section-title { font-size: 12px; font-weight: 600; color: #666; text-transform: uppercase;
-                   letter-spacing: 0.08em; margin-bottom: 12px; padding-bottom: 8px;
-                   border-bottom: 1px solid #222; }
+  .badge-pending { background: #1c1917; border: 1px solid #854d0e; color: #fbbf24;
+                   font-size: 10px; padding: 2px 8px; border-radius: 10px;
+                   margin-right: 6px; vertical-align: middle; font-weight: 500; }
+
+  /* ─── Score ─── */
+  .score-badge { font-weight: 700; font-size: 15px; font-family: 'JetBrains Mono', monospace; }
+  .score-ring { display: inline-flex; align-items: center; justify-content: center;
+                width: 42px; height: 42px; border-radius: 50%;
+                font-weight: 700; font-size: 14px; font-family: 'JetBrains Mono', monospace;
+                border: 2.5px solid currentColor; flex-shrink: 0; }
+
+  /* ─── Section titles ─── */
+  .section-title { font-size: 11px; font-weight: 600; color: #52525b; text-transform: uppercase;
+                   letter-spacing: 0.1em; margin-bottom: 14px; padding-bottom: 10px;
+                   border-bottom: 1px solid #1e1e22; }
+
+  /* ─── Panels ─── */
+  .panel { background: #111113; border: 1px solid #1e1e22; border-radius: 12px;
+           padding: 20px; margin-bottom: 16px; }
 """
 
 
@@ -600,9 +651,9 @@ def _build_dashboard_html(
             safe_c = escape(c)
             active = (c == current_code)
             style = (
-                "background:#1d4ed8;border-color:#1d4ed8;color:#fff;"
+                "background:#4f46e5;border-color:#4f46e5;color:#fff;"
                 if active else
-                "background:#1a1a1a;border-color:#333;color:#888;"
+                "background:#16161a;border-color:#27272a;color:#71717a;"
             )
             pills.append(
                 f'<a href="/?filter={quote(c, safe="")}" '
@@ -612,7 +663,8 @@ def _build_dashboard_html(
             )
         code_tabs_html = (
             f'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:24px">'
-            f'<span style="font-size:12px;color:#555;margin-right:4px">Interview:</span>'
+            f'<span style="font-size:11px;color:#52525b;margin-right:4px;font-weight:500;'
+            f'text-transform:uppercase;letter-spacing:0.06em">Interview:</span>'
             + "".join(pills)
             + '</div>'
         )
@@ -624,70 +676,85 @@ def _build_dashboard_html(
 <title>interviewsignal Dashboard</title>
 <style>
   {SHARED_CSS}
-  .stats {{ display: flex; gap: 24px; margin-bottom: 32px; }}
-  .stat {{ background: #161616; border: 1px solid #222; border-radius: 8px; padding: 16px 24px; }}
-  .stat-val {{ font-size: 28px; font-weight: 700; color: #fff; }}
-  .stat-label {{ font-size: 12px; color: #666; margin-top: 4px; }}
+  .stats {{ display: flex; gap: 16px; margin-bottom: 28px; }}
+  .stat {{ background: #111113; border: 1px solid #1e1e22; border-radius: 12px;
+           padding: 18px 24px; flex: 1; position: relative; overflow: hidden; }}
+  .stat::before {{ content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; }}
+  .stat:nth-child(1)::before {{ background: linear-gradient(90deg, #818cf8, #6366f1); }}
+  .stat:nth-child(2)::before {{ background: linear-gradient(90deg, #34d399, #10b981); }}
+  .stat:nth-child(3)::before {{ background: linear-gradient(90deg, #fbbf24, #f59e0b); }}
+  .stat-val {{ font-size: 28px; font-weight: 700; color: #fff;
+               font-family: 'JetBrains Mono', monospace; letter-spacing: -0.02em; }}
+  .stat-label {{ font-size: 11px; color: #52525b; margin-top: 4px; font-weight: 500;
+                 text-transform: uppercase; letter-spacing: 0.06em; }}
   .toolbar {{ display: flex; gap: 12px; margin-bottom: 16px; align-items: center; flex-wrap: wrap; }}
-  table {{ width: 100%; border-collapse: collapse; }}
-  thead th {{ text-align: left; font-size: 11px; font-weight: 600; color: #666;
-              text-transform: uppercase; letter-spacing: 0.06em;
-              padding: 8px 16px; border-bottom: 1px solid #222; }}
-  tbody tr {{ border-bottom: 1px solid #1a1a1a; }}
-  tbody tr:hover {{ background: #161616; }}
-  td {{ padding: 12px 16px; font-size: 13px; vertical-align: middle; }}
+  table {{ width: 100%; border-collapse: separate; border-spacing: 0; }}
+  thead th {{ text-align: left; font-size: 10px; font-weight: 600; color: #52525b;
+              text-transform: uppercase; letter-spacing: 0.08em;
+              padding: 10px 16px; border-bottom: 1px solid #1e1e22; }}
+  tbody tr {{ border-bottom: 1px solid #141416; transition: background 0.15s ease; }}
+  tbody tr:hover {{ background: #141416; }}
+  td {{ padding: 14px 16px; font-size: 13px; vertical-align: middle; }}
   .td-label {{ display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }}
-  .display-label {{ font-weight: 600; color: #e0e0e0; }}
-  .empty {{ text-align: center; padding: 64px; color: #444; }}
-  .received-hint {{ background: #111; border: 1px solid #333; border-radius: 8px;
-                    padding: 16px; margin-bottom: 24px; font-size: 13px; color: #888; }}
-  .received-hint strong {{ color: #ccc; }}
-  code {{ font-family: monospace; font-size: 12px; color: #555; }}
+  .display-label {{ font-weight: 600; color: #e4e4e7; letter-spacing: -0.01em; }}
+  .empty {{ text-align: center; padding: 80px 32px; color: #3f3f46; }}
+  .empty h3 {{ font-size: 18px; font-weight: 600; color: #52525b; margin-bottom: 8px; }}
+  .empty p {{ font-size: 14px; color: #3f3f46; }}
+  .received-hint {{ background: #111113; border: 1px solid #1e1e22; border-radius: 10px;
+                    padding: 14px 18px; margin-bottom: 24px; font-size: 13px; color: #71717a; }}
+  .received-hint strong {{ color: #a1a1aa; }}
+  code {{ font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #52525b; }}
   /* Sort + filter controls */
   .controls-row {{ display: flex; gap: 12px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }}
-  .controls-row label {{ font-size: 12px; color: #888; }}
-  .ctrl-select {{ background: #1a1a1a; border: 1px solid #333; color: #ccc;
-                  padding: 5px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; }}
-  .ctrl-input {{ background: #1a1a1a; border: 1px solid #333; color: #ccc;
-                 padding: 5px 8px; border-radius: 6px; font-size: 12px; width: 58px; }}
+  .controls-row label {{ font-size: 12px; color: #71717a; font-weight: 500; }}
+  .ctrl-select {{ background: #16161a; border: 1px solid #27272a; color: #a1a1aa;
+                  padding: 6px 12px; border-radius: 8px; font-size: 12px; cursor: pointer;
+                  font-family: inherit; }}
+  .ctrl-input {{ background: #16161a; border: 1px solid #27272a; color: #a1a1aa;
+                 padding: 6px 8px; border-radius: 8px; font-size: 12px; width: 58px;
+                 font-family: 'JetBrains Mono', monospace; }}
   /* Summary bar */
-  .summary-bar {{ background: #111; border: 1px solid #222; border-radius: 6px;
-                  padding: 10px 16px; margin-bottom: 10px; font-size: 12px; color: #888;
+  .summary-bar {{ background: #111113; border: 1px solid #1e1e22; border-radius: 10px;
+                  padding: 10px 18px; margin-bottom: 12px; font-size: 12px; color: #71717a;
                   display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }}
-  .summary-bar span {{ color: #ccc; }}
-  .summary-bar .sep {{ color: #333; }}
+  .summary-bar span {{ color: #a1a1aa; font-weight: 500; }}
+  .summary-bar .sep {{ color: #27272a; }}
   /* Selection count bar */
-  .sel-bar {{ background: #0c1a2e; border: 1px solid #1e40af; border-radius: 6px;
-              padding: 8px 14px; margin-bottom: 8px; font-size: 12px; color: #93c5fd;
-              display: none; }}
+  .sel-bar {{ background: #1a1537; border: 1px solid #3730a3; border-radius: 10px;
+              padding: 8px 16px; margin-bottom: 8px; font-size: 12px; color: #a5b4fc;
+              display: none; font-weight: 500; }}
   /* Batch actions bar */
-  .batch-bar {{ background: #111; border: 1px solid #333; border-radius: 6px;
-                padding: 10px 14px; margin-bottom: 10px; display: none;
+  .batch-bar {{ background: #111113; border: 1px solid #1e1e22; border-radius: 10px;
+                padding: 12px 16px; margin-bottom: 12px; display: none;
                 gap: 10px; align-items: center; flex-wrap: wrap; }}
   .batch-bar.visible {{ display: flex; }}
-  .batch-progress {{ font-size: 12px; color: #888; margin-left: 8px; }}
+  .batch-progress {{ font-size: 12px; color: #71717a; margin-left: 8px; }}
   /* Pagination */
-  .pagination {{ display: flex; gap: 10px; align-items: center; margin-top: 16px;
-                 font-size: 13px; color: #888; }}
-  .pagination button {{ background: #1a1a1a; border: 1px solid #333; color: #ccc;
-                         padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; }}
+  .pagination {{ display: flex; gap: 10px; align-items: center; margin-top: 20px;
+                 font-size: 13px; color: #71717a; }}
+  .pagination button {{ background: #16161a; border: 1px solid #27272a; color: #a1a1aa;
+                         padding: 6px 14px; border-radius: 8px; cursor: pointer; font-size: 12px;
+                         font-weight: 500; font-family: inherit; transition: all 0.15s; }}
+  .pagination button:hover {{ background: #1c1c21; border-color: #3f3f46; }}
   .pagination button:disabled {{ opacity: 0.3; cursor: not-allowed; }}
   /* Confirmation dialog overlay */
-  .confirm-overlay {{ position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+  .confirm-overlay {{ position: fixed; inset: 0; background: rgba(0,0,0,0.75);
+                       backdrop-filter: blur(4px);
                        z-index: 1000; display: flex; align-items: center; justify-content: center; }}
-  .confirm-box {{ background: #161616; border: 1px solid #333; border-radius: 10px;
-                  padding: 28px 32px; max-width: 420px; width: 90%; }}
-  .confirm-box h3 {{ font-size: 15px; color: #fff; margin-bottom: 10px; }}
-  .confirm-box p {{ font-size: 13px; color: #888; margin-bottom: 20px; }}
+  .confirm-box {{ background: #111113; border: 1px solid #27272a; border-radius: 14px;
+                  padding: 28px 32px; max-width: 420px; width: 90%;
+                  box-shadow: 0 24px 48px rgba(0,0,0,0.5); }}
+  .confirm-box h3 {{ font-size: 16px; color: #fff; margin-bottom: 10px; font-weight: 600; }}
+  .confirm-box p {{ font-size: 13px; color: #71717a; margin-bottom: 24px; line-height: 1.5; }}
   .confirm-btns {{ display: flex; gap: 10px; }}
 </style>
 </head>
 <body>
 <div class="topbar">
-  <h1>interviewsignal</h1>
-  <span class="tagline">Thought process, not puzzles.</span>
+  <h1>interview<span class="logo-accent">signal</span></h1>
+  <span class="tagline">Thought process, not puzzles</span>
   <div style="margin-left:auto;display:flex;gap:12px;align-items:center">
-    <a href="/create-interview" style="background:#1d4ed8;border:1px solid #1d4ed8;color:#fff;padding:6px 14px;border-radius:6px;font-size:13px;text-decoration:none;margin-left:0">+ Create Interview</a>
+    <a href="/create-interview" class="btn btn-primary" style="font-size:13px">+ Create Interview</a>
   </div>
 </div>
 <div class="main">
@@ -706,6 +773,7 @@ def _build_dashboard_html(
 
   <div class="toolbar">
     <button class="btn" onclick="location.reload()">↻ Refresh</button>
+    {'<button class="btn" id="btn-export-csv">↓ Export CSV</button>' if reports else ''}
   </div>
 
   {'<div id="candidates-section">' if reports else ''}
@@ -714,7 +782,7 @@ def _build_dashboard_html(
   {'<div class="controls-row"><label>Sort by:</label><select class="ctrl-select" id="sort-select"><option value="score-desc">Score ↓</option><option value="score-asc">Score ↑</option><option value="submitted-desc">Submitted (newest)</option><option value="submitted-asc">Submitted (oldest)</option><option value="duration">Session duration</option><option value="flags">Flag severity (red first)</option></select></div>' if reports else ''}
 
   {'<!-- Filter controls -->' if reports else ''}
-  {'<div class="controls-row"><label>Status:</label><select class="ctrl-select" id="filter-status"><option value="all">All</option><option value="graded">Graded</option><option value="pending">Pending</option><option value="decided">Decided</option></select><label style="margin-left:8px">Flags:</label><select class="ctrl-select" id="filter-flags"><option value="all">All</option><option value="clean">Clean only</option><option value="flagged">Flagged only</option></select><label style="margin-left:8px">Score:</label><input type="number" class="ctrl-input" id="filter-score-min" min="0" max="10" step="0.1" placeholder="min"><span style="color:#555;font-size:12px">–</span><input type="number" class="ctrl-input" id="filter-score-max" min="0" max="10" step="0.1" placeholder="max"><button class="btn btn-sm" id="btn-apply-filter" style="margin-left:4px">Apply</button></div>' if reports else ''}
+  {'<div class="controls-row"><label>Status:</label><select class="ctrl-select" id="filter-status"><option value="all">All</option><option value="graded">Graded</option><option value="pending">Pending</option><option value="decided">Decided</option></select><label style="margin-left:8px">Flags:</label><select class="ctrl-select" id="filter-flags"><option value="all">All</option><option value="clean">Clean only</option><option value="flagged">Flagged only</option></select><label style="margin-left:8px">Score:</label><input type="number" class="ctrl-input" id="filter-score-min" min="0" max="10" step="0.1" placeholder="min"><span style="color:#3f3f46;font-size:12px">–</span><input type="number" class="ctrl-input" id="filter-score-max" min="0" max="10" step="0.1" placeholder="max"><button class="btn btn-sm" id="btn-apply-filter" style="margin-left:4px">Apply</button></div>' if reports else ''}
 
   {'<!-- Summary bar -->' if reports else ''}
   {'<div class="summary-bar" id="summary-bar"><span id="sb-total">0 submissions</span><span class="sep">|</span><span id="sb-graded">0 graded</span><span class="sep">|</span><span id="sb-pending">0 pending</span><span class="sep">|</span><span id="sb-avg">avg score —</span><span class="sep">|</span><span id="sb-advancing">0 advancing</span><span class="sep">|</span><span id="sb-rejected">0 rejected</span></div>' if reports else ''}
@@ -723,7 +791,7 @@ def _build_dashboard_html(
   {'<div class="sel-bar" id="sel-bar">0 selected</div>' if reports else ''}
 
   {'<!-- Batch actions bar -->' if reports else ''}
-  {'<div class="batch-bar" id="batch-bar"><button class="btn btn-sm btn-next" id="batch-advance">Advance Selected</button><button class="btn btn-sm btn-reject" id="batch-reject">Reject Selected</button><span style="margin-left:8px;color:#555;font-size:12px">|</span><label style="font-size:12px;color:#888;margin-left:8px">Reject below score:</label><input type="number" class="ctrl-input" id="batch-threshold" min="0" max="10" step="0.1" placeholder="e.g. 5"><button class="btn btn-sm btn-reject" id="batch-reject-below" style="margin-left:4px">Reject Below</button><span class="batch-progress" id="batch-progress"></span></div>' if reports else ''}
+  {'<div class="batch-bar" id="batch-bar"><button class="btn btn-sm btn-next" id="batch-advance">Advance Selected</button><button class="btn btn-sm btn-reject" id="batch-reject">Reject Selected</button><span style="margin-left:8px;color:#27272a;font-size:12px">|</span><label style="font-size:12px;color:#71717a;margin-left:8px">Reject below score:</label><input type="number" class="ctrl-input" id="batch-threshold" min="0" max="10" step="0.1" placeholder="e.g. 5"><button class="btn btn-sm btn-reject" id="batch-reject-below" style="margin-left:4px">Reject Below</button><span class="batch-progress" id="batch-progress"></span></div>' if reports else ''}
 
   {'<table id="candidates-table"><thead><tr><th><input type="checkbox" id="select-all"> Candidate</th><th>Score</th><th>Flags</th><th>Duration</th><th>Events</th><th>Submitted</th><th>Actions</th></tr></thead><tbody id="candidates-tbody">' + rows + '</tbody></table>'
    if reports else
@@ -1019,6 +1087,31 @@ def _build_dashboard_html(
     await batchDecision(entries, 'reject', 'Batch reject (below ' + threshold + ')', 'Reject below ' + threshold);
   }});
 
+  // ── CSV Export ──────────────────────────────────────────────────────────────
+  document.getElementById('btn-export-csv')?.addEventListener('click', function() {{
+    const visibleRows = allRows.filter(r => r.style.display !== 'none');
+    const headers = ['Candidate', 'Score', 'Flags', 'Duration', 'Events', 'Decision'];
+    const csvRows = [headers.join(',')];
+    visibleRows.forEach(r => {{
+      const name = (r.dataset.label || '').replace(/"/g, '""');
+      const score = r.dataset.score || '';
+      const flagCount = r.dataset.flagcount || '0';
+      const flagSev = r.dataset.flagsev || '';
+      const duration = (r.querySelector('td:nth-child(4)')?.textContent || '').trim().replace(/"/g, '""');
+      const events = (r.querySelector('td:nth-child(5)')?.textContent || '').trim();
+      const decision = r.dataset.decision || '';
+      csvRows.push(['"' + name + '"', score, flagCount > 0 ? flagSev + ' (' + flagCount + ')' : 'clean',
+                     '"' + duration + '"', events, decision].join(','));
+    }});
+    const blob = new Blob([csvRows.join('\\n')], {{type: 'text/csv;charset=utf-8;'}});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'interviewsignal-export.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  }});
+
   // ── Initial render ─────────────────────────────────────────────────────────
   applyFilterAndSort();
 }})();
@@ -1081,23 +1174,26 @@ def _build_flags_panel_html(flags: list[dict]) -> str:
         label    = escape(str(flag.get("label", "")))
         detail   = escape(str(flag.get("detail", "")))
         if severity == "red":
-            bg     = "#fee2e2"
-            border = "#ef4444"
-            color  = "#991b1b"
+            bg     = "#1c0a0a"
+            border = "#7f1d1d"
+            color  = "#fca5a5"
+            icon   = "●"
         else:
-            bg     = "#fef3c7"
-            border = "#f59e0b"
-            color  = "#92400e"
+            bg     = "#1c1508"
+            border = "#854d0e"
+            color  = "#fcd34d"
+            icon   = "●"
         badges += (
             f'<div style="background:{bg};border:1px solid {border};color:{color};'
-            f'border-radius:6px;padding:10px 14px;margin-bottom:8px">'
-            f'<div style="font-weight:600;font-size:13px;margin-bottom:2px">{label}</div>'
-            f'<div style="font-size:12px">{detail}</div>'
+            f'border-radius:8px;padding:10px 14px;margin-bottom:8px">'
+            f'<div style="font-weight:600;font-size:13px;margin-bottom:2px">'
+            f'<span style="margin-right:6px">{icon}</span>{label}</div>'
+            f'<div style="font-size:12px;opacity:0.8">{detail}</div>'
             f'</div>'
         )
 
     return (
-        f'<div class="panel" style="border-color:#2a2a2a">'
+        f'<div class="panel">'
         f'<div class="section-title">Session Flags</div>'
         f'{badges}'
         f'</div>'
@@ -1317,7 +1413,7 @@ def _render_preamble(manifest: dict) -> str:
     banner_text = "\n".join(banner_lines)
     parts.append(
         f'<div class="t-banner"><pre style="margin:0;white-space:pre-wrap;'
-        f'color:#888;font-family:inherit">{escape(banner_text)}</pre></div>'
+        f'color:#71717a;font-family:inherit">{escape(banner_text)}</pre></div>'
     )
     return "\n".join(parts)
 
@@ -1483,7 +1579,7 @@ def _render_transcript_html(events: list, manifest: dict | None = None) -> str:
             )
 
     if len(parts) <= (2 if manifest else 1):
-        parts.append('<div style="color:#555;font-size:13px">No session events recorded.</div>')
+        parts.append('<div style="color:#52525b;font-size:13px">No session events recorded.</div>')
 
     parts.append('</div>')
     return "\n".join(parts)
@@ -1556,16 +1652,16 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
     if decision_obj:
         d = decision_obj.get("decision", "")
         recorded = escape(decision_obj.get("recorded_at") or decision_obj.get("timestamp_iso", ""))
-        colors = {"hire": "#22c55e", "next_round": "#60a5fa", "reject": "#ef4444"}
+        colors = {"hire": "#22c55e", "next_round": "#818cf8", "reject": "#ef4444"}
         labels_map = {"hire": "✓ Hired", "next_round": "→ Next Round", "reject": "✗ Rejected"}
         decision_label = escape(labels_map.get(d, d))
         decision_reason = escape(decision_obj.get("reason", "—"))
         decision_html = f"""
-        <div class="current-decision" style="color:{colors.get(d,'#888')}">
+        <div class="current-decision" style="color:{colors.get(d,'#71717a')}">
           Current decision: <strong>{decision_label}</strong>
-          <span style="color:#555;font-size:12px;margin-left:12px">{recorded}</span>
+          <span style="color:#52525b;font-size:12px;margin-left:12px">{recorded}</span>
         </div>
-        <div style="color:#888;font-size:13px;margin-top:8px">Reason: {decision_reason}</div>"""
+        <div style="color:#71717a;font-size:13px;margin-top:8px">Reason: {decision_reason}</div>"""
 
     # Grade panel (relay mode — when we have grading data)
     grade_panel_html = ""
@@ -1583,10 +1679,10 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
             prev_score = prev.get("overall_score")
             rev_reason = escape(prev.get("revision_reason", ""))
             if prev_score is not None:
-                revision_badge = f' <span style="font-size:12px;color:#888">(revised from {prev_score})</span>'
+                revision_badge = f' <span style="font-size:12px;color:#71717a">(revised from {prev_score})</span>'
             if rev_reason:
                 revision_reason_html = (
-                    f'<div style="font-size:12px;color:#888;margin-top:4px">'
+                    f'<div style="font-size:12px;color:#71717a;margin-top:4px">'
                     f'Reason: <em>"{rev_reason}"</em></div>'
                 )
 
@@ -1600,17 +1696,17 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
                 label    = "Initial grade" if i == len(grading_history) - 1 else f"Revision {len(grading_history) - i - 1}"
                 history_rows += (
                     f'<div style="display:grid;grid-template-columns:100px 60px 1fr;'
-                    f'gap:6px;font-size:11px;padding:4px 0;border-bottom:1px solid #1a1a1a">'
-                    f'<span style="color:#555">{label}</span>'
-                    f'<span style="color:#ccc">{h_score} / 10</span>'
-                    f'<span style="color:#555">{h_ts[:16].replace("T"," ")}</span>'
+                    f'gap:6px;font-size:11px;padding:4px 0;border-bottom:1px solid #1e1e22">'
+                    f'<span style="color:#52525b">{label}</span>'
+                    f'<span style="color:#a1a1aa;font-family:JetBrains Mono,monospace">{h_score} / 10</span>'
+                    f'<span style="color:#52525b">{h_ts[:16].replace("T"," ")}</span>'
                     f'</div>'
-                    + (f'<div style="font-size:11px;color:#555;padding-bottom:4px">'
+                    + (f'<div style="font-size:11px;color:#52525b;padding-bottom:4px">'
                        f'Reason: {h_reason}</div>' if h_reason else "")
                 )
             history_section = (
                 f'<details style="margin-top:12px">'
-                f'<summary style="font-size:12px;color:#555;cursor:pointer">'
+                f'<summary style="font-size:12px;color:#52525b;cursor:pointer">'
                 f'Revision history ({len(grading_history)})</summary>'
                 f'<div style="margin-top:8px">{history_rows}</div>'
                 f'</details>'
@@ -1622,15 +1718,15 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
         if graded_by_val == "auto":
             graded_by_label = (
                 '<span title="Graded automatically on submission" '
-                'style="font-size:11px;color:#60a5fa;background:#0c1a2e;'
-                'border:1px solid #1e40af;border-radius:10px;padding:2px 8px;'
+                'style="font-size:11px;color:#818cf8;background:#1e1b4b;'
+                'border:1px solid #312e81;border-radius:10px;padding:2px 8px;'
                 'margin-left:8px;vertical-align:middle">Auto-graded</span>'
             )
         else:
             graded_by_label = (
                 '<span title="Graded by hiring manager" '
-                'style="font-size:11px;color:#a3a3a3;background:#1a1a1a;'
-                'border:1px solid #333;border-radius:10px;padding:2px 8px;'
+                'style="font-size:11px;color:#a1a1aa;background:#16161a;'
+                'border:1px solid #27272a;border-radius:10px;padding:2px 8px;'
                 'margin-left:8px;vertical-align:middle">HM-graded</span>'
             )
 
@@ -1638,28 +1734,31 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
         grade_panel_html = f"""
     <div class="panel" id="grade-panel">
       <div class="section-title">Grade</div>
-      <div style="font-size:22px;font-weight:700;color:#fbbf24;margin-bottom:4px">
+      <div style="font-size:28px;font-weight:700;color:#fbbf24;margin-bottom:4px;
+                  font-family:'JetBrains Mono',monospace;letter-spacing:-0.02em">
         {score_display}{revision_badge}{graded_by_label}
       </div>
       {revision_reason_html}
-      {f'<div style="font-size:12px;color:#555;margin-top:8px">{current_summary}</div>' if current_summary else ''}
+      {f'<div style="font-size:12px;color:#52525b;margin-top:8px">{current_summary}</div>' if current_summary else ''}
       {history_section}
       <div style="margin-top:14px">
         <button class="btn btn-sm" id="btn-toggle-revise" style="border-color:#854d0e;color:#fbbf24">
           Revise Grade
         </button>
       </div>
-      <div id="revise-form" style="display:none;margin-top:14px;border-top:1px solid #1a1a1a;padding-top:14px">
-        <label style="font-size:12px;color:#888;display:block;margin-bottom:4px">New overall score (0–10)</label>
+      <div id="revise-form" style="display:none;margin-top:14px;border-top:1px solid #1e1e22;padding-top:14px">
+        <label style="font-size:12px;color:#71717a;display:block;margin-bottom:4px">New overall score (0–10)</label>
         <input type="number" id="revise-score" min="0" max="10" step="0.1" value="{revise_score_val}"
-               style="width:90px;background:#0a0a0a;border:1px solid #333;color:#e0e0e0;
-                      border-radius:6px;padding:6px 10px;font-size:14px;margin-bottom:10px">
-        <label style="font-size:12px;color:#888;display:block;margin-bottom:4px">
+               style="width:90px;background:#0a0a0b;border:1px solid #27272a;color:#e0e0e0;
+                      border-radius:8px;padding:6px 10px;font-size:14px;margin-bottom:10px;
+                      font-family:'JetBrains Mono',monospace">
+        <label style="font-size:12px;color:#71717a;display:block;margin-bottom:4px">
           Reason for revision <span style="color:#ef4444">*</span>
         </label>
         <textarea id="revise-reason" placeholder="What changed in your evaluation?"
-                  style="width:100%;background:#0a0a0a;border:1px solid #333;color:#e0e0e0;
-                         border-radius:6px;padding:8px;font-size:12px;min-height:64px;resize:vertical"></textarea>
+                  style="width:100%;background:#0a0a0b;border:1px solid #27272a;color:#e0e0e0;
+                         border-radius:8px;padding:8px;font-size:12px;min-height:64px;resize:vertical;
+                         font-family:inherit"></textarea>
         <div style="display:flex;gap:8px;margin-top:8px">
           <button class="btn btn-sm" id="btn-submit-revision"
                   data-code="{escape(code)}" data-cid="{escape(cid)}"
@@ -1695,15 +1794,17 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
             )
             score_label = f"{d_score}/10" if d_score is not None else "—"
             dim_rows += (
-                f'<div style="margin-bottom:12px">'
-                f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">'
-                f'<span style="font-size:12px;color:#ccc">{d_name}</span>'
-                f'<span style="font-size:12px;font-weight:600;color:{score_color}">{score_label}</span>'
+                f'<div style="margin-bottom:14px">'
+                f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">'
+                f'<span style="font-size:12px;color:#d4d4d8">{d_name}</span>'
+                f'<span style="font-size:12px;font-weight:600;color:{score_color};'
+                f'font-family:JetBrains Mono,monospace">{score_label}</span>'
                 f'</div>'
-                f'<div style="height:3px;background:#1a1a1a;border-radius:2px;margin-bottom:5px">'
-                f'<div style="height:3px;width:{score_pct}%;background:{score_color};border-radius:2px"></div>'
+                f'<div style="height:4px;background:#1e1e22;border-radius:2px;margin-bottom:5px">'
+                f'<div style="height:4px;width:{score_pct}%;background:{score_color};border-radius:2px;'
+                f'transition:width 0.3s ease"></div>'
                 f'</div>'
-                f'<div style="font-size:11px;color:#555;line-height:1.5">{d_just}</div>'
+                f'<div style="font-size:11px;color:#52525b;line-height:1.5">{d_just}</div>'
                 f'</div>'
             )
 
@@ -1715,10 +1816,10 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
                 for s in an_standouts
             )
             standout_html = (
-                f'<div style="margin-top:14px">'
+                f'<div style="margin-top:16px">'
                 f'<div style="font-size:10px;color:#4ade80;text-transform:uppercase;'
-                f'letter-spacing:0.08em;margin-bottom:6px">Standout moments</div>'
-                f'<ul style="margin:0;padding-left:16px;font-size:12px;color:#888;line-height:1.6">'
+                f'letter-spacing:0.08em;margin-bottom:6px;font-weight:600">Standout moments</div>'
+                f'<ul style="margin:0;padding-left:16px;font-size:12px;color:#71717a;line-height:1.6">'
                 f'{items}</ul></div>'
             )
 
@@ -1730,18 +1831,18 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
                 for c in an_concerns
             )
             concerns_html = (
-                f'<div style="margin-top:14px">'
+                f'<div style="margin-top:16px">'
                 f'<div style="font-size:10px;color:#f87171;text-transform:uppercase;'
-                f'letter-spacing:0.08em;margin-bottom:6px">Concerns</div>'
-                f'<ul style="margin:0;padding-left:16px;font-size:12px;color:#888;line-height:1.6">'
+                f'letter-spacing:0.08em;margin-bottom:6px;font-weight:600">Concerns</div>'
+                f'<ul style="margin:0;padding-left:16px;font-size:12px;color:#71717a;line-height:1.6">'
                 f'{items}</ul></div>'
             )
 
         analysis_panel_html = (
             f'<div class="panel" id="analysis-panel">'
             f'<div class="section-title">Claude\'s Analysis '
-            f'<span style="color:#555;font-size:10px;font-weight:400">· HM-only · rubric-based</span></div>'
-            + (f'<div style="font-size:13px;color:#b0b0b0;margin-bottom:16px;line-height:1.6">{an_summary}</div>'
+            f'<span style="color:#3f3f46;font-size:10px;font-weight:400">· HM-only · rubric-based</span></div>'
+            + (f'<div style="font-size:13px;color:#a1a1aa;margin-bottom:16px;line-height:1.6">{an_summary}</div>'
                if an_summary else '')
             + dim_rows
             + standout_html
@@ -1776,13 +1877,13 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
         if cand_name else ''
     )
     email_html = (
-        '<div style="font-size:13px;color:#888;margin-bottom:4px">'
+        '<div style="font-size:13px;color:#71717a;margin-bottom:4px">'
         + escape(cand_email) + '</div>'
         if cand_email else ''
     )
     gh_user_html = (
         '<div style="font-size:12px;margin-bottom:4px"><a href="https://github.com/'
-        + escape(cand_username) + '" target="_blank" style="color:#60a5fa;text-decoration:none">@'
+        + escape(cand_username) + '" target="_blank" style="color:#818cf8;text-decoration:none">@'
         + escape(cand_username) + '</a></div>'
         if cand_username else ''
     )
@@ -1792,7 +1893,7 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
         if cand_repo_url else ''
     )
     no_identity_note = (
-        '<div style="font-size:13px;color:#555">No identity info — GitHub OAuth not configured.</div>'
+        '<div style="font-size:13px;color:#52525b">No identity info — GitHub OAuth not configured.</div>'
         if not any([cand_name, cand_email, cand_username]) else ''
     )
     identity_block = f"""
@@ -1816,28 +1917,32 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
 <style>
   {SHARED_CSS}
   .layout {{ display: grid; grid-template-columns: 1fr 340px; gap: 24px; }}
-  .panel {{ background: #111; border: 1px solid #222; border-radius: 8px; padding: 20px; margin-bottom: 16px; }}
-  .comment {{ border-bottom: 1px solid #1a1a1a; padding: 10px 0; }}
+  .comment {{ border-bottom: 1px solid #1e1e22; padding: 10px 0; }}
   .comment:last-child {{ border-bottom: none; }}
-  .comment-meta {{ font-size: 11px; color: #555; margin-bottom: 4px; }}
-  .comment-text {{ font-size: 13px; color: #ccc; }}
-  .no-comments {{ color: #555; font-size: 13px; }}
-  textarea {{ width: 100%; background: #0a0a0a; border: 1px solid #333; color: #e0e0e0;
-              border-radius: 6px; padding: 10px; font-size: 13px; resize: vertical;
-              min-height: 80px; margin-top: 12px; }}
-  textarea:focus {{ outline: none; border-color: #555; }}
+  .comment-meta {{ font-size: 11px; color: #52525b; margin-bottom: 4px; }}
+  .comment-text {{ font-size: 13px; color: #a1a1aa; }}
+  .no-comments {{ color: #52525b; font-size: 13px; }}
+  textarea {{ width: 100%; background: #0a0a0b; border: 1px solid #27272a; color: #e0e0e0;
+              border-radius: 8px; padding: 10px; font-size: 13px; resize: vertical;
+              min-height: 80px; margin-top: 12px; font-family: inherit; }}
+  textarea:focus {{ outline: none; border-color: #4f46e5; }}
   .decision-btns {{ display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }}
   .current-decision {{ font-size: 14px; font-weight: 600; margin-bottom: 8px; }}
-  .back-link {{ color: #60a5fa; text-decoration: none; font-size: 13px; margin-bottom: 24px; display: block; }}
-  .reason-input {{ width: 100%; margin-top: 8px; background: #0a0a0a; border: 1px solid #333;
-                   color: #e0e0e0; border-radius: 6px; padding: 8px; font-size: 13px; }}
-  .transcript {{ font-family: 'Menlo','Consolas','Monaco',monospace; font-size: 13px;
-                 line-height: 1.7; background: #0a0a0a; color: #d4d4d4; padding: 20px;
-                 border-radius: 6px; overflow-x: auto; max-height: 75vh; overflow-y: auto; }}
+  .back-link {{ color: #818cf8; text-decoration: none; font-size: 13px; margin-bottom: 24px;
+                display: inline-flex; align-items: center; gap: 6px; }}
+  .back-link:hover {{ color: #a5b4fc; }}
+  .reason-input {{ width: 100%; margin-top: 8px; background: #0a0a0b; border: 1px solid #27272a;
+                   color: #e0e0e0; border-radius: 8px; padding: 8px; font-size: 13px;
+                   font-family: inherit; }}
+  .reason-input:focus {{ outline: none; border-color: #4f46e5; }}
+  .transcript {{ font-family: 'JetBrains Mono', 'Menlo', 'Consolas', monospace; font-size: 12.5px;
+                 line-height: 1.7; background: #0a0a0b; color: #d4d4d8; padding: 20px;
+                 border-radius: 10px; overflow-x: auto; max-height: 75vh; overflow-y: auto;
+                 border: 1px solid #1e1e22; }}
   .t-banner {{ margin-bottom: 6px; }}
-  .t-debrief {{ border-top: 1px solid #1a1a1a; margin-top: 16px; padding-top: 14px; }}
-  .t-debrief-body {{ color: #b0b0b0; font-size: 13px; line-height: 1.7; padding-left: 4px; }}
-  .t-setup {{ color: #444; font-size: 12px; margin: 8px 0; border-left: 2px solid #222;
+  .t-debrief {{ border-top: 1px solid #1e1e22; margin-top: 16px; padding-top: 14px; }}
+  .t-debrief-body {{ color: #a1a1aa; font-size: 13px; line-height: 1.7; padding-left: 4px; }}
+  .t-setup {{ color: #3f3f46; font-size: 12px; margin: 8px 0; border-left: 2px solid #27272a;
               padding-left: 10px; }}
   .t-setup summary {{ cursor: pointer; list-style: none; }}
   .t-setup summary::-webkit-details-marker {{ display: none; }}
@@ -1845,38 +1950,38 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
   .t-user {{ color: #f97316; white-space: pre-wrap; margin: 14px 0 6px 0;
              font-weight: 600; }}
   .t-assistant {{ color: #e0e0e0; margin: 6px 0 14px 0; padding-left: 18px;
-                  border-left: 2px solid #2a2a5a; }}
-  .t-dot {{ color: #60a5fa; margin-right: 6px; }}
+                  border-left: 2px solid #312e81; }}
+  .t-dot {{ color: #818cf8; margin-right: 6px; }}
   .t-tool-call {{ color: #a78bfa; margin: 8px 0 2px 0; }}
-  .t-tool-result {{ color: #6b7280; margin: 0 0 8px 0; padding-left: 16px; }}
+  .t-tool-result {{ color: #52525b; margin: 0 0 8px 0; padding-left: 16px; }}
   .t-arrow {{ margin-right: 4px; }}
   .t-output {{ white-space: pre-wrap; }}
-  .t-thinking {{ color: #444; margin: 4px 0; font-size: 12px; }}
+  .t-thinking {{ color: #3f3f46; margin: 4px 0; font-size: 12px; }}
   .t-thinking summary {{ list-style: none; cursor: pointer; }}
   .t-thinking summary::-webkit-details-marker {{ display: none; }}
-  .t-end {{ color: #555; border-top: 1px solid #1a1a1a; margin-top: 16px;
+  .t-end {{ color: #52525b; border-top: 1px solid #1e1e22; margin-top: 16px;
              padding-top: 12px; font-size: 12px; }}
-  .t-gitdiff {{ color: #444; font-size: 12px; margin-top: 8px; }}
-  .t-gitdiff summary {{ cursor: pointer; list-style: none; color: #555; }}
+  .t-gitdiff {{ color: #3f3f46; font-size: 12px; margin-top: 8px; }}
+  .t-gitdiff summary {{ cursor: pointer; list-style: none; color: #52525b; }}
   .t-gitdiff summary::-webkit-details-marker {{ display: none; }}
-  .transcript code {{ background: #1a1a1a; padding: 1px 4px; border-radius: 3px; font-size: 12px; }}
-  .transcript pre {{ background: #111; border: 1px solid #1e1e1e; border-radius: 4px;
+  .transcript code {{ background: #1e1e22; padding: 1px 5px; border-radius: 4px; font-size: 12px; }}
+  .transcript pre {{ background: #111113; border: 1px solid #1e1e22; border-radius: 6px;
                      padding: 10px; overflow-x: auto; margin: 4px 0; white-space: pre; }}
   .transcript pre code {{ background: none; padding: 0; }}
-  .diff-block {{ border: 1px solid #222; border-radius: 4px; overflow: hidden;
-                 font-family: 'Menlo','Consolas','Monaco',monospace; font-size: 12px;
+  .diff-block {{ border: 1px solid #1e1e22; border-radius: 6px; overflow: hidden;
+                 font-family: 'JetBrains Mono', 'Menlo', 'Consolas', monospace; font-size: 12px;
                  margin: 4px 0; display: block; }}
-  .diff-file {{ background: #111; color: #888; padding: 4px 10px;
-                border-bottom: 1px solid #222; font-size: 11px; }}
+  .diff-file {{ background: #111113; color: #71717a; padding: 4px 10px;
+                border-bottom: 1px solid #1e1e22; font-size: 11px; }}
   .diff-hunk {{ background: #0c1a2e; color: #4a6fa5; padding: 2px 10px; font-size: 11px; }}
   .diff-add {{ background: #0a1f0a; color: #4ade80; padding: 1px 10px; white-space: pre; }}
   .diff-del {{ background: #1f0a0a; color: #f87171; padding: 1px 10px; white-space: pre; }}
-  .diff-ctx {{ background: #0a0a0a; color: #555; padding: 1px 10px; white-space: pre; }}
+  .diff-ctx {{ background: #0a0a0b; color: #52525b; padding: 1px 10px; white-space: pre; }}
 </style>
 </head>
 <body>
 <div class="topbar">
-  <h1>interviewsignal</h1>
+  <h1>interview<span class="logo-accent">signal</span></h1>
   <span class="tagline">{safe_code}</span>
   <a href="/">← Dashboard</a>
 </div>
@@ -1897,7 +2002,7 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
   <div>
     <!-- Comments -->
     <div class="panel">
-      <div class="section-title">Comments <span style="color:#555;font-size:10px">(append-only)</span></div>
+      <div class="section-title">Comments <span style="color:#3f3f46;font-size:10px">(append-only)</span></div>
       <div id="comments-list">{comments_html}</div>
       <textarea id="comment-input" placeholder="Add a note... (cannot be edited or deleted)"></textarea>
       <button class="btn btn-sm" style="margin-top:8px" id="btn-add-comment" data-code="{safe_code}" {cid_attr}>Add Comment</button>
@@ -1919,7 +2024,7 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
     <!-- Session integrity -->
     <div class="panel">
       <div class="section-title">Session Integrity</div>
-      <div style="font-size:12px;color:#555;margin-bottom:10px">
+      <div style="font-size:12px;color:#52525b;margin-bottom:10px">
         Verify the candidate's session log hasn't been tampered with.
         Each event is SHA-256 hash-chained — any edit breaks the chain.
       </div>
@@ -2031,19 +2136,19 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
 
         let rows = `
           <div style="color:${{color}};font-weight:600;margin-bottom:8px">${{icon}} ${{d.details}}</div>
-          <div style="display:grid;grid-template-columns:120px 1fr;gap:4px;color:#888">
-            <span>Events</span><span style="color:#ccc">${{d.event_count}}</span>
-            <span>Chain</span><span style="color:${{d.chain_intact ? '#22c55e' : '#ef4444'}}">${{d.chain_intact ? 'intact' : 'BROKEN'}}</span>
-            <span>Manifest</span><span style="color:${{d.manifest_ok ? '#22c55e' : '#ef4444'}}">${{d.manifest_ok ? 'ok' : 'MISMATCH'}}</span>
-            <span>Started</span><span style="color:#ccc">${{fmt(d.session_start)}}</span>
-            <span>Ended</span><span style="color:#ccc">${{fmt(d.session_end)}}</span>
-            <span>Duration</span><span style="color:#ccc">${{d.elapsed_minutes != null ? d.elapsed_minutes + ' min' : '—'}}</span>`;
+          <div style="display:grid;grid-template-columns:120px 1fr;gap:4px;color:#52525b">
+            <span>Events</span><span style="color:#a1a1aa;font-family:JetBrains Mono,monospace">${{d.event_count}}</span>
+            <span>Chain</span><span style="color:${{d.chain_intact ? '#22c55e' : '#ef4444'}};font-weight:500">${{d.chain_intact ? 'intact' : 'BROKEN'}}</span>
+            <span>Manifest</span><span style="color:${{d.manifest_ok ? '#22c55e' : '#ef4444'}};font-weight:500">${{d.manifest_ok ? 'ok' : 'MISMATCH'}}</span>
+            <span>Started</span><span style="color:#a1a1aa">${{fmt(d.session_start)}}</span>
+            <span>Ended</span><span style="color:#a1a1aa">${{fmt(d.session_end)}}</span>
+            <span>Duration</span><span style="color:#a1a1aa;font-family:JetBrains Mono,monospace">${{d.elapsed_minutes != null ? d.elapsed_minutes + ' min' : '—'}}</span>`;
         if (d.submitted_at) {{
-          rows += `<span>Submitted</span><span style="color:#ccc">${{fmt(d.submitted_at)}}</span>`;
+          rows += `<span>Submitted</span><span style="color:#a1a1aa">${{fmt(d.submitted_at)}}</span>`;
         }}
         rows += `
-            <span>Final hash</span><span style="color:#444;font-family:monospace;font-size:10px">${{d.final_hash}}</span>
-            <span>Verified at</span><span style="color:#444">${{d.verified_at}}</span>
+            <span>Final hash</span><span style="color:#3f3f46;font-family:JetBrains Mono,monospace;font-size:10px">${{d.final_hash}}</span>
+            <span>Verified at</span><span style="color:#3f3f46">${{d.verified_at}}</span>
           </div>`;
         out.innerHTML = rows;
       }})
@@ -2165,12 +2270,12 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
                         self._send_html(resp.read().decode())
                 except Exception:
                     self._send_html(
-                        "<p style='color:#555;padding:32px;font-family:sans-serif'>"
+                        "<p style='color:#52525b;padding:32px;font-family:sans-serif'>"
                         "Report not available.</p>"
                     )
             else:
                 self._send_html(
-                    "<p style='color:#555;padding:32px;font-family:sans-serif'>"
+                    "<p style='color:#52525b;padding:32px;font-family:sans-serif'>"
                     "Report not yet generated. Run /submit to generate it.</p>"
                 )
 
