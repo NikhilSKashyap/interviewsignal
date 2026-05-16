@@ -55,26 +55,9 @@ If the candidate already submitted (duplicate GitHub account):
 ```
 Stop — do not start the session.
 
-Display the session header:
+The command prints the session header and full problem statement to the terminal. Do not reprint or summarise it.
 
-```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  INTERVIEW SESSION — INT-4829-XK
-  Started: 2026-04-13 10:32 AM
-  GitHub:  @candidate-username
-  Repo:    https://github.com/candidate-username/interview-INT-4829-XK
-  Time limit: 90 minutes
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  PROBLEM STATEMENT
-  [problem text here]
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Session is recording. Type /submit when done.
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
-Then work normally. Do not prompt the candidate for anything else.
+**Stop here. Wait for the candidate to speak first. Do not analyse the problem, suggest an approach, ask clarifying questions, or start writing code. The candidate leads — respond only when asked.**
 
 ### During the session — your responsibility
 
