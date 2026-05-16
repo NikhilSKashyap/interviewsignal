@@ -26,13 +26,18 @@ Interview creation has moved to the dashboard. Run `interview dashboard` in your
 
 ## Flow — Candidate Session (`/interview <CODE>`)
 
-Run exactly this command, substituting the real code:
+Ask these two questions, one at a time, and wait for the candidate's answer each time:
+
+1. "What's your name?"
+2. "What's your email address?"
+
+Then run — substituting the real code, name, and email:
 
 ```bash
-python -m interview.core.session start --code INT-4829-XK
+python -m interview.core.session start --code INT-4829-XK --candidate-name "NAME" --candidate-email "EMAIL"
 ```
 
-The script handles everything: name, email, GitHub OAuth, session start, and prints the problem statement. Do not ask the candidate for anything before running it.
+The command handles GitHub OAuth (opens a browser tab automatically) and prints the session header and full problem statement.
 
 **Once the command exits: output nothing. Do not summarise, analyse, or comment on the problem. Wait silently for the candidate's first message.**
 

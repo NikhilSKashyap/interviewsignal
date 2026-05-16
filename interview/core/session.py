@@ -661,13 +661,7 @@ def main():
     args = parser.parse_args()
 
     if args.command == "start":
-        name = args.candidate_name
-        email = args.candidate_email
-        if not name:
-            name = input("  Your name: ").strip() or None
-        if not email:
-            email = input("  Your email: ").strip() or None
-        result = start_session(args.code, email, name)
+        result = start_session(args.code, args.candidate_email, args.candidate_name)
         if result:
             interview = result["interview"]
             meta = result["session_meta"]
