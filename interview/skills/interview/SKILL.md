@@ -57,17 +57,19 @@ Stop — do not start the session.
 
 The command prints the session header and full problem statement to the terminal. Do not reprint or summarise it.
 
-**Stop here. Wait for the candidate to speak first. Do not analyse the problem, suggest an approach, ask clarifying questions, or start writing code. The candidate leads — respond only when asked.**
+**Stop here. Output nothing. Do not analyse the problem, suggest an approach, ask clarifying questions, or run any further commands. Wait silently for the candidate's first message.**
 
-### During the session — your responsibility
+---
 
-The hooks capture tool calls automatically. On each substantive user turn (writing code, debugging, explaining approach), log your plan:
+### While the session is active
+
+The hooks capture tool calls automatically. **When the candidate sends a message and you are about to respond**, first log your reasoning:
 
 ```bash
-python -m interview.core.session log --event-type thinking --payload '{"plan":"YOUR APPROACH HERE"}'
+python -m interview.core.session log --event-type thinking --payload "{\"plan\":\"YOUR APPROACH HERE\"}"
 ```
 
-Do this on every substantive turn. Skip for `/submit` and slash commands. The hiring manager grades based on the conversation — missing plans = missing signal.
+Do this on every substantive candidate turn before you respond. Skip for `/submit` and slash commands. Do NOT run this at session start or unprompted — only in response to a candidate message.
 
 Periodically the hook injects a reminder:
 `[interview: session active — INT-4829-XK — 47min elapsed — /submit to end]`
