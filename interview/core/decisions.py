@@ -60,7 +60,7 @@ def get_comments(code: str) -> list[dict]:
 
 # ─── Decisions ────────────────────────────────────────────────────────────────
 
-VALID_DECISIONS = {"hire", "next_round", "reject"}
+VALID_DECISIONS = {"yes", "maybe", "no"}
 
 
 def record_decision(

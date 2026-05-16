@@ -287,8 +287,8 @@ def _build_candidate_row(r: dict) -> str:
     decision_badge = ""
     if decision_obj:
         d = decision_obj["decision"]
-        d_color = {"hire": "#22c55e", "next_round": "#818cf8", "reject": "#ef4444"}.get(d, "#71717a")
-        d_label = {"hire": "✓ Hired", "next_round": "→ Next Round", "reject": "✗ Rejected"}.get(d, d)
+        d_color = {"yes": "#22c55e", "maybe": "#818cf8", "no": "#ef4444"}.get(d, "#71717a")
+        d_label = {"yes": "✓ Yes", "maybe": "→ Maybe", "no": "✗ No"}.get(d, d)
         decision_badge = f' <span style="color:{d_color};font-size:11px;font-weight:600">{d_label}</span>'
 
     view_url = (
@@ -364,6 +364,7 @@ def _build_candidate_row(r: dict) -> str:
       <td>{flag_indicator}</td>
       <td style="color:#71717a;font-family:'JetBrains Mono',monospace;font-size:12px">{elapsed}<span style="color:#3f3f46"> min</span></td>
       <td style="color:#52525b;font-family:'JetBrains Mono',monospace;font-size:12px">{event_count}</td>
+      <td style="font-size:11px;font-weight:600;color:{d_color if decision_obj else '#3f3f46'}">{d_label if decision_obj else '—'}</td>
       <td style="color:#52525b;font-size:12px">{submitted}</td>
       <td>
         <a class="btn btn-sm" href="{view_url}" target="_blank">View</a>
@@ -785,15 +786,15 @@ def _build_dashboard_html(
   {'<div class="controls-row"><label>Status:</label><select class="ctrl-select" id="filter-status"><option value="all">All</option><option value="graded">Graded</option><option value="pending">Pending</option><option value="decided">Decided</option></select><label style="margin-left:8px">Flags:</label><select class="ctrl-select" id="filter-flags"><option value="all">All</option><option value="clean">Clean only</option><option value="flagged">Flagged only</option></select><label style="margin-left:8px">Score:</label><input type="number" class="ctrl-input" id="filter-score-min" min="0" max="10" step="0.1" placeholder="min"><span style="color:#3f3f46;font-size:12px">–</span><input type="number" class="ctrl-input" id="filter-score-max" min="0" max="10" step="0.1" placeholder="max"><button class="btn btn-sm" id="btn-apply-filter" style="margin-left:4px">Apply</button></div>' if reports else ''}
 
   {'<!-- Summary bar -->' if reports else ''}
-  {'<div class="summary-bar" id="summary-bar"><span id="sb-total">0 submissions</span><span class="sep">|</span><span id="sb-graded">0 graded</span><span class="sep">|</span><span id="sb-pending">0 pending</span><span class="sep">|</span><span id="sb-avg">avg score —</span><span class="sep">|</span><span id="sb-advancing">0 advancing</span><span class="sep">|</span><span id="sb-rejected">0 rejected</span></div>' if reports else ''}
+  {'<div class="summary-bar" id="summary-bar"><span id="sb-total">0 submissions</span><span class="sep">|</span><span id="sb-graded">0 graded</span><span class="sep">|</span><span id="sb-pending">0 pending</span><span class="sep">|</span><span id="sb-avg">avg score —</span><span class="sep">|</span><span id="sb-yes" style="color:#22c55e">0 yes</span><span class="sep">|</span><span id="sb-maybe" style="color:#818cf8">0 maybe</span><span class="sep">|</span><span id="sb-no" style="color:#ef4444">0 no</span></div>' if reports else ''}
 
   {'<!-- Selection count bar -->' if reports else ''}
   {'<div class="sel-bar" id="sel-bar">0 selected</div>' if reports else ''}
 
   {'<!-- Batch actions bar -->' if reports else ''}
-  {'<div class="batch-bar" id="batch-bar"><button class="btn btn-sm btn-next" id="batch-advance">Advance Selected</button><button class="btn btn-sm btn-reject" id="batch-reject">Reject Selected</button><span style="margin-left:8px;color:#27272a;font-size:12px">|</span><label style="font-size:12px;color:#71717a;margin-left:8px">Reject below score:</label><input type="number" class="ctrl-input" id="batch-threshold" min="0" max="10" step="0.1" placeholder="e.g. 5"><button class="btn btn-sm btn-reject" id="batch-reject-below" style="margin-left:4px">Reject Below</button><span class="batch-progress" id="batch-progress"></span></div>' if reports else ''}
+  {'<div class="batch-bar" id="batch-bar"><button class="btn btn-sm btn-next" id="batch-advance">Maybe Selected</button><button class="btn btn-sm btn-reject" id="batch-reject">No Selected</button><span style="margin-left:8px;color:#27272a;font-size:12px">|</span><label style="font-size:12px;color:#71717a;margin-left:8px">No below score:</label><input type="number" class="ctrl-input" id="batch-threshold" min="0" max="10" step="0.1" placeholder="e.g. 5"><button class="btn btn-sm btn-reject" id="batch-reject-below" style="margin-left:4px">No Below</button><span class="batch-progress" id="batch-progress"></span></div>' if reports else ''}
 
-  {'<table id="candidates-table"><thead><tr><th><input type="checkbox" id="select-all"> Candidate</th><th>Score</th><th>Flags</th><th>Duration</th><th>Events</th><th>Submitted</th><th>Actions</th></tr></thead><tbody id="candidates-tbody">' + rows + '</tbody></table>'
+  {'<table id="candidates-table"><thead><tr><th><input type="checkbox" id="select-all"> Candidate</th><th>Score</th><th>Flags</th><th>Duration</th><th>Events</th><th>Decision</th><th>Submitted</th><th>Actions</th></tr></thead><tbody id="candidates-tbody">' + rows + '</tbody></table>'
    if reports else
    '<div class="empty"><h3>No submissions yet.</h3><p>Candidates appear here after /submit.</p></div>'}
 
@@ -900,22 +901,22 @@ def _build_dashboard_html(
     const scores   = rows.map(r => r.dataset.score !== '' ? parseFloat(r.dataset.score) : null).filter(s => s !== null);
     const avg      = scores.length ? (scores.reduce((a,b) => a+b, 0) / scores.length).toFixed(1) : '—';
 
-    // Count decided rows by inspecting decision badge text
-    let advancing = 0, rejected = 0;
+    // Count decisions from data-decision attribute
+    let countYes = 0, countMaybe = 0, countNo = 0;
     rows.forEach(r => {{
-      const badge = r.querySelector('.display-label')?.nextElementSibling;
-      if (!badge) return;
-      const t = badge.textContent || '';
-      if (t.includes('Next Round') || t.includes('Hired')) advancing++;
-      if (t.includes('Rejected')) rejected++;
+      const d = r.dataset.decision || '';
+      if (d === 'yes')   countYes++;
+      if (d === 'maybe') countMaybe++;
+      if (d === 'no')    countNo++;
     }});
 
     document.getElementById('sb-total').textContent   = total + ' submission' + (total !== 1 ? 's' : '');
     document.getElementById('sb-graded').textContent  = graded + ' graded';
     document.getElementById('sb-pending').textContent = pending + ' pending';
     document.getElementById('sb-avg').textContent     = 'avg score ' + avg;
-    document.getElementById('sb-advancing').textContent = advancing + ' advancing';
-    document.getElementById('sb-rejected').textContent  = rejected + ' rejected';
+    document.getElementById('sb-yes').textContent     = countYes + ' yes';
+    document.getElementById('sb-maybe').textContent   = countMaybe + ' maybe';
+    document.getElementById('sb-no').textContent      = countNo + ' no';
   }}
 
   // ── Pagination ─────────────────────────────────────────────────────────────
@@ -1064,13 +1065,13 @@ def _build_dashboard_html(
   document.getElementById('batch-advance')?.addEventListener('click', async function() {{
     const entries = [...document.querySelectorAll('.candidate-checkbox:checked')]
       .map(cb => ({{code: cb.dataset.code, cid: cb.dataset.cid || ''}}));
-    await batchDecision(entries, 'next_round', 'Batch advance', 'Advance');
+    await batchDecision(entries, 'maybe', 'Batch maybe', 'Maybe');
   }});
 
   document.getElementById('batch-reject')?.addEventListener('click', async function() {{
     const entries = [...document.querySelectorAll('.candidate-checkbox:checked')]
       .map(cb => ({{code: cb.dataset.code, cid: cb.dataset.cid || ''}}));
-    await batchDecision(entries, 'reject', 'Batch reject', 'Reject');
+    await batchDecision(entries, 'no', 'Batch no', 'No');
   }});
 
   document.getElementById('batch-reject-below')?.addEventListener('click', async function() {{
@@ -1084,7 +1085,7 @@ def _build_dashboard_html(
       alert('No graded candidates in the current view with score below ' + threshold + '.');
       return;
     }}
-    await batchDecision(entries, 'reject', 'Batch reject (below ' + threshold + ')', 'Reject below ' + threshold);
+    await batchDecision(entries, 'no', 'Batch no (below ' + threshold + ')', 'No below ' + threshold);
   }});
 
   // ── CSV Export ──────────────────────────────────────────────────────────────
@@ -1653,7 +1654,7 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
         d = decision_obj.get("decision", "")
         recorded = escape(decision_obj.get("recorded_at") or decision_obj.get("timestamp_iso", ""))
         colors = {"hire": "#22c55e", "next_round": "#818cf8", "reject": "#ef4444"}
-        labels_map = {"hire": "✓ Hired", "next_round": "→ Next Round", "reject": "✗ Rejected"}
+        labels_map = {"yes": "✓ Yes", "maybe": "→ Maybe", "no": "✗ No"}
         decision_label = escape(labels_map.get(d, d))
         decision_reason = escape(decision_obj.get("reason", "—"))
         decision_html = f"""
@@ -2015,9 +2016,9 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
       <div id="decision-display">{decision_html}</div>
       <input class="reason-input" id="decision-reason" placeholder="Reason (optional but recommended)">
       <div class="decision-btns">
-        <button class="btn btn-sm btn-hire" id="btn-hire" data-code="{safe_code}" {cid_attr} {'disabled' if not graded else ''}>✓ Hire</button>
-        <button class="btn btn-sm btn-next" id="btn-next" data-code="{safe_code}" {cid_attr} {'disabled' if not graded else ''}>→ Next Round</button>
-        <button class="btn btn-sm btn-reject" id="btn-reject" data-code="{safe_code}" {cid_attr} {'disabled' if not graded else ''}>✗ Reject</button>
+        <button class="btn btn-sm btn-hire" id="btn-hire" data-code="{safe_code}" {cid_attr} {'disabled' if not graded else ''}>✓ Yes</button>
+        <button class="btn btn-sm btn-next" id="btn-next" data-code="{safe_code}" {cid_attr} {'disabled' if not graded else ''}>→ Maybe</button>
+        <button class="btn btn-sm btn-reject" id="btn-reject" data-code="{safe_code}" {cid_attr} {'disabled' if not graded else ''}>✗ No</button>
       </div>
     </div>
 
@@ -2054,7 +2055,7 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
 
   ['btn-hire','btn-next','btn-reject'].forEach(id => {{
     document.getElementById(id)?.addEventListener('click', function() {{
-      const decision = {{'btn-hire':'hire','btn-next':'next_round','btn-reject':'reject'}}[id];
+      const decision = {{'btn-hire':'yes','btn-next':'maybe','btn-reject':'no'}}[id];
       const reason = document.getElementById('decision-reason').value.trim();
       if (!confirm('Record decision: ' + decision.toUpperCase() + '?')) return;
       fetch('/record-decision', {{method:'POST', headers:{{'Content-Type':'application/json'}},
