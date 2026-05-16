@@ -207,6 +207,8 @@ Reports are emailed directly to the HM on `/submit`. The HM saves the JSON attac
 
 Every candidate session is append-only and SHA-256 hash-chained — any tampering breaks the chain. In relay mode, the relay's server-side timestamp is the integrity anchor. Grade revisions require an explicit reason and the audit records whether identity was known at revision time:
 
+The relay enforces strict credential isolation. When a candidate fetches `GET /interviews/<code>`, they receive only the problem, time limit, and a per-interview `submit_token` scoped to that code — the HM's admin credential (`hm_key`) never leaves the server. The submit token is write-only: it can only be used to submit to that specific interview, nothing else. A compromised token grants no read access to other candidates, no rubric, no scoring data.
+
 ```
 [2026-04-13T10:47:22Z] grade_recorded  INT-4829-XK  hash=d4abe5e6  score=7.7
 [2026-04-13T11:30:00Z] grade_revised   INT-4829-XK  hash=9f2c1a3b  7.7→8.2  reason="missed edge cases"
