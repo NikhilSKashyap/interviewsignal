@@ -43,8 +43,8 @@ def _write_relay_config(relay_url: str):
     if CONFIG_FILE.exists():
         try:
             config = json.loads(CONFIG_FILE.read_text())
-    except Exception:
-        pass
+        except Exception:
+            pass
     config["relay_url"] = relay_url
     tmp = CONFIG_FILE.with_suffix(".tmp")
     tmp.write_text(json.dumps(config, indent=2))
