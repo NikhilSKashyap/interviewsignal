@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import random
+import secrets
 import string
 import time
 from pathlib import Path
@@ -36,6 +37,20 @@ def encode_package(payload: dict) -> str:
     """Base64-encode the interview payload for embedding in the code token."""
     raw = json.dumps(payload, separators=(",", ":")).encode()
     return base64.urlsafe_b64encode(raw).decode()
+
+
+def candidate_package(payload: dict) -> dict:
+    """Return only fields safe for a candidate to receive."""
+    allowed = {
+        "code",
+        "problem",
+        "time_limit_minutes",
+        "relay_url",
+        "submit_token",
+        "created_at",
+        "problem_hash",
+    }
+    return {k: v for k, v in payload.items() if k in allowed}
 
 
 def create_interview(
@@ -83,9 +98,10 @@ def create_interview(
         # the problem was different
         "problem_hash": hashlib.sha256(problem.encode()).hexdigest()[:16],
         # Transport: relay config flows HM → package → candidate
-        # hm_key scopes the session to this HM on the relay (Model B)
+        # hm_key stays HM-only; submit_token is scoped to candidate submission
         "relay_url": relay_url,
         "hm_key": hm_key,
+        "submit_token": secrets.token_urlsafe(32),
         "auto_grade": True,
     }
 
@@ -94,7 +110,7 @@ def create_interview(
     interview_file.write_text(json.dumps(payload, indent=2))
 
     # Also write an encoded token (for offline/embedded sharing)
-    token = encode_package(payload)
+    token = encode_package(candidate_package(payload))
     token_file = CREATED_DIR / f"{code}.token"
     token_file.write_text(token)
 

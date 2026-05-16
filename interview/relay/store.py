@@ -22,7 +22,9 @@ Single-process assumption: HTTPServer is single-threaded; no file locking needed
 """
 
 import hashlib
+import hmac
 import json
+import secrets
 import time
 import uuid
 from pathlib import Path
@@ -143,36 +145,57 @@ class SessionStore:
         index = self._load_code_index()
         if code in index:
             raise StoreError("already_exists")
+        payload = dict(payload)
+        payload.setdefault("submit_token", secrets.token_urlsafe(32))
         d = self._interviews_dir(hm_key)
         d.mkdir(parents=True, exist_ok=True)
         self._write_atomic(d / f"{code}.json", json.dumps(payload, indent=2))
         index[code] = hm_key
         self._save_code_index(index)
 
+    def _ensure_submit_token(self, hm_key: str, code: str) -> dict | None:
+        """Return the full interview payload, adding a submit token for older records."""
+        path = self._interviews_dir(hm_key) / f"{code}.json"
+        payload = self._load_json(path)
+        if payload is None:
+            return None
+        if not payload.get("submit_token"):
+            payload["submit_token"] = secrets.token_urlsafe(32)
+            self._write_atomic(path, json.dumps(payload, indent=2))
+        return payload
+
     def get_interview(self, code: str) -> dict | None:
-        """Fetch an interview package by code (public — no hm_key needed)."""
+        """Fetch a full interview package by code for trusted internal callers."""
         hm_key = self.lookup_hm_for_code(code)
         if not hm_key:
             return None
         return self._load_json(self._interviews_dir(hm_key) / f"{code}.json")
 
     # Fields safe to expose to candidates via GET /interviews/{code}.
-    # rubric, sharing, auto_grade, audit_email, hm_email, cc_emails,
+    # hm_key, rubric, sharing, auto_grade, audit_email, hm_email, cc_emails,
     # candidate_email, and anonymize are deliberately excluded.
     _CANDIDATE_SAFE_FIELDS = frozenset({
         "code", "problem", "time_limit_minutes", "relay_url",
-        "hm_key", "created_at", "problem_hash",
+        "submit_token", "created_at", "problem_hash",
     })
 
     def get_interview_candidate(self, hm_key: str, code: str) -> dict | None:
         """
         Return candidate-safe fields only.
-        Never includes rubric, sharing, auto_grade, or PII fields.
+        Never includes hm_key, rubric, sharing, auto_grade, or PII fields.
         """
-        full = self._load_json(self._interviews_dir(hm_key) / f"{code}.json")
+        full = self._ensure_submit_token(hm_key, code)
         if full is None:
             return None
         return {k: v for k, v in full.items() if k in self._CANDIDATE_SAFE_FIELDS}
+
+    def verify_submit_token(self, hm_key: str, code: str, submit_token: str) -> bool:
+        """Return True when a candidate submit token matches the interview code."""
+        if not submit_token:
+            return False
+        full = self._ensure_submit_token(hm_key, code)
+        expected = str((full or {}).get("submit_token", ""))
+        return bool(expected) and hmac.compare_digest(str(submit_token), expected)
 
     def get_rubric(self, hm_key: str, code: str) -> str | None:
         """
@@ -587,4 +610,3 @@ class SessionStore:
         subs = self._load_json(self._github_subs_path()) or {}
         subs.setdefault(code, {})[str(github_id)] = cid
         self._write_atomic(self._github_subs_path(), json.dumps(subs, indent=2))
-

@@ -37,19 +37,15 @@ def ensure_dirs():
     SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def _write_relay_config(relay_url: str, hm_key: str = "", relay_api_key: str = ""):
+def _write_relay_config(relay_url: str):
     """Write relay config to ~/.interview/config.json from interview package."""
     config = {}
     if CONFIG_FILE.exists():
         try:
             config = json.loads(CONFIG_FILE.read_text())
-        except Exception:
-            pass
+    except Exception:
+        pass
     config["relay_url"] = relay_url
-    if hm_key:
-        config["hm_key"] = hm_key
-    if relay_api_key:
-        config["relay_api_key"] = relay_api_key
     tmp = CONFIG_FILE.with_suffix(".tmp")
     tmp.write_text(json.dumps(config, indent=2))
     tmp.rename(CONFIG_FILE)
@@ -431,15 +427,11 @@ def start_session(code: str, candidate_email: str | None = None, candidate_name:
         print(f"  Ask the hiring manager to re-share the code.\n")
         return {}
 
-    # Auto-configure relay from package so candidates need zero setup
-    # hm_key scopes the session to this HM on the multi-tenant relay (Model B)
+    # Auto-configure relay from package so candidates need zero setup.
+    # Candidate packages must not install HM/admin credentials locally.
     relay_url = interview.get("relay_url", "")
     if relay_url:
-        _write_relay_config(
-            relay_url,
-            hm_key=interview.get("hm_key", ""),
-            relay_api_key=interview.get("relay_api_key", ""),
-        )
+        _write_relay_config(relay_url)
 
     # Always ensure a git repo exists in the working directory for diff capture.
     _ensure_git_init(code)
@@ -497,6 +489,7 @@ def start_session(code: str, candidate_email: str | None = None, candidate_name:
         # reach the candidate's machine. Relay-side grading loads it from the
         # relay store via get_rubric() which is never exposed to candidates.
         "problem":            interview["problem"],
+        "submit_token":       interview.get("submit_token"),
         "git_base_commit":    git_snapshot.get("commit"),
         "last_event_hash":    "",
         # GitHub identity (None if relay has no GitHub app configured)
@@ -617,6 +610,7 @@ def seal_session(code: str) -> dict:
         # rubric from the relay store (get_rubric()) which is never exposed
         # to candidates via any public endpoint.
         "problem":           session.get("problem", ""),
+        "submit_token":      session.get("submit_token"),
         "started_at":        session["started_at"],
         "ended_at":          ended_at,
         "elapsed_minutes":   elapsed_minutes,

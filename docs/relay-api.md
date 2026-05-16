@@ -74,20 +74,18 @@ Response `201 Created`:
 
 ### `GET /interviews/{code}`
 Fetch an interview package by code. No auth required — candidates call this to bootstrap their
-session. The package includes the problem, rubric, relay_url, hm_key, sharing config, and more.
+session. The package includes only candidate-safe fields: the problem, relay URL, scoped submit
+token, and basic interview metadata. It never includes the HM/admin `hm_key`, rubric, sharing
+config, or HM/candidate PII.
 
 Response `200 OK`:
 ```json
 {
   "code": "INT-4829-XK",
   "problem": "Build a rate limiter...",
-  "rubric": "Score on: decomposition, edge cases, ...",
-  "hm_email": "alice@company.com",
   "time_limit_minutes": 60,
-  "anonymize": false,
-  "sharing": { "score": "breakdown_notes" },
   "relay_url": "https://relay.interviewsignal.dev",
-  "hm_key": "550e8400-...",
+  "submit_token": "submit_...",
   "created_at": 1744754400
 }
 ```
@@ -225,8 +223,10 @@ Returns `409` if the code is already registered.
 ---
 
 ### `POST /sessions`
-Candidate submits a sealed session package. The `hm_key` must match the owner of the interview
-code. If GitHub OAuth is configured on the relay, `session_token` is required.
+Candidate submits a sealed session package. Candidate submissions use the per-interview
+`submit_token` from `GET /interviews/{code}`. HM/admin callers may alternatively authenticate
+with the matching `hm_key`. If GitHub OAuth is configured on the relay, `session_token` is also
+required.
 
 Request body:
 ```json
@@ -234,6 +234,7 @@ Request body:
   "code": "INT-4829-XK",
   "candidate_email": "jane@example.com",
   "candidate_name": "Jane Doe",
+  "submit_token": "submit_...",
   "session_token": "uuid-state-token",
   "github_repo_url": "https://github.com/janedoe/interview-INT-4829-XK",
   "manifest_json": "<base64-encoded manifest.json>",
@@ -245,6 +246,7 @@ Request body:
 ```
 
 - `manifest_json` and `events_jsonl` are required. All other fields are optional.
+- `submit_token` is required for candidate submissions and is scoped to one interview code.
 - `session_token` is required when GitHub OAuth is configured on the relay.
 - `github_repo_url` is omitted if repo creation failed or OAuth is not configured.
 - Returns `401` with `github_auth_required` if OAuth is configured but `session_token` is missing.
