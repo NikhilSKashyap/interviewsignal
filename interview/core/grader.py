@@ -641,6 +641,16 @@ def main():
     args = parser.parse_args()
 
     if args.command == "grade":
+        # Guard: only HMs can grade locally — they have the created/ dir with rubrics
+        created_file = INTERVIEW_DIR / "created" / f"{args.code}.json"
+        if not created_file.exists():
+            print(
+                f"\n✗ Cannot grade {args.code} locally.\n"
+                f"  No interview package found in {INTERVIEW_DIR / 'created'}.\n"
+                f"  Local grading is only available to the hiring manager who created the interview.\n"
+                f"  In relay mode, grading happens server-side.\n"
+            )
+            return
         print(f"\nGrading session {args.code}...")
         try:
             result = grade_session(args.code)

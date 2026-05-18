@@ -515,6 +515,9 @@ def _build_create_interview_html(in_wizard: bool = False, error: str = "") -> st
       <label for="rubric">Grading rubric <span style="color:#ef4444">*</span></label>
       <textarea id="rubric" name="rubric" class="wizard-field textarea"
                 placeholder="{rubric_placeholder}"></textarea>
+      <div style="font-size:11px;color:#52525b;margin:-8px 0 12px 0;line-height:1.5">
+        Your rubric dimensions are your weights. If you want thought process to matter more than code quality, make more of your dimensions about process.
+      </div>
       <label for="time_limit">Time limit in minutes (optional)</label>
       <input id="time_limit" name="time_limit" type="number" class="wizard-field number"
              min="1" placeholder="e.g. 90">
@@ -792,7 +795,7 @@ def _build_dashboard_html(
   {'<div class="sel-bar" id="sel-bar">0 selected</div>' if reports else ''}
 
   {'<!-- Batch actions bar -->' if reports else ''}
-  {'<div class="batch-bar" id="batch-bar"><button class="btn btn-sm btn-next" id="batch-advance">Maybe Selected</button><button class="btn btn-sm btn-reject" id="batch-reject">No Selected</button><span style="margin-left:8px;color:#27272a;font-size:12px">|</span><label style="font-size:12px;color:#71717a;margin-left:8px">No below score:</label><input type="number" class="ctrl-input" id="batch-threshold" min="0" max="10" step="0.1" placeholder="e.g. 5"><button class="btn btn-sm btn-reject" id="batch-reject-below" style="margin-left:4px">No Below</button><span class="batch-progress" id="batch-progress"></span></div>' if reports else ''}
+  {'<div class="batch-bar" id="batch-bar"><button class="btn btn-sm" id="batch-regrade" style="border-color:#312e81;color:#818cf8">↻ Regrade</button><span style="margin-left:8px;color:#27272a;font-size:12px">|</span><button class="btn btn-sm btn-next" id="batch-advance" style="margin-left:8px">Maybe Selected</button><button class="btn btn-sm btn-reject" id="batch-reject">No Selected</button><span style="margin-left:8px;color:#27272a;font-size:12px">|</span><label style="font-size:12px;color:#71717a;margin-left:8px">No below score:</label><input type="number" class="ctrl-input" id="batch-threshold" min="0" max="10" step="0.1" placeholder="e.g. 5"><button class="btn btn-sm btn-reject" id="batch-reject-below" style="margin-left:4px">No Below</button><span class="batch-progress" id="batch-progress"></span></div>' if reports else ''}
 
   {'<table id="candidates-table"><thead><tr><th><input type="checkbox" id="select-all"> Candidate</th><th>Score</th><th>Flags</th><th>Duration</th><th>Events</th><th>Decision</th><th>Submitted</th><th>Actions</th></tr></thead><tbody id="candidates-tbody">' + rows + '</tbody></table>'
    if reports else
@@ -1090,6 +1093,41 @@ def _build_dashboard_html(
       return;
     }}
     await batchDecision(entries, 'no', 'Batch no (below ' + threshold + ')', 'No below ' + threshold);
+  }});
+
+  // ── Batch regrade ──────────────────────────────────────────────────────────
+  document.getElementById('batch-regrade')?.addEventListener('click', async function() {{
+    const entries = [...document.querySelectorAll('.candidate-checkbox:checked')]
+      .map(cb => ({{code: cb.dataset.code, cid: cb.dataset.cid || ''}}));
+    if (!entries.length) {{ alert('No candidates selected.'); return; }}
+    const confirmed = await showConfirm(
+      'Regrade ' + entries.length + ' candidate' + (entries.length !== 1 ? 's' : '') + '?',
+      'This will re-run AI grading for each selected candidate, replacing their current grades.'
+    );
+    if (!confirmed) return;
+    const progressEl = document.getElementById('batch-progress');
+    let done = 0;
+    let errors = 0;
+    for (const entry of entries) {{
+      progressEl.textContent = 'Regrading... ' + done + '/' + entries.length;
+      try {{
+        const resp = await fetch('/regrade', {{
+          method: 'POST',
+          headers: {{'Content-Type': 'application/json'}},
+          body: JSON.stringify({{code: entry.code, cid: entry.cid}}),
+        }});
+        const d = await resp.json();
+        if (!d.ok) errors++;
+      }} catch(e) {{
+        console.error('Regrade failed for', entry.code, e);
+        errors++;
+      }}
+      done++;
+    }}
+    progressEl.textContent = errors
+      ? 'Done (' + errors + ' error' + (errors !== 1 ? 's' : '') + '). Reloading...'
+      : 'Done! Reloading...';
+    location.reload();
   }});
 
   // ── CSV Export ──────────────────────────────────────────────────────────────
@@ -1921,7 +1959,8 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
 <title>Candidate — {safe_code}</title>
 <style>
   {SHARED_CSS}
-  .layout {{ display: grid; grid-template-columns: 1fr 340px; gap: 24px; }}
+  .layout {{ display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 24px; }}
+  .layout > div {{ min-width: 0; }}
   .comment {{ border-bottom: 1px solid #1e1e22; padding: 10px 0; }}
   .comment:last-child {{ border-bottom: none; }}
   .comment-meta {{ font-size: 11px; color: #52525b; margin-bottom: 4px; }}
@@ -1943,7 +1982,7 @@ def _build_candidate_detail_html(code: str, cid: str = "") -> str:
   .transcript {{ font-family: 'JetBrains Mono', 'Menlo', 'Consolas', monospace; font-size: 12.5px;
                  line-height: 1.7; background: #0a0a0b; color: #d4d4d8; padding: 20px;
                  border-radius: 10px; overflow-x: auto; max-height: 75vh; overflow-y: auto;
-                 border: 1px solid #1e1e22; }}
+                 border: 1px solid #1e1e22; overflow-wrap: break-word; word-break: break-word; }}
   .t-banner {{ margin-bottom: 6px; }}
   .t-debrief {{ border-top: 1px solid #1e1e22; margin-top: 16px; padding-top: 14px; }}
   .t-debrief-body {{ color: #a1a1aa; font-size: 13px; line-height: 1.7; padding-left: 4px; }}
@@ -2401,6 +2440,44 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
                 "message": f"Graded {succeeded}/{len(entries)} candidates. Refresh to see scores.",
                 "results": results,
             })
+
+        elif path == "/regrade":
+            code = body.get("code", "")
+            cid  = body.get("cid", "")
+            if not code:
+                self._send_json({"ok": False, "error": "Missing code"}, 400)
+                return
+            try:
+                # Clear local grading cache so grade_session runs fresh
+                session_dir = SESSIONS_DIR / code
+                grading_file = session_dir / "grading.json"
+                if grading_file.exists():
+                    grading_file.unlink()
+
+                from interview.core.grader import grade_session, GradingError, _get_api_key
+                if not _get_api_key():
+                    raise GradingError("No Anthropic API key configured.")
+
+                if get_relay_url():
+                    _ensure_local_cache(code, cid)
+
+                grading = grade_session(code)
+
+                # Post to relay as a revision with reason
+                if get_relay_url():
+                    transport = get_transport()
+                    grading["reason"] = "AI regrade requested by hiring manager"
+                    grading["graded_by"] = "auto"
+                    try:
+                        transport.post_action(code, "grade", grading, cid=cid or None)
+                    except Exception as relay_err:
+                        err_str = str(relay_err)
+                        if "revision_requires_reason" not in err_str:
+                            print(f"  ⚠ Regrade saved locally but relay sync failed: {relay_err}")
+
+                self._send_json({"ok": True})
+            except Exception as e:
+                self._send_json({"ok": False, "error": str(e)}, 400)
 
         elif path == "/reveal":
             code = body.get("code", "")
