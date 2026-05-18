@@ -513,6 +513,16 @@ def start_session(code: str, candidate_email: str | None = None, candidate_name:
 
     _save_active_session(session_meta)
 
+    # Clear any stale session data from a previous run with the same code on
+    # this machine.  Each candidate run must start fresh.
+    session_dir = SESSIONS_DIR / code
+    session_dir.mkdir(parents=True, exist_ok=True)
+    ts_suffix = str(int(time.time()))
+    for stale_file in ("events.jsonl", "manifest.json", "grading.json"):
+        stale_path = session_dir / stale_file
+        if stale_path.exists():
+            stale_path.rename(session_dir / f"{stale_file}.{ts_suffix}")
+
     # Write first event
     h = _append_event(code, "session_start", {
         "git_snapshot": git_snapshot,
