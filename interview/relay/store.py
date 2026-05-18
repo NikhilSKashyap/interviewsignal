@@ -215,6 +215,16 @@ class SessionStore:
             return False
         return bool(pkg.get("auto_grade", False))
 
+    def update_rubric(self, hm_key: str, code: str, rubric: str) -> dict:
+        """Update the rubric for an existing interview. Returns updated config."""
+        path = self._interviews_dir(hm_key) / f"{code}.json"
+        pkg = self._load_json(path)
+        if pkg is None:
+            raise StoreError(f"Interview {code} not found.")
+        pkg["rubric"] = rubric
+        self._save_json(path, pkg)
+        return {"code": code, "rubric_updated": True}
+
     def get_interview_config(self, hm_key: str, code: str) -> dict | None:
         """Fetch an interview package by hm_key + code (HM-scoped). Returns None if not found."""
         return self._load_json(self._interviews_dir(hm_key) / f"{code}.json")

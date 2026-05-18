@@ -313,6 +313,10 @@ class RelayHandler(BaseHTTPRequestHandler):
         if len(parts) == 3 and parts[0] == "sessions" and parts[2] == "sharing":
             return self._post_sharing(hm_key, parts[1])
 
+        # Rubric update — POST /interviews/{code}/rubric
+        if len(parts) == 3 and parts[0] == "interviews" and parts[2] == "rubric":
+            return self._post_rubric(hm_key, parts[1])
+
         self._error(404, "not_found", f"No route for POST {self.path}")
 
     # ── open GET handlers ─────────────────────────────────────────────────────
@@ -754,6 +758,17 @@ class RelayHandler(BaseHTTPRequestHandler):
                 return self._error(409, "already_decided", "Decision already recorded.")
             else:
                 return self._error(500, "store_error", str(e))
+
+    def _post_rubric(self, hm_key: str, code: str):
+        """POST /interviews/{code}/rubric — update rubric for an interview."""
+        body = self._read_body()
+        if body is None or not body.get("rubric", "").strip():
+            return self._error(400, "invalid_payload", "Missing 'rubric' field.")
+        try:
+            result = _store.update_rubric(hm_key, code, body["rubric"].strip())
+            self._json(result)
+        except StoreError as e:
+            return self._error(404, "not_found", str(e))
 
     def _post_sharing(self, hm_key: str, code: str):
         """POST /sessions/{code}/sharing — update sharing config for an interview code."""

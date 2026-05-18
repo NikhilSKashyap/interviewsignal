@@ -673,6 +673,37 @@ def _build_dashboard_html(
             + '</div>'
         )
 
+    # Load rubric for current interview code (from local created/ file)
+    rubric_panel_html = ""
+    if current_code:
+        created_file = INTERVIEW_DIR / "created" / f"{current_code}.json"
+        if created_file.exists():
+            try:
+                pkg = json.loads(created_file.read_text())
+                current_rubric = pkg.get("rubric", "")
+                safe_rubric = escape(current_rubric)
+                safe_current = escape(current_code)
+                rubric_panel_html = (
+                    f'<details style="margin-bottom:20px">'
+                    f'<summary style="cursor:pointer;font-size:11px;color:#52525b;font-weight:500;'
+                    f'text-transform:uppercase;letter-spacing:0.06em;list-style:none">'
+                    f'▸ Edit Rubric</summary>'
+                    f'<div class="panel" style="margin-top:8px">'
+                    f'<textarea id="rubric-editor" style="width:100%;min-height:160px;background:#0a0a0b;'
+                    f'border:1px solid #27272a;color:#e0e0e0;border-radius:8px;padding:10px;font-size:12px;'
+                    f'font-family:inherit;resize:vertical;line-height:1.6">{safe_rubric}</textarea>'
+                    f'<div style="font-size:11px;color:#52525b;margin-top:6px;line-height:1.5">'
+                    f'Your rubric dimensions are your weights. If you want thought process to matter '
+                    f'more than code quality, make more of your dimensions about process.</div>'
+                    f'<div style="display:flex;gap:8px;margin-top:10px;align-items:center">'
+                    f'<button class="btn btn-sm" id="btn-save-rubric" data-code="{safe_current}" '
+                    f'style="border-color:#312e81;color:#818cf8">Save Rubric</button>'
+                    f'<span id="rubric-status" style="font-size:12px;color:#52525b"></span>'
+                    f'</div></div></details>'
+                )
+            except Exception:
+                pass
+
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -764,6 +795,7 @@ def _build_dashboard_html(
 <div class="main">
 
   {code_tabs_html}
+  {rubric_panel_html}
 
   <div class="stats">
     <div class="stat"><div class="stat-val">{count}</div><div class="stat-label">Candidates</div></div>
@@ -1131,6 +1163,36 @@ def _build_dashboard_html(
   }});
 
   // ── CSV Export ──────────────────────────────────────────────────────────────
+  // ── Save rubric ────────────────────────────────────────────────────────────
+  document.getElementById('btn-save-rubric')?.addEventListener('click', function() {{
+    const btn = this;
+    const code = btn.dataset.code;
+    const rubric = document.getElementById('rubric-editor').value.trim();
+    const status = document.getElementById('rubric-status');
+    if (!rubric) {{ alert('Rubric cannot be empty.'); return; }}
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+    status.textContent = '';
+    fetch('/update-rubric', {{method:'POST', headers:{{'Content-Type':'application/json'}},
+      body: JSON.stringify({{code, rubric}})}})
+      .then(r => r.json()).then(d => {{
+        if (d.ok) {{
+          status.textContent = '✓ Saved — select candidates and Regrade to apply.';
+          status.style.color = '#4ade80';
+        }} else {{
+          status.textContent = 'Error: ' + (d.error || 'Unknown');
+          status.style.color = '#f87171';
+        }}
+        btn.disabled = false;
+        btn.textContent = 'Save Rubric';
+      }}).catch(e => {{
+        status.textContent = 'Failed: ' + e;
+        status.style.color = '#f87171';
+        btn.disabled = false;
+        btn.textContent = 'Save Rubric';
+      }});
+  }});
+
   document.getElementById('btn-export-csv')?.addEventListener('click', function() {{
     const visibleRows = allRows.filter(r => r.style.display !== 'none');
     const headers = ['Candidate', 'Score', 'Flags', 'Duration', 'Events', 'Decision'];
@@ -2573,6 +2635,47 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
                 self._send_json({"ok": True, "result": result})
             except Exception as e:
                 self._send_json({"ok": False, "error": str(e)}, 400)
+
+        elif path == "/update-rubric":
+            code = body.get("code", "").strip()
+            rubric = body.get("rubric", "").strip()
+            if not code or not rubric:
+                self._send_json({"ok": False, "error": "Missing code or rubric"}, 400)
+                return
+            # Update local created/ file
+            created_file = INTERVIEW_DIR / "created" / f"{code}.json"
+            if created_file.exists():
+                try:
+                    pkg = json.loads(created_file.read_text())
+                    pkg["rubric"] = rubric
+                    tmp = created_file.with_suffix(".tmp")
+                    tmp.write_text(json.dumps(pkg, indent=2))
+                    tmp.replace(created_file)
+                except Exception as e:
+                    self._send_json({"ok": False, "error": f"Local save failed: {e}"}, 500)
+                    return
+            # Update relay if configured
+            if get_relay_url():
+                try:
+                    from interview.core.transport import get_hm_key, get_relay_api_key
+                    relay_url_val = get_relay_url()
+                    token = get_hm_key() or get_relay_api_key()
+                    req_body = json.dumps({"rubric": rubric}).encode()
+                    req = urllib.request.Request(
+                        f"{relay_url_val}/interviews/{code}/rubric",
+                        data=req_body,
+                        headers={
+                            "Content-Type": "application/json",
+                            "Authorization": f"Bearer {token}",
+                        },
+                        method="POST",
+                    )
+                    with urllib.request.urlopen(req, timeout=15) as resp:
+                        json.loads(resp.read())
+                except Exception as e:
+                    self._send_json({"ok": False, "error": f"Relay update failed: {e}"}, 500)
+                    return
+            self._send_json({"ok": True})
 
         elif path == "/update-sharing":
             code    = body.get("code", "")
