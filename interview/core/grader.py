@@ -300,14 +300,27 @@ Tool calls: {event_count}
 ━━━ FINAL CODE CHANGES (git diff) ━━━
 {git_diff if git_diff.strip() else "(no git diff captured — evaluate from session timeline)"}
 
+━━━ ATTRIBUTION RULE ━━━
+For EVERY rubric dimension, your job is to determine: did the CANDIDATE drive this, or did the AI?
+
+The CANDIDATE lines in the timeline are your primary evidence. The git diff is secondary.
+If a technique, feature, or approach appears in the code but NO candidate prompt asked for it
+or reasoned about it, the AI chose it — do NOT credit the candidate for it.
+
+Great code produced by the AI is the AI's achievement, not the candidate's.
+Score each dimension based on what the CANDIDATE demonstrably contributed.
+
 ━━━ INSTRUCTIONS ━━━
 1. Read the rubric carefully. Extract each distinct grading dimension from it.
-2. Score each dimension 1–10. Be honest — a score of 5 means average, 8 means strong.
-3. Write one specific, evidence-based justification per dimension (cite what you saw).
+2. For each dimension, FIRST identify the CANDIDATE's contributions from the transcript
+   (their prompts, their hypotheses, their corrections). THEN check if the code output
+   supports their claims. Score based on what the CANDIDATE drove, not what the AI produced.
+3. Score each dimension 1–10. Be honest — a score of 5 means average, 8 means strong.
+   Cite specific CANDIDATE prompts (quote them) as evidence in your justification.
 4. Compute overall_score as a weighted average matching the rubric's weighting.
    If no weights are specified, weight all dimensions equally.
 5. Write a 2–3 sentence summary of the candidate's approach for the hiring manager.
-6. List up to 3 standout_moments (specific impressive things you observed).
+6. List up to 3 standout_moments (specific impressive things you observed THE CANDIDATE doing).
 7. List up to 3 concerns (specific gaps or weaknesses — omit if none).
 
 Respond with ONLY valid JSON, no markdown, no code fences. Schema:
