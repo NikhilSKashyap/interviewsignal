@@ -235,6 +235,27 @@ interview dashboard
 
 ---
 
+## Overtime Scoring
+
+Submissions after the time limit are accepted — but automatically penalized. The deduction is applied to the AI-graded score post-grading, not injected into the grading prompt, so it can't be argued away.
+
+The penalty grows as a quadratic curve within each band, meaning a candidate barely over the boundary loses almost nothing while one deep in the band feels it accelerate:
+
+| Time over limit | Score deduction (out of 10) |
+|:---|:---|
+| 1 min | −0.01 |
+| 5 min | −0.13 |
+| 7 min | −0.25 |
+| 10 min | −0.50 |
+| 20 min | −1.00 |
+| 30 min | −1.50 |
+| 60 min | −2.50 |
+| 60+ min | −4.00 (cap) |
+
+The dashboard shows the raw AI score, the overtime deduction, and the adjusted final score separately. A flag is also raised — yellow for ≤20 min over, red beyond.
+
+---
+
 ## What gets captured
 
 <table>
