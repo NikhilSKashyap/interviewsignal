@@ -22,3 +22,4 @@ worked/
 # Secrets / local config
 .env
 *.env
+AGENTS.md
