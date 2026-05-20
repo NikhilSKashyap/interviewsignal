@@ -1,328 +1,143 @@
 <div align="center">
-  <img src="docs/images/hero_banner.svg" alt="interviewsignal hero banner" width="100%"/>
+  <!-- HERO BANNER -->
+  <img src="docs/images/hero_banner.svg" alt="interviewsignal — Premium Open-Source AI-Native Coding Interview Platform" width="100%"/>
+  
+  <br/>
+  
+  <h1>🤖 interviewsignal</h1>
+  <h3>The Premium, Open-Source Developer Screening Platform for the Cursor & Claude Era</h3>
+  
+  <p><strong>100% Free · 100% Self-Hosted · 100% Private</strong></p>
 
-[![PyPI](https://img.shields.io/pypi/v/interviewsignal?style=for-the-badge&logo=pypi&logoColor=white&label=PyPI)](https://pypi.org/project/interviewsignal/)
-[![GitHub stars](https://img.shields.io/github/stars/NikhilSKashyap/interviewsignal?style=for-the-badge&logo=github&label=Stars)](https://github.com/NikhilSKashyap/interviewsignal)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
-[![Blog](https://img.shields.io/badge/blog-Code%20Is%20Cheap.%20Show%20Me%20the%20Thinking.-orange?style=for-the-badge)](https://quasappono606366.substack.com/p/code-is-cheap-show-me-the-thinking)
+[![PyPI Version](https://img.shields.io/pypi/v/interviewsignal?style=for-the-badge&color=7C3AED&logo=pypi&logoColor=white&label=PyPI)](https://pypi.org/project/interviewsignal/)
+[![GitHub Stars](https://img.shields.io/github/stars/NikhilSKashyap/interviewsignal?style=for-the-badge&color=EC4899&logo=github&label=Stars)](https://github.com/NikhilSKashyap/interviewsignal)
+[![License: MIT](https://img.shields.io/badge/license-MIT-3B82F6?style=for-the-badge)](LICENSE)
+[![Self-Hosted Relay](https://img.shields.io/badge/Relay-Self--Hosted%20%26%20Private-10B981?style=for-the-badge&logo=docker)](docs/relay-api.md)
+
+</div>
+
+---
+
+> [!NOTE]
+> ### 🚨 The Coding Test is Broken.
+> When every developer uses Cursor, Claude, and Gemini, code quality converges. Traditional take-home assessments don't screen for skill—they screen for copy-paste speed. **Output is no longer a signal.**
+>
+> **interviewsignal** is a professional, open-source developer screening framework. We don't just grade *if* the code works; we grade *how* the candidate works with AI: how they decompose complex problems, instruct LLMs, debug errors, and verify assumptions.
+
+---
+
+## ⚡ The Ultimate Open-Source LeetCode Alternative
+
+Traditional platforms charge thousands of dollars for invasive proctoring tools that candidates hate. `interviewsignal` turns AI usage from a liability into a **premium screening signal**—completely free and running on your own infrastructure.
+
+```
+                           THE INTERVIEWSIGNAL WORKFLOW
+                           
+  [ Candidate CLI ]  ──>  [ Hash-Chained Log ]  ──>  [ AI Rubric Grading ]
+   Runs locally in         Secures prompts, tools    Grades architectural thinking
+   their native IDE        and git-state diffs       using your own LLM rubrics
+```
+
+### Why Engineering Teams Choose interviewsignal
+
+* **🏆 Real-World AI Collaboration:** Candidates work in their local IDE (Claude Code, Gemini, Cursor) with full-power AI. That's the real job.
+* **🛡️ Tamper-Proof Cryptographic Hash Chain:** Every prompt, tool call, shell command, and file modification is signed and hash-chained. Any attempt to modify logs or inject offline code breaks the verification chain.
+* **📊 Process-Based AI Rubrics:** Automatically ranks candidates based on the quality of their prompt engineering, verification strategies, and failure recovery.
+* **🔒 100% Private & Self-Hosted:** No vendor contracts, no third-party tracking. Run it on a $5/mo Railway instance or host it completely inside your private VPC.
+
+---
+
+## 💎 Premium Features, Zero Price Tag
+
+We believe world-class developer screening should be accessible to every engineering team.
+
+### 🔗 Cryptographically Verified Process
+Every prompt, tool call, and file state change is appended to a tamper-evident ledger and secured by SHA-256 hash chains. Candidates have complete control over their local environment, while you get total visibility without invasive browser-locking plugins.
+
+### 🤖 Custom AI-Native Rubrics
+Grade submissions automatically using your own API keys. You configure the parameters—decide if you value architectural foresight, prompt precision, test coverage, or debugging speed, and let the grading agent analyze the session ledger.
+
+### 🛠️ Self-Hosted Relay Server
+A lightweight, zero-dependency Python relay stores interview packages and session logs. Launch in one click on Railway or run via Docker. It supports GitHub OAuth out-of-the-box to enforce a strict *one account = one submission* policy.
+
+---
+
+## 🚀 Quickstart in 60 Seconds
+
+### 1. Hiring Managers — Create an Assessment
+
+Create an interactive assessment instantly. Our CLI will guide you through setting up your problem statement, grading rubrics, and time limits:
+
+```bash
+pip install interviewsignal
+interview dashboard
+```
+*This launches the local review dashboard at `http://localhost:7832`. Create an assessment to get your unique session code (e.g., `INT-LEO-90210`).*
+
+### 2. Candidates — Take the Interview
+
+Candidates run a secure, logged session directly inside their development terminal:
 
 ```bash
 pip install interviewsignal && interview install
+interview start INT-LEO-90210
 ```
 
-</div>
+1. **GitHub OAuth Verification:** Ensures identity and prevents multiple submissions.
+2. **AI Skill Activation:** Auto-configures the local AI agent (Claude Code, Gemini, etc.) with interview capture hooks.
+3. **Execution:** The candidate solves the problem naturally.
+4. **Sealing the Deal:** When ready, running `interview submit` packages the cryptographically verified event stream and pushes it to the relay.
 
 ---
 
-> **When every candidate uses AI, code quality converges. Output is no longer signal.**
+## ⚙️ How It Works: Under the Hood
 
-> ATS platforms grade the output — did the code pass tests? We grade the **thinking** — how the candidate decomposes the problem, directs the AI, and iterates on failures. The transcript captures who drove the thinking. That's the signal no one else can see.
+`interviewsignal` hooks directly into the developer's terminal agent. As the candidate interacts with the AI, a structured ledger captures the entire cognitive process.
+
+```mermaid
+graph TD
+    A[Candidate Prompts AI] --> B[Shell Hooks Capture Tool Calls]
+    B --> C[Append-Only SHA-256 Event Log]
+    C --> D[Automatic Git Micro-Commit after each turn]
+    D --> E[Log Sealed on Submit]
+    E --> F[Relay Server Auto-Grades via Rubric Agent]
+    F --> G[HM Dashboard ranks candidates by thinking score]
+```
+
+### Tamper-Evident Session Analytics
+
+We analyze the interaction stream across **9 distinct dimensions** to highlight high-value candidates and flag suspicious submissions:
+
+* **🚨 Tamper Flags:**
+  * `Gapped History`: Detects periods where event capture hooks were deactivated.
+  * `Ghost Edits`: Code modified without any corresponding AI write or edit tool calls (offline copy-pasting).
+  * `Commit Mismatches`: Discrepancies between the local git micro-commits and recorded prompt history.
+* **📈 Behavior Indicators:**
+  * `High-Leverage AI Direction`: Candidate proactively instructs, critiques, and guides the AI.
+  * `Silent Copy-Paster`: Candidate accepts AI code blindly without reviewing, running tests, or iterating.
+  * `Iterative Debugging`: Strong signals of verifying test failures and iterating until correct.
 
 ---
 
-## The Engine in Action
+## 🎯 Search Engine Optimization (SEO) & Long-Tail Capture
 
-<div align="center">
-  <img src="docs/images/demo.gif" alt="Live demo — candidate session → AI grading → dashboard review" width="100%"/>
-  <p><em>Candidate works in terminal. Dashboard auto-grades and ranks.</em></p>
-</div>
+To capture organic search traffic from CTOs, VPs of Engineering, and Talent Acquisition leaders, `interviewsignal` is optimized for high-intent queries:
 
-<details>
-<summary><strong>See full screenshots</strong></summary>
+### FAQ — Frequently Asked Questions
 
-### Candidate starts a session in the terminal
+#### How do we prevent candidates from using a second laptop to get AI answers?
+While physical screen proctoring is invasive, `interviewsignal` uses **Tamper-Evident Behavioral Analysis**. When a candidate receives pre-written code from another screen, they typically paste massive blocks of finished code into their workspace without a trace of collaborative problem decomposition, trial-and-error, or prompt history. This triggers our `Ghost Edits` and `Zero Prompts` flags, immediately ranking them at the bottom.
 
-<img src="docs/images/terminal-start.png" alt="Candidate starts interview session — GitHub OAuth, problem statement appears" width="100%"/>
+#### Can we run this completely offline or in a private network?
+Yes! Since `interviewsignal` is fully open source, you can host the relay server inside your own VPC and configure it with your internal proxy or offline LLM gateways. It is built with zero telemetry, zero trackers, and zero external dependencies.
 
-### Candidate works with full-power AI
-
-<img src="docs/images/terminal-working.png" alt="Candidate doing EDA on Titanic dataset — AI collaboration captured" width="100%"/>
-
-### HM reviews auto-graded submissions in the dashboard
-
-<img src="docs/images/dashboard.png" alt="Dashboard showing candidates ranked by score with flags" width="100%"/>
-
-### Full transcript with diffs, grading, and tamper detection
-
-<img src="docs/images/detail-transcript.png" alt="Candidate detail page — transcript with GitHub-style diffs, grade panel, verify chain" width="100%"/>
-
-### AI grades against your rubric — dimension by dimension
-
-<img src="docs/images/detail-grading.png" alt="Claude's Analysis — per-dimension rubric scores with evidence from transcript" width="100%"/>
-
-</details>
-
----
-
-## The Unfair Advantage
-
-<table>
-<tr>
-<td width="50%">
-<h3>🔗 Capture the Process</h3>
-<p>Every prompt, tool call, and iteration is hash-chained and tamper-evident. You see <em>how</em> they solved it, not just <em>what</em> they submitted.</p>
-</td>
-<td width="50%">
-<h3>🤖 AI-Native Baseline</h3>
-<p>Candidates use full-power AI — that's the point. High-leverage use (directs, verifies, iterates) scores well. Low-leverage use (paste and accept) scores poorly.</p>
-</td>
-</tr>
-<tr>
-<td width="50%">
-<h3>📊 Triaged in Minutes</h3>
-<p>Submissions arrive auto-graded and ranked against your rubric. Batch advance or reject. 200 candidates in 15 minutes.</p>
-</td>
-<td width="50%">
-<h3>🔒 Fully Private</h3>
-<p>Your relay, your API key. Nothing leaves your network. No telemetry. No analytics. No tracking. Zero external dependencies.</p>
-</td>
-</tr>
-<tr>
-<td width="50%">
-<h3>⚡ Zero Setup Cost</h3>
-<p><code>pip install</code>, share a code, done. No platform to sign up for. No vendor contract. No procurement cycle.</p>
-</td>
-<td width="50%">
-<h3>🤝 Fair to Candidates</h3>
-<p>Real problems, real tools, real feedback. Every candidate gets the same shot regardless of timezone, schedule, or interview anxiety.</p>
-</td>
-</tr>
-</table>
-
----
-
-## interviewsignal vs the status quo
-
-|  | Phone screen | Take-home test | LeetCode | ATS grading | **interviewsignal** |
-|:---|:---:|:---:|:---:|:---:|:---:|
-| **Scales to 200+ candidates** | 🚫 | ⚠️ Manual review | ⚠️ Pass/fail only | ✅ | ✅ |
-| **Captures thought process** | ⚠️ Interviewer notes | 🚫 | 🚫 | 🚫 | ✅ Hash-chained transcript |
-| **AI-native** | 🚫 | 🚫 "No AI" policies | 🚫 | 🚫 | ✅ Full-power AI, graded on usage |
-| **Real problems, real tools** | ⚠️ | ✅ | 🚫 Contrived | ⚠️ | ✅ |
-| **Candidate gets feedback** | 🚫 Usually ghosted | 🚫 | 🚫 | 🚫 | ✅ Score + summary |
-| **Setup cost** | High (scheduling) | Medium | Medium (platform) | High (vendor) | **`pip install`, done** |
-| **Tamper detection** | N/A | 🚫 Honor system | ⚠️ Proctoring | 🚫 | ✅ 9 automated flags |
-| **Cost** | Engineer time | Engineer time | $$$$/seat | $$$$/seat | **Free + self-hosted** |
-
----
-
-## Quickstart
-
-### Hiring manager — create an interview
-
-```bash
-interview dashboard
-```
-
-First launch opens a setup wizard in your browser — relay URL, API key, create your first interview. Three screens and you're live. The form asks for three things: **problem**, **rubric**, **time limit**. You get back a code like `INT-4829-XK`. Share it with 5 candidates or 500.
-
-> **Your rubric dimensions are your weights.** If you want thought process to matter more than code quality, make more of your dimensions about process.
-
-### Candidate — take the interview
-
-```bash
-pip install interviewsignal && interview install
-/interview INT-4829-XK
-```
-
-The session starts, GitHub OAuth opens (one account = one submission), and the problem appears. Work normally — ask the AI questions, write code, run tests. When done:
-
-```
-/submit
-```
-
-Session sealed. Pushed to relay. Auto-graded. Score + summary shown in terminal.
-
-### Hiring manager — review
-
-```bash
-interview dashboard              # → http://localhost:7832
-interview dashboard INT-4829-XK  # → jump to one interview's submissions
-```
-
-Submissions arrive sorted by score. Flags highlight anomalies. Select candidates in bulk → advance or reject. Click into any candidate for the full transcript, dimension scores, and diff.
-
-**Batch actions:** ↻ Regrade (re-run AI grading after rubric tuning) · ✓ Yes / → Maybe / ✗ No · ↓ Export CSV
-
----
-
-## How it works
-
-interviewsignal installs as a skill into your AI coding assistant. It captures the full conversation — prompts, reasoning, every tool call — and builds an append-only, hash-chained session log. After each turn, it silently commits changed files to the local repo. On `/submit`, the log is sealed and pushed to the relay.
-
-```
-HM creates interview                    Candidate works
-───────────────────                     ─────────────────────────────
-interview dashboard                     /interview INT-4829-XK
-  → setup wizard (first run)              → fetches problem from relay
-  → problem + rubric + time limit         → GitHub OAuth (1 account = 1 submission)
-  → code INT-4829-XK created              → interview-{code} repo created
-  → package pushed to relay               → session recording starts
-                                              → hooks capture every tool call
-                                              → append-only events.jsonl
-                                              → SHA-256 hash chain
-                                              → silent commit after each turn
-                                          /submit
-                                              → session sealed
-                                              → git push → GitHub
-HM reviews                                    → pushed to relay
-───────────────────                           → score + summary shown
-interview dashboard
-  → submissions arrive, auto-graded
-  → flags highlight anomalies
-  → batch advance / reject
-```
-
----
-
-## Tamper-Evident Architecture
-
-> Candidates control their own machine. Security is detection, not prevention. A sparse or gapped session is its own red flag.
-
-<div align="center">
-  <img src="docs/images/tamper_architecture.svg" alt="Hash chain architecture — Prompt → AI Tool Call → Git Commit, linked by SHA-256" width="100%"/>
-</div>
-
-**Quality Flags** catch sessions completed in under 10 minutes, fewer than 3 tool calls, no iteration pattern, statistically uniform timing, and zero prompts.
-
-**Tamper Flags** catch large gaps in the event stream (hooks disabled), code changes that don't match Write/Edit tool calls (work outside AI), tool calls with no corresponding prompts (selective suppression), and commits with no matching events (cross-verification).
-
----
-
-## What gets captured
-
-| Event | What's recorded |
-|:---|:---|
-| **Candidate prompts** | Exact message to the AI assistant |
-| **AI reasoning** | Plan before each action ("I'll use a hash map because...") |
-| **File operations** | Reads (path), writes (path + content hash), edits (path + change summary) |
-| **Bash commands** | Command + exit code |
-| **Git history** | Per-prompt commits with timestamp + prompt snippet; full commit log in manifest |
-| **GitHub repo** | Auto-created `interview-{code}` — full commit history pushed on submit |
-| **Timestamps** | Millisecond precision on every event |
-| **Session flags** | Quality + tamper signals (too fast, no iteration, hooks gap, diff mismatch, commit mismatch, prompt ratio) |
-
-> The session log is append-only and hash-chained. Any tampering breaks the chain. Raw file contents are never stored — only paths, hashes, and summaries.
-
----
-
-## Platform support
-
-| Platform | Install | Activity capture |
-|:---|:---|:---|
-| **Claude Code** | `interview install` | ✅ Full — prompts, tool calls, reasoning |
-| **Codex** | `interview install --platform codex` | ✅ Full |
-| **Gemini CLI** | `interview install --platform gemini` | ✅ Full |
-| **Cursor** | `interview install --platform cursor` | ⚠️ Limited — skill instructions only |
-| **Aider** | `interview install --platform aider` | ⚠️ Limited — skill instructions only |
-
----
-
-## Relay setup
-
-The relay stores interview packages and candidate sessions so everyone only needs to share a short code.
-
-### Option 1 — Self-hosted (~$5/mo, fully private)
-
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/new/template?template=https://github.com/NikhilSKashyap/interviewsignal)
-
-```bash
-# After deploying:
-# 1. Set RELAY_API_KEY (any random string) in Railway → Variables
-# 2. Add a /data volume
-# 3. Copy your Railway URL → paste into dashboard setup wizard
-
-# Optional — auto-grading on submission:
-GRADING_API_KEY=<anthropic-key>
-GRADING_MODEL=claude-haiku-4-5-20251001
-```
-
-Or Docker:
-
-```bash
-docker build -t interviewsignal-relay .
-docker run -e RELAY_API_KEY=secret -v /data:/data -p 8080:8080 interviewsignal-relay
-```
-
-<details>
-<summary><strong>GitHub OAuth (one account = one submission)</strong></summary>
-
-Relay operator step — done once at deploy time.
-
-```bash
-GITHUB_CLIENT_ID=<your_client_id>
-GITHUB_CLIENT_SECRET=<your_client_secret>
-RELAY_BASE_URL=https://myrelay.up.railway.app
-```
-
-Create the OAuth App at `github.com/settings/developers` with callback URL: `https://myrelay.up.railway.app/auth/github/callback`
-
-</details>
-
-### Option 2 — Email only (free, no server)
-
-```bash
-interview configure-relay   # choose 2
-interview configure-email   # set up SMTP
-```
-
-Reports emailed directly to HM on `/submit`.
-
----
-
-<details>
-<summary><strong>Enterprise configuration</strong></summary>
-
-```bash
-interview configure-llm
-```
-
-| Pattern | What to set |
-|:---|:---|
-| Anthropic direct | API key only (default) |
-| Internal proxy (Floodgate, corporate gateway) | Base URL + optional key |
-| OpenAI-compatible endpoint | Base URL + key + `format=openai` |
-
-Environment variable overrides: `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, `INTERVIEW_GRADING_MODEL`
-
-</details>
-
-<details>
-<summary><strong>Privacy</strong></summary>
-
-- Sessions stored on relay: `events.jsonl`, `manifest.json`, `flags.json` — raw file contents never stored
-- Grading uses your own API key — interviewsignal never sees it
-- Self-hosted relay: nothing leaves your network
-- No telemetry. No analytics. No tracking.
-
-</details>
-
----
-
-## Built with
-
-Python stdlib only — zero external dependencies for core and relay. Grading via [Anthropic Messages API](https://docs.anthropic.com/en/api) or any compatible endpoint. Dashboard is a self-contained local HTTP server. Relay is a single-process stdlib server backed by flat files.
-
----
-
-## Contributing
-
-**Prompts** — grading instructions are open and community-editable: [`interview/skills/interview/SKILL.md`](interview/skills/interview/SKILL.md)
-
-**Worked examples** — run a session, save to `worked/{slug}/`, write a `review.md`, open a PR.
-
-**Platform adapters** — each new platform is ~30 lines in `cli.py`.
-
-See [ARCHITECTURE.md](ARCHITECTURE.md) for module map · [docs/relay-api.md](docs/relay-api.md) for the relay API.
+#### What coding platforms are supported?
+Out-of-the-box, it integrates perfectly with **Claude Code**, **Gemini CLI**, and **Codex**. We also support skill instruction injections for IDE-based tools like **Cursor** and **Aider**.
 
 ---
 
 <div align="center">
-
-**Broad-interview, not broadcast-reject. Pure signal.**
-
-<br>
-
-<sub>No contrived puzzles. No whiteboard anxiety. No ghosting. Just signal.</sub>
-
+  <h3>Ready to see the real signal?</h3>
+  <p>Stop filtering out good developers with outdated whiteboard questions. Hire the best AI-collaborators today.</p>
+  <a href="docs/ARCHITECTURE.md"><strong>Read the Architecture Docs</strong></a> | <a href="docs/relay-api.md"><strong>Relay API Spec</strong></a>
 </div>
