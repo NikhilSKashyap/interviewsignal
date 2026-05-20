@@ -1,352 +1,346 @@
-# interviewsignal
+<div align="center">
 
-[![PyPI](https://img.shields.io/pypi/v/interviewsignal)](https://pypi.org/project/interviewsignal/)
-[![GitHub](https://img.shields.io/badge/github-NikhilSKashyap%2Finterviewsignal-blue)](https://github.com/NikhilSKashyap/interviewsignal)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Blog](https://img.shields.io/badge/blog-Code%20Is%20Cheap.%20Show%20Me%20the%20Thinking.-orange)](https://quasappono606366.substack.com/p/code-is-cheap-show-me-the-thinking)
+<!-- HERO -->
+<h1>interviewsignal</h1>
 
-**Broad-interview, not broadcast-reject.** One code. Any number of candidates. Every one of them gets a fair shot — real problem, real tools, real feedback. `pip install` and you're running. Zero setup cost. Completely secure.
+<h3>Every candidate uses AI now. Grade the <em>thinking</em>, not the output.</h3>
 
-No contrived puzzles. No whiteboard anxiety. Just signal.
+<br>
 
----
+<p><strong>One code. Any number of candidates. Pure signal.</strong></p>
 
-## What is broad-interviewing?
+<p>
+AI-graded take-home assessments that capture the candidate's <em>thought process</em> — not just the final answer.<br>
+<code>pip install</code>, share a code, done. Zero setup cost. Completely secure.
+</p>
 
-The same way broadcasting reaches many listeners with one signal, broad-interviewing reaches many candidates with one interview. Share a code, and every candidate works the problem on their own time, with their own AI tools, on a real problem. You get back structured, graded, ranked results. They get back honest feedback. Both sides win.
+<br>
 
-```
-Create interview  →  Share code  →  Candidates work  →  Auto-grade  →  Triage  →  Hire
-```
+[![PyPI](https://img.shields.io/pypi/v/interviewsignal?style=for-the-badge&logo=pypi&logoColor=white&label=PyPI)](https://pypi.org/project/interviewsignal/)
+[![GitHub stars](https://img.shields.io/github/stars/NikhilSKashyap/interviewsignal?style=for-the-badge&logo=github&label=Stars)](https://github.com/NikhilSKashyap/interviewsignal)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
+[![Blog](https://img.shields.io/badge/blog-Code%20Is%20Cheap.%20Show%20Me%20the%20Thinking.-orange?style=for-the-badge)](https://quasappono606366.substack.com/p/code-is-cheap-show-me-the-thinking)
 
-**For the startup:** you posted a role and got 200 applications. You can't interview all of them live. With interviewsignal, you share one code, submissions arrive auto-graded and ranked, you spend 15 minutes triaging — advance the top 10, reject the rest, done.
-
-**For the candidate:** no scheduling, no whiteboard, no trick questions. You work the way you actually work — with AI assistance, on your own time. You get your score once the HM grades. Every candidate gets the same shot regardless of timezone, schedule, or interview anxiety.
-
-**For everyone:** `pip install interviewsignal && interview install`. That's the entire setup. No platform to sign up for. No vendor contract. No procurement cycle. No setup cost.
-
----
-
-## Install
+<br>
 
 ```bash
 pip install interviewsignal && interview install
 ```
 
-Requires Python 3.10+ and one of the [supported platforms](#platform-support).
+</div>
 
-> **Enterprise / no personal API key?** See [Enterprise configuration](#enterprise-configuration) below.
+---
+
+<div align="center">
+
+### The problem
+
+**When every candidate uses AI, code quality converges. Output is no longer signal.**
+
+ATS grading partners (Greenhouse, Lever, Ashby) grade the output — did the code pass tests?<br>
+We grade the **thinking** — how did the candidate decompose the problem, direct the AI, iterate on failures?<br>
+The transcript captures who drove the thinking. That's the signal no one else can see.
+
+</div>
+
+---
+
+## How it looks
+
+<table>
+<tr>
+<td width="50%">
+
+**Candidate (terminal)**
+
+```
+❯ /interview INT-4829-XK
+
+  Welcome, Alex Chen.
+
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Build a rate limiter that supports
+  sliding window and fixed window
+  strategies...
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ⏱ Time limit: 90 minutes
+  📁 GitHub repo: interview-INT-4829-XK
+  🔒 Session recording active
+
+  Work normally. Ask the AI questions,
+  write code, run tests. When done:
+  /submit
+```
+
+</td>
+<td width="50%">
+
+**Hiring manager (browser)**
+
+```
+┌─────────────────────────────────────┐
+│  INT-4829-XK        ↻ Regrade      │
+│  Rate Limiter — Senior Backend      │
+├─────────────────────────────────────┤
+│  ✓ Alex Chen      8.2  ██████████░ │
+│  → Jordan Lee     7.7  █████████░░ │
+│  → Sam Rivera     6.1  ███████░░░░ │
+│  ✗ Pat Kim        3.4  ████░░░░░░░ │
+│                                     │
+│  ⚑ 2 flagged · 12 submissions      │
+│  ↓ Export CSV                       │
+└─────────────────────────────────────┘
+```
+
+</td>
+</tr>
+</table>
+
+---
+
+## Why interviewsignal
+
+<table>
+<tr><td>🎯</td><td><strong>Captures thought process, not just output</strong></td><td>Every prompt, every AI interaction, every iteration — hash-chained and tamper-evident. You see <em>how</em> they solved it, not just <em>what</em> they submitted.</td></tr>
+<tr><td>⚡</td><td><strong>Zero setup cost</strong></td><td><code>pip install</code>, share a code, done. No platform. No vendor contract. No procurement cycle. Works in 60 seconds.</td></tr>
+<tr><td>🤖</td><td><strong>AI-native by design</strong></td><td>Candidates work with full-power AI — that's the point. The grading calibrates for <em>how</em> they use AI: high-leverage (directs, verifies) scores well; low-leverage (copy-paste, "yes") scores poorly.</td></tr>
+<tr><td>📊</td><td><strong>Auto-graded + ranked</strong></td><td>Submissions arrive scored against your rubric. Batch advance or reject. Spend 15 minutes triaging 200 candidates instead of 200 hours interviewing them.</td></tr>
+<tr><td>🔒</td><td><strong>Tamper-evident audit trail</strong></td><td>SHA-256 hash chain, per-prompt git commits, cross-verified against tool logs. Gaps in the event stream, code changes outside AI — all flagged automatically.</td></tr>
+<tr><td>🏠</td><td><strong>Self-hosted &amp; private</strong></td><td>Your relay, your data, your API key. Nothing leaves your network. No telemetry. No analytics. No tracking.</td></tr>
+</table>
+
+---
+
+## interviewsignal vs the status quo
+
+|  | Phone screen | Take-home test | LeetCode | ATS grading | **interviewsignal** |
+|:---|:---:|:---:|:---:|:---:|:---:|
+| **Scales to 200+ candidates** | 🚫 | ⚠️ Manual review | ⚠️ Pass/fail only | ✅ | ✅ |
+| **Captures thought process** | ⚠️ Interviewer notes | 🚫 | 🚫 | 🚫 | ✅ Hash-chained transcript |
+| **AI-native** | 🚫 | 🚫 "No AI" policies | 🚫 | 🚫 | ✅ Full-power AI, graded on usage |
+| **Real problems, real tools** | ⚠️ | ✅ | 🚫 Contrived | ⚠️ | ✅ |
+| **Candidate gets feedback** | 🚫 Usually ghosted | 🚫 | 🚫 | 🚫 | ✅ Score + summary |
+| **Setup cost** | High (scheduling) | Medium | Medium (platform) | High (vendor) | **`pip install`, done** |
+| **Tamper detection** | N/A | 🚫 Honor system | ⚠️ Proctoring | 🚫 | ✅ 9 automated flags |
+| **Cost** | Engineer time | Engineer time | $$$$/seat | $$$$/seat | **Free + self-hosted** |
 
 ---
 
 ## Quickstart
 
-### Hiring manager
+### Hiring manager — create an interview
 
 ```bash
 interview dashboard
 ```
 
-First launch opens a setup wizard in your browser — relay URL, API key, create your first interview. Three screens and you're live.
+First launch opens a setup wizard in your browser — relay URL, API key, create your first interview. Three screens and you're live. The form asks for three things: **problem**, **rubric**, **time limit**. You get back a code like `INT-4829-XK`. Share it with 5 candidates or 500.
 
-The interview form asks for three things: problem statement, grading rubric, and an optional time limit. You get back a code like `INT-4829-XK`. That's your broad-interview — share it with 5 candidates or 500. They all get the same problem, submissions arrive auto-graded and ranked. Hit **+ Create Interview** to create more.
+> 💡 **Your rubric dimensions are your weights.** If you want thought process to matter more than code quality, make more of your dimensions about process.
 
-### Candidate
+### Candidate — take the interview
 
 ```bash
 pip install interviewsignal && interview install
 /interview INT-4829-XK
 ```
 
-`interview install` asks for your name and email once and saves them. After that, `/interview CODE` is fully automatic — the session starts, GitHub OAuth opens a browser tab if configured (one account, one submission), and the problem appears with no further prompts from you. The problem appears once auth completes. A GitHub repo (`interview-{code}`) is created automatically and a git remote named `interview` is wired up in your working directory. Work normally — ask the AI questions, write code, run tests. The session records everything automatically.
-
-When done:
+The session starts, GitHub OAuth opens (one account = one submission), and the problem appears. Work normally — ask the AI questions, write code, run tests. When done:
 
 ```
 /submit
 ```
 
-The session is sealed, pushed to the relay, and auto-graded. You'll see your overall score and a one-line summary in the terminal. Once graded, you can also run:
-
-```bash
-interview score INT-4829-XK
-```
-
-to see your score (if the HM has enabled sharing).
+Session sealed. Pushed to relay. Auto-graded. Score + summary shown in terminal.
 
 ### Hiring manager — review
 
 ```bash
 interview dashboard              # → http://localhost:7832
-interview dashboard INT-4829-XK  # → jump straight to one interview's submissions
+interview dashboard INT-4829-XK  # → jump to one interview's submissions
 ```
 
-Submissions arrive sorted by score. Flags highlight anomalies — sessions that were too fast, showed no iteration, had suspiciously uniform timing, or show signs of tampered hooks (gaps in the event stream, code changes that don't match the tool log). Select candidates in bulk and advance or reject in one click. Click into any candidate to see the full transcript, dimension scores, and diff. Add comments. Record your decision. Export filtered candidates as CSV.
+Submissions arrive sorted by score. Flags highlight anomalies. Select candidates in bulk → advance or reject. Click into any candidate for the full transcript, dimension scores, and diff.
 
-Use **↻ Regrade** to re-run AI grading with the latest prompt (useful after rubric tuning). Use **Revise Grade** to manually override the score with a reason. Use **Verify Chain** to confirm the session log is tamper-evident. Control what candidates see after grading with the **Score Sharing** panel.
+**Batch actions:** ↻ Regrade (re-run AI grading after rubric tuning) · ✓ Yes / → Maybe / ✗ No · ↓ Export CSV
 
 ---
 
 ## How it works
 
-interviewsignal installs as a skill into your AI coding assistant. It captures the full conversation — prompts, AI reasoning before each action, every tool call (reads, writes, bash commands) — and builds an append-only, hash-chained session log. After each turn, it silently commits any changed files to the local repo, so the candidate's `interview-{code}` GitHub repo shows a step-by-step commit history. On `/submit`, the log is sealed and pushed to the relay.
+interviewsignal installs as a skill into your AI coding assistant. It captures the full conversation — prompts, reasoning, every tool call — and builds an append-only, hash-chained session log. After each turn, it silently commits changed files to the local repo. On `/submit`, the log is sealed and pushed to the relay.
 
 ```
-HM side                                 Candidate side
-───────────────────────────             ─────────────────────────────
+HM creates interview                    Candidate works
+───────────────────                     ─────────────────────────────
+interview dashboard                     /interview INT-4829-XK
+  → setup wizard (first run)              → fetches problem from relay
+  → problem + rubric + time limit         → GitHub OAuth (1 account = 1 submission)
+  → code INT-4829-XK created              → interview-{code} repo created
+  → package pushed to relay               → session recording starts
+                                              → hooks capture every tool call
+                                              → append-only events.jsonl
+                                              → SHA-256 hash chain
+                                              → silent commit after each turn
+                                          /submit
+                                              → session sealed
+                                              → git push → GitHub
+HM reviews                                    → pushed to relay
+───────────────────                           → score + summary shown
 interview dashboard
-  ↓ setup wizard (first run):
-      relay URL → registers hm_key
-      API key → saved locally
-      create interview form
-  ↓ code INT-4829-XK created
-  ↓ package pushed to relay
-
-                                        /interview INT-4829-XK
-                                          ↓ fetches problem from relay
-                                          ↓ relay auto-configured from package
-                                          ↓ GitHub OAuth (one account = one submission)
-                                          ↓ interview-{code} repo created
-                                          ↓ session recording starts
-                                              ↓ hooks capture every tool call
-                                              ↓ append-only events.jsonl
-                                              ↓ SHA-256 hash chain
-                                              ↓ silent commit after each turn
-                                        /submit
-                                          ↓ session sealed + commit log captured
-                                          ↓ git push → interview-{code}
-                                          ↓ pushed to relay
-                                          ↓ score + summary shown (if auto-graded)
-
-interview dashboard
-  ↓ submissions arrive, auto-graded
-  ↓ flags highlight anomalies
-  ↓ batch advance / reject
-  ↓ hire / next round / reject
+  → submissions arrive, auto-graded
+  → flags highlight anomalies
+  → batch advance / reject
 ```
-
-**During session (after each turn):**
-- Silent `git add -A && git commit` — captures code state after every candidate prompt; commit message is timestamp + prompt snippet; skips if nothing changed
-
-**On submit:**
-1. `session seal` — finalises hash chain, captures git diff (start → end) and full per-prompt commit log
-2. Git push — pushes entire commit history to the candidate's `interview-{code}` repo (non-blocking)
-3. Push to relay — sealed session (events + manifest + commit log) stored server-side
-4. Auto-grade — if enabled and `GRADING_API_KEY` is configured on relay, grade runs immediately; overall score + summary shown to candidate in terminal
 
 ---
 
-## Relay
+## What gets captured
 
-The relay stores interview packages and candidate sessions so HMs and candidates only need to share a short code — no file transfers, no email attachments.
+| Event | What's recorded |
+|:---|:---|
+| **Candidate prompts** | Exact message to the AI assistant |
+| **AI reasoning** | Plan before each action ("I'll use a hash map because...") |
+| **File operations** | Reads (path), writes (path + content hash), edits (path + change summary) |
+| **Bash commands** | Command + exit code |
+| **Git history** | Per-prompt commits with timestamp + prompt snippet; full commit log in manifest |
+| **GitHub repo** | Auto-created `interview-{code}` — full commit history pushed on submit |
+| **Timestamps** | Millisecond precision on every event |
+| **Session flags** | Quality + tamper signals (too fast, no iteration, hooks gap, diff mismatch, commit mismatch, prompt ratio) |
 
-The setup wizard handles relay configuration on first launch. For automation or scripting, you can also configure it directly:
+> The session log is append-only and hash-chained. Any tampering breaks the chain. Raw file contents are never stored — only paths, hashes, and summaries.
 
-```bash
-interview configure-relay      # CLI alternative to the wizard
-```
+---
 
-### Option 1 — Your own relay (~$5/mo, fully private)
+## Platform support
+
+| Platform | Install | Activity capture |
+|:---|:---|:---|
+| **Claude Code** | `interview install` | ✅ Full — prompts, tool calls, reasoning |
+| **Codex** | `interview install --platform codex` | ✅ Full |
+| **Gemini CLI** | `interview install --platform gemini` | ✅ Full |
+| **Cursor** | `interview install --platform cursor` | ⚠️ Limited — skill instructions only |
+| **Aider** | `interview install --platform aider` | ⚠️ Limited — skill instructions only |
+
+---
+
+## Relay setup
+
+The relay stores interview packages and candidate sessions so everyone only needs to share a short code.
+
+### Option 1 — Self-hosted (~$5/mo, fully private)
 
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/new/template?template=https://github.com/NikhilSKashyap/interviewsignal)
 
-After deploying:
-1. Set `RELAY_API_KEY` (any random string) in Railway → Variables
-2. Add a `/data` volume — this is where sessions are stored
-3. Copy your Railway URL (e.g. `https://myrelay.up.railway.app`)
-4. Run `interview dashboard` and paste the URL into the setup wizard
+```bash
+# After deploying:
+# 1. Set RELAY_API_KEY (any random string) in Railway → Variables
+# 2. Add a /data volume
+# 3. Copy your Railway URL → paste into dashboard setup wizard
 
-Optional — auto-grading on submission:
-```
-GRADING_API_KEY=<anthropic-key>          # enables auto-grading
-GRADING_MODEL=claude-haiku-4-5-20251001  # model to use (default)
+# Optional — auto-grading on submission:
+GRADING_API_KEY=<anthropic-key>
+GRADING_MODEL=claude-haiku-4-5-20251001
 ```
 
-Or with Docker:
+Or Docker:
 
 ```bash
 docker build -t interviewsignal-relay .
 docker run -e RELAY_API_KEY=secret -v /data:/data -p 8080:8080 interviewsignal-relay
 ```
 
-#### GitHub OAuth
+<details>
+<summary><strong>GitHub OAuth (one account = one submission)</strong></summary>
 
-Prevent candidates from submitting multiple times under different names. One GitHub account = one submission per interview code.
+Relay operator step — done once at deploy time.
 
-This is a **relay operator** step — done once at deploy time, not something HMs configure per-interview.
-
-Add to your relay's environment variables:
-```
+```bash
 GITHUB_CLIENT_ID=<your_client_id>
 GITHUB_CLIENT_SECRET=<your_client_secret>
 RELAY_BASE_URL=https://myrelay.up.railway.app
 ```
 
-Create the GitHub OAuth App at `github.com/settings/developers`:
-- **Application name:** your company or team name
-- **Callback URL:** `https://myrelay.up.railway.app/auth/github/callback`
+Create the OAuth App at `github.com/settings/developers` with callback URL: `https://myrelay.up.railway.app/auth/github/callback`
 
-When configured, candidates see a browser auth step at session start. The relay enforces uniqueness server-side. The HM sees the candidate's GitHub username, avatar, and a link to their session repo.
-
-Without GitHub OAuth, candidates are identified by name + email.
-
-See [docs/relay-api.md](docs/relay-api.md) for the full API contract and data layout.
+</details>
 
 ### Option 2 — Email only (free, no server)
 
 ```bash
 interview configure-relay   # choose 2
-interview configure-email   # set up SMTP credentials
+interview configure-email   # set up SMTP
 ```
 
-Reports are emailed directly to the HM on `/submit`. The HM saves the JSON attachment to `~/.interview/received/` and it appears in the dashboard.
+Reports emailed directly to HM on `/submit`.
 
 ---
 
-## Why this works
-
-Every candidate session is append-only and SHA-256 hash-chained — any tampering breaks the chain. In relay mode, the relay's server-side timestamp is the integrity anchor. Grade revisions require an explicit reason and the audit records whether identity was known at revision time:
-
-The relay enforces strict credential isolation. When a candidate fetches `GET /interviews/<code>`, they receive only the problem, time limit, and a per-interview `submit_token` scoped to that code — the HM's admin credential (`hm_key`) never leaves the server. The submit token is write-only: it can only be used to submit to that specific interview, nothing else. A compromised token grants no read access to other candidates, no rubric, no scoring data.
-
-```
-[2026-04-13T10:47:22Z] grade_recorded  INT-4829-XK  hash=d4abe5e6  score=7.7
-[2026-04-13T11:30:00Z] grade_revised   INT-4829-XK  hash=9f2c1a3b  7.7→8.2  reason="missed edge cases"
-```
-
-The session flags system detects signal-noise issues at two levels. Quality flags catch sessions completed in under 10 minutes (too fast), fewer than 3 tool calls (few interactions), no failed-then-fixed iteration pattern (no iteration), statistically uniform event timing (possible scripting), and zero prompts logged (no prompts). Tamper detection flags catch large gaps in the event stream where hooks may have been disabled (hooks gap), code changes in the git diff that don't match the Write/Edit tool calls in the log (diff mismatch), and tool calls with no corresponding user prompts (selective suppression). Candidates control their own machine — security is detection, not prevention. A sparse or gapped session is its own red flag. Flags appear as color-coded indicators in the dashboard — you decide what to do with them.
-
----
-
-## Enterprise configuration
+<details>
+<summary><strong>Enterprise configuration</strong></summary>
 
 ```bash
 interview configure-llm
 ```
 
 | Pattern | What to set |
-|---|---|
+|:---|:---|
 | Anthropic direct | API key only (default) |
-| Internal proxy (Floodgate, corporate gateway) | Base URL + optional key; proxy handles auth |
+| Internal proxy (Floodgate, corporate gateway) | Base URL + optional key |
 | OpenAI-compatible endpoint | Base URL + key + `format=openai` |
 
-Config stored in `~/.interview/config.json`:
+Environment variable overrides: `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, `INTERVIEW_GRADING_MODEL`
 
-```json
-{
-  "anthropic_base_url":      "https://ai-gateway.corp.internal/anthropic",
-  "anthropic_api_key":       "",
-  "api_format":              "anthropic",
-  "grading_model":           "claude-haiku-4-5-20251001",
-  "anthropic_extra_headers": {"X-Team-ID": "ml-hiring"}
-}
-```
+</details>
 
-Environment variable overrides:
+<details>
+<summary><strong>Security & tamper detection</strong></summary>
 
-```bash
-ANTHROPIC_API_KEY=...           # API key
-ANTHROPIC_BASE_URL=...          # base URL override
-INTERVIEW_GRADING_MODEL=...     # model name override
-```
+**Quality flags** catch sessions completed in under 10 minutes, fewer than 3 tool calls, no iteration pattern, statistically uniform timing, and zero prompts.
 
----
+**Tamper detection flags** catch large gaps in the event stream (hooks disabled), code changes that don't match Write/Edit tool calls (work outside AI), tool calls with no corresponding prompts (selective suppression), and commits with no matching events (cross-verification).
 
-## Platform support
+Candidates control their own machine — security is detection, not prevention. A sparse or gapped session is its own red flag.
 
-| Platform | Install | Hooks | Activity capture |
-|---|---|---|---|
-| Claude Code | `interview install` | PreToolUse / PostToolUse / Stop | Full — prompts, tool calls, reasoning |
-| Codex | `interview install --platform codex` | PreToolUse | Full |
-| Gemini CLI | `interview install --platform gemini` | preToolUse / postToolUse | Full |
-| Cursor | `interview install --platform cursor` | None | Limited — skill instructions only |
-| Aider | `interview install --platform aider` | None | Limited — skill instructions only |
+</details>
 
-Cursor and Aider don't support lifecycle hooks, so activity capture is limited to what the candidate voluntarily records. For full capture, use Claude Code, Codex, or Gemini CLI.
+<details>
+<summary><strong>Privacy</strong></summary>
 
----
+- Sessions stored on relay: `events.jsonl`, `manifest.json`, `flags.json` — raw file contents never stored
+- Grading uses your own API key — interviewsignal never sees it
+- Self-hosted relay: nothing leaves your network
+- No telemetry. No analytics. No tracking.
 
-## What gets captured
-
-| Event | Captured |
-|---|---|
-| Candidate prompts | Exact message to the AI assistant |
-| AI reasoning | Plan before each action ("I'll use a hash map because...") |
-| File reads | Path |
-| File writes | Path + content hash |
-| Bash commands | Command + exit code |
-| File edits | Path + change summary |
-| Git state | Branch + commit at start and end |
-| Git diff | Full diff (start → submit) |
-| Per-prompt commits | Silent commit after each turn; timestamp + prompt snippet as message |
-| Commit log | Full commit history (hash, timestamp, message, files changed) in manifest |
-| GitHub repo | Auto-created `interview-{code}` repo; full commit history pushed on submit |
-| Timestamps | Millisecond precision on every event |
-| Session flags | Quality + tamper signals (too fast, no iteration, uniform timing, hooks gap, diff/commit mismatch, prompt ratio) |
-
-The session log is append-only and hash-chained. Any tampering breaks the chain. The dashboard includes a **Verify Chain** button.
-
-Raw file contents are never stored — only paths, hashes, and command summaries.
-
----
-
-## Configuration reference
-
-```bash
-# HM dashboard (primary — starts setup wizard on first run)
-interview dashboard            # → http://localhost:7832
-interview dashboard <CODE>     # jump straight to one interview's submissions
-
-# CLI alternatives for scripting / automation
-interview configure-relay      # relay URL + auto-register HM account
-interview configure-api-key    # Anthropic API key (direct access)
-interview configure-llm        # Enterprise: custom endpoint, proxy, format, extra headers
-interview configure-email      # SMTP fallback (email-only mode, no relay)
-
-# Candidate
-interview install                        # Claude Code (default)
-interview install --platform codex       # Codex
-interview install --platform cursor      # Cursor
-interview install --platform gemini      # Gemini CLI
-interview install --platform aider       # Aider
-interview status                         # check active session
-interview score <CODE>                   # fetch your score from relay
-```
-
-All config stored in `~/.interview/config.json` (permissions: 600).
-
----
-
-## Privacy
-
-Candidate sessions stored on relay: `events.jsonl`, `manifest.json`, `flags.json`. Raw file contents are never stored.
-
-Grading sends the session timeline and git diff to the configured AI endpoint using your own API key — interviewsignal never sees it.
-
-Self-hosted relay: nothing leaves your network. See [docs/relay-api.md](docs/relay-api.md).
-
-No telemetry. No analytics. No tracking.
+</details>
 
 ---
 
 ## Built with
 
-Python stdlib only (no external dependencies for core or relay). Grading via [Anthropic Messages API](https://docs.anthropic.com/en/api) or any compatible endpoint. Dashboard is a self-contained local HTTP server. Relay is a single-process stdlib HTTP server backed by flat files.
+Python stdlib only — zero external dependencies for core and relay. Grading via [Anthropic Messages API](https://docs.anthropic.com/en/api) or any compatible endpoint. Dashboard is a self-contained local HTTP server. Relay is a single-process stdlib server backed by flat files.
 
 ---
 
 ## Contributing
 
-**Prompts** — the grading instructions are open and community-editable. The full interview skill is in [`interview/skills/interview/SKILL.md`](interview/skills/interview/SKILL.md).
+**Prompts** — grading instructions are open and community-editable: [`interview/skills/interview/SKILL.md`](interview/skills/interview/SKILL.md)
 
-**Worked examples** — run a real session, save output to `worked/{slug}/`, write an honest `review.md`, open a PR.
+**Worked examples** — run a session, save to `worked/{slug}/`, write a `review.md`, open a PR.
 
-**Platform support** — each new platform is a ~30 line adapter in `cli.py`.
+**Platform adapters** — each new platform is ~30 lines in `cli.py`.
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for module responsibilities and [docs/relay-api.md](docs/relay-api.md) for the relay API contract.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for module map · [docs/relay-api.md](docs/relay-api.md) for the relay API.
 
 ---
 
-<p align="center">
-  <em>Broad-interview, not broadcast-reject. Pure signal.</em>
-</p>
+<div align="center">
+
+**Broad-interview, not broadcast-reject. Pure signal.**
+
+<br>
+
+<sub>No contrived puzzles. No whiteboard anxiety. No ghosting. Just signal.</sub>
+
+</div>
