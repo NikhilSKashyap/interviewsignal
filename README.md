@@ -47,6 +47,23 @@ Traditional platforms charge thousands of dollars for invasive proctoring tools 
 
 ---
 
+## 📊 The Open-Source Alternative to High-Priced Proprietary Platforms
+
+Proprietary AI technical assessment platforms (such as OpenRound.ai) have validated that grading candidate process and AI fluency is the future of hiring—but they charge hundreds of dollars a month and strictly limit assessments (e.g., Starter tiers charging **$449/mo** or **$129/seat** while offering **only 5 assessments/month**).
+
+`interviewsignal` offers a professional, modern, and completely unrestricted open-source alternative.
+
+| Feature | 🤖 interviewsignal (Open-Source) | 🏢 Proprietary SaaS (e.g., OpenRound) |
+| :--- | :--- | :--- |
+| **Pricing** | **100% Free Forever** | **$449+/mo** or high seat licensing fees |
+| **Assessment Volume** | **Unlimited** (Screen 10 or 1,000 candidates at no extra cost) | Strictly metered (typically **only 5 to 20** assessments/mo) |
+| **Data Privacy & Telemetry** | **100% Private & Self-Hosted**. Zero tracking. Runs inside your VPC. | Multi-tenant SaaS cloud. Session logs sent to third-party. |
+| **Candidate Environment** | Work in their local native IDE (Claude Code, Gemini CLI, Cursor, Aider). | Sandboxed browser interfaces or proprietary VMs. |
+| **Customization** | Completely customizable. Modify LLM grading rubrics, prompts, and CLI skills. | Standardized rubrics, customization locked behind enterprise tiers. |
+| **Vendor Lock-in** | **Zero**. You own your relay, your transcripts, and your rubrics. | High. Bound to proprietary seat limits and contracts. |
+
+---
+
 ## 💎 Premium Features, Zero Price Tag
 
 We believe world-class developer screening should be accessible to every engineering team.
