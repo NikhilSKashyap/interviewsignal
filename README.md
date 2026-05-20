@@ -13,16 +13,17 @@
 [![GitHub Stars](https://img.shields.io/github/stars/NikhilSKashyap/interviewsignal?style=for-the-badge&color=EC4899&logo=github&label=Stars)](https://github.com/NikhilSKashyap/interviewsignal)
 [![License: MIT](https://img.shields.io/badge/license-MIT-3B82F6?style=for-the-badge)](LICENSE)
 [![Self-Hosted Relay](https://img.shields.io/badge/Relay-Self--Hosted%20%26%20Private-10B981?style=for-the-badge&logo=docker)](docs/relay-api.md)
+[![Blog](https://img.shields.io/badge/blog-Code%20Is%20Cheap.%20Show%20Me%20the%20Thinking.-orange?style=for-the-badge)](https://quasappono606366.substack.com/p/code-is-cheap-show-me-the-thinking)
 
 </div>
 
 ---
 
 > [!NOTE]
-> ### 🚨 The Coding Test is Broken.
+> ### 🚨 Code is Cheap. Show Me the Thinking.
 > When every developer uses Cursor, Claude, and Gemini, code quality converges. Traditional take-home assessments don't screen for skill—they screen for copy-paste speed. **Output is no longer a signal.**
 >
-> **interviewsignal** is a professional, open-source developer screening framework. We don't just grade *if* the code works; we grade *how* the candidate works with AI: how they decompose complex problems, instruct LLMs, debug errors, and verify assumptions.
+> **interviewsignal** is a professional, open-source developer screening framework built around the philosophy that **code is cheap, but deep engineering thinking is priceless**. We don't just grade *if* the code works; we grade *how* the candidate works with AI: how they decompose complex problems, instruct LLMs, debug errors, and verify assumptions.
 
 ---
 
