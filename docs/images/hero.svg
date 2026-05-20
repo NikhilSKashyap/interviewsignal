@@ -1,0 +1,230 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 520" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="520" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0a0a0b"/>
+      <stop offset="100%" stop-color="#111113"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4f46e5"/>
+      <stop offset="100%" stop-color="#818cf8"/>
+    </linearGradient>
+    <linearGradient id="green" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#22c55e"/>
+      <stop offset="100%" stop-color="#4ade80"/>
+    </linearGradient>
+    <linearGradient id="cardBorder1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4f46e5" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#4f46e5" stop-opacity="0.1"/>
+    </linearGradient>
+    <linearGradient id="cardBorder2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#22c55e" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#22c55e" stop-opacity="0.1"/>
+    </linearGradient>
+    <linearGradient id="cardBorder3" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#f59e0b" stop-opacity="0.1"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+    <filter id="softGlow">
+      <feGaussianBlur stdDeviation="20" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="520" fill="url(#bg)"/>
+
+  <!-- Subtle grid pattern -->
+  <g opacity="0.03">
+    <line x1="0" y1="0" x2="0" y2="520" stroke="#fff" stroke-width="1" transform="translate(60,0)"/>
+    <line x1="0" y1="0" x2="0" y2="520" stroke="#fff" stroke-width="1" transform="translate(120,0)"/>
+    <line x1="0" y1="0" x2="0" y2="520" stroke="#fff" stroke-width="1" transform="translate(180,0)"/>
+    <line x1="0" y1="0" x2="0" y2="520" stroke="#fff" stroke-width="1" transform="translate(240,0)"/>
+    <line x1="0" y1="0" x2="0" y2="520" stroke="#fff" stroke-width="1" transform="translate(300,0)"/>
+    <line x1="0" y1="0" x2="0" y2="520" stroke="#fff" stroke-width="1" transform="translate(360,0)"/>
+    <line x1="0" y1="0" x2="0" y2="520" stroke="#fff" stroke-width="1" transform="translate(420,0)"/>
+    <line x1="0" y1="0" x2="0" y2="520" stroke="#fff" stroke-width="1" transform="translate(480,0)"/>
+    <line x1="0" y1="0" x2="0" y2="520" stroke="#fff" stroke-width="1" transform="translate(540,0)"/>
+    <line x1="0" y1="0" x2="0" y2="520" stroke="#fff" stroke-width="1" transform="translate(600,0)"/>
+    <line x1="0" y1="0" x2="0" y2="520" stroke="#fff" stroke-width="1" transform="translate(660,0)"/>
+    <line x1="0" y1="0" x2="0" y2="520" stroke="#fff" stroke-width="1" transform="translate(720,0)"/>
+    <line x1="0" y1="0" x2="0" y2="520" stroke="#fff" stroke-width="1" transform="translate(780,0)"/>
+    <line x1="0" y1="0" x2="0" y2="520" stroke="#fff" stroke-width="1" transform="translate(840,0)"/>
+    <line x1="0" y1="0" x2="0" y2="520" stroke="#fff" stroke-width="1" transform="translate(900,0)"/>
+    <line x1="0" y1="0" x2="0" y2="520" stroke="#fff" stroke-width="1" transform="translate(960,0)"/>
+    <line x1="0" y1="0" x2="0" y2="520" stroke="#fff" stroke-width="1" transform="translate(1020,0)"/>
+    <line x1="0" y1="0" x2="0" y2="520" stroke="#fff" stroke-width="1" transform="translate(1080,0)"/>
+    <line x1="0" y1="0" x2="0" y2="520" stroke="#fff" stroke-width="1" transform="translate(1140,0)"/>
+    <line x1="0" y1="0" x2="1200" y2="0" stroke="#fff" stroke-width="1" transform="translate(0,60)"/>
+    <line x1="0" y1="0" x2="1200" y2="0" stroke="#fff" stroke-width="1" transform="translate(0,120)"/>
+    <line x1="0" y1="0" x2="1200" y2="0" stroke="#fff" stroke-width="1" transform="translate(0,180)"/>
+    <line x1="0" y1="0" x2="1200" y2="0" stroke="#fff" stroke-width="1" transform="translate(0,240)"/>
+    <line x1="0" y1="0" x2="1200" y2="0" stroke="#fff" stroke-width="1" transform="translate(0,300)"/>
+    <line x1="0" y1="0" x2="1200" y2="0" stroke="#fff" stroke-width="1" transform="translate(0,360)"/>
+    <line x1="0" y1="0" x2="1200" y2="0" stroke="#fff" stroke-width="1" transform="translate(0,420)"/>
+    <line x1="0" y1="0" x2="1200" y2="0" stroke="#fff" stroke-width="1" transform="translate(0,480)"/>
+  </g>
+
+  <!-- Decorative glow spots -->
+  <circle cx="200" cy="260" r="150" fill="#4f46e5" opacity="0.04"/>
+  <circle cx="1000" cy="260" r="150" fill="#4f46e5" opacity="0.04"/>
+  <circle cx="600" cy="260" r="200" fill="#818cf8" opacity="0.02"/>
+
+  <!-- ==================== STEP 1: Share Code ==================== -->
+
+  <!-- Card 1 background -->
+  <rect x="40" y="100" width="320" height="320" rx="16" fill="#18181b" stroke="url(#cardBorder1)" stroke-width="1.5"/>
+
+  <!-- Card 1 header bar -->
+  <rect x="40" y="100" width="320" height="44" rx="16" fill="#1f1f23"/>
+  <rect x="40" y="128" width="320" height="16" fill="#1f1f23"/>
+  <!-- Terminal dots -->
+  <circle cx="64" cy="122" r="5" fill="#ef4444" opacity="0.8"/>
+  <circle cx="82" cy="122" r="5" fill="#f59e0b" opacity="0.8"/>
+  <circle cx="100" cy="122" r="5" fill="#22c55e" opacity="0.8"/>
+  <text x="200" y="126" text-anchor="middle" font-family="monospace" font-size="11" fill="#71717a">Terminal</text>
+
+  <!-- Step number -->
+  <rect x="56" y="160" width="24" height="24" rx="12" fill="url(#accent)"/>
+  <text x="68" y="177" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="13" fill="#fff" font-weight="700">1</text>
+  <text x="90" y="177" font-family="system-ui, -apple-system, sans-serif" font-size="14" fill="#a1a1aa" font-weight="500">HM creates interview</text>
+
+  <!-- Terminal content -->
+  <text x="68" y="210" font-family="'JetBrains Mono', monospace" font-size="12" fill="#818cf8">$ interview dashboard</text>
+
+  <!-- Mini wizard mockup -->
+  <rect x="68" y="228" width="270" height="80" rx="8" fill="#27272a" stroke="#3f3f46" stroke-width="0.5"/>
+  <text x="82" y="248" font-family="system-ui, -apple-system, sans-serif" font-size="10" fill="#71717a" letter-spacing="1">STEP 3 OF 3</text>
+  <text x="82" y="268" font-family="system-ui, -apple-system, sans-serif" font-size="13" fill="#e4e4e7" font-weight="600">Create your first interview</text>
+  <rect x="82" y="280" width="120" height="16" rx="4" fill="#3f3f46"/>
+  <text x="90" y="292" font-family="monospace" font-size="9" fill="#71717a">problem + rubric</text>
+
+  <!-- Code output -->
+  <rect x="68" y="324" width="270" height="40" rx="8" fill="#052e16" stroke="#22c55e" stroke-width="0.5" opacity="0.8"/>
+  <text x="82" y="340" font-family="'JetBrains Mono', monospace" font-size="10" fill="#4ade80">&#x2713; Interview created</text>
+  <text x="82" y="356" font-family="'JetBrains Mono', monospace" font-size="13" fill="#fbbf24" font-weight="700">INT-4829-XK</text>
+
+  <text x="200" y="400" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#71717a">Share this code with 5 or 500 candidates</text>
+
+  <!-- ==================== Arrow 1 ==================== -->
+  <line x1="375" y1="260" x2="425" y2="260" stroke="url(#accent)" stroke-width="2" stroke-dasharray="6,4" opacity="0.6"/>
+  <polygon points="425,254 437,260 425,266" fill="#818cf8" opacity="0.6"/>
+
+  <!-- ==================== STEP 2: Candidate Works ==================== -->
+
+  <!-- Card 2 background -->
+  <rect x="440" y="100" width="320" height="320" rx="16" fill="#18181b" stroke="url(#cardBorder2)" stroke-width="1.5"/>
+
+  <!-- Card 2 header bar -->
+  <rect x="440" y="100" width="320" height="44" rx="16" fill="#1f1f23"/>
+  <rect x="440" y="128" width="320" height="16" fill="#1f1f23"/>
+  <circle cx="464" cy="122" r="5" fill="#ef4444" opacity="0.8"/>
+  <circle cx="482" cy="122" r="5" fill="#f59e0b" opacity="0.8"/>
+  <circle cx="500" cy="122" r="5" fill="#22c55e" opacity="0.8"/>
+  <text x="600" y="126" text-anchor="middle" font-family="monospace" font-size="11" fill="#71717a">Claude Code</text>
+
+  <!-- Step number -->
+  <rect x="456" y="160" width="24" height="24" rx="12" fill="url(#green)"/>
+  <text x="468" y="177" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="13" fill="#fff" font-weight="700">2</text>
+  <text x="490" y="177" font-family="system-ui, -apple-system, sans-serif" font-size="14" fill="#a1a1aa" font-weight="500">Candidate works with AI</text>
+
+  <!-- Terminal lines -->
+  <text x="468" y="204" font-family="'JetBrains Mono', monospace" font-size="12" fill="#818cf8">&#x276F; /interview INT-4829-XK</text>
+
+  <text x="468" y="226" font-family="'JetBrains Mono', monospace" font-size="10" fill="#4ade80">&#x2713; Authenticated as @alexchen</text>
+
+  <!-- Session box -->
+  <rect x="468" y="238" width="270" height="56" rx="6" fill="#27272a" stroke="#3f3f46" stroke-width="0.5"/>
+  <text x="482" y="256" font-family="system-ui, -apple-system, sans-serif" font-size="11" fill="#e4e4e7" font-weight="600">PROBLEM STATEMENT</text>
+  <text x="482" y="274" font-family="monospace" font-size="9" fill="#a1a1aa">Build a rate limiter that supports</text>
+  <text x="482" y="286" font-family="monospace" font-size="9" fill="#a1a1aa">sliding window and fixed window...</text>
+
+  <!-- Activity indicators -->
+  <text x="468" y="316" font-family="'JetBrains Mono', monospace" font-size="10" fill="#f59e0b">&#x25CF; Write(rate_limiter.py)</text>
+  <text x="468" y="334" font-family="'JetBrains Mono', monospace" font-size="10" fill="#818cf8">&#x25CF; Bash(python -m pytest)</text>
+  <text x="468" y="352" font-family="'JetBrains Mono', monospace" font-size="10" fill="#f59e0b">&#x25CF; Edit(rate_limiter.py)</text>
+
+  <!-- Recording indicator -->
+  <rect x="468" y="368" width="140" height="20" rx="10" fill="#1c1917" stroke="#f59e0b" stroke-width="0.5"/>
+  <circle cx="482" cy="378" r="4" fill="#ef4444">
+    <animate attributeName="opacity" values="1;0.3;1" dur="2s" repeatCount="indefinite"/>
+  </circle>
+  <text x="494" y="382" font-family="monospace" font-size="9" fill="#a1a1aa">Recording session</text>
+
+  <text x="600" y="400" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#71717a">Full-power AI. Every action captured.</text>
+
+  <!-- ==================== Arrow 2 ==================== -->
+  <line x1="775" y1="260" x2="825" y2="260" stroke="url(#accent)" stroke-width="2" stroke-dasharray="6,4" opacity="0.6"/>
+  <polygon points="825,254 837,260 825,266" fill="#818cf8" opacity="0.6"/>
+
+  <!-- ==================== STEP 3: Auto-graded ==================== -->
+
+  <!-- Card 3 background -->
+  <rect x="840" y="100" width="320" height="320" rx="16" fill="#18181b" stroke="url(#cardBorder3)" stroke-width="1.5"/>
+
+  <!-- Card 3 header bar -->
+  <rect x="840" y="100" width="320" height="44" rx="16" fill="#1f1f23"/>
+  <rect x="840" y="128" width="320" height="16" fill="#1f1f23"/>
+  <circle cx="864" cy="122" r="5" fill="#ef4444" opacity="0.8"/>
+  <circle cx="882" cy="122" r="5" fill="#f59e0b" opacity="0.8"/>
+  <circle cx="900" cy="122" r="5" fill="#22c55e" opacity="0.8"/>
+  <text x="1000" y="126" text-anchor="middle" font-family="monospace" font-size="11" fill="#71717a">Dashboard</text>
+
+  <!-- Step number -->
+  <rect x="856" y="160" width="24" height="24" rx="12" fill="#f59e0b"/>
+  <text x="868" y="177" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="13" fill="#fff" font-weight="700">3</text>
+  <text x="890" y="177" font-family="system-ui, -apple-system, sans-serif" font-size="14" fill="#a1a1aa" font-weight="500">HM triages in 15 min</text>
+
+  <!-- Candidate rows -->
+  <rect x="868" y="198" width="270" height="36" rx="6" fill="#27272a" stroke="#3f3f46" stroke-width="0.5"/>
+  <circle cx="888" cy="216" r="10" fill="#22c55e" stroke="#18181b" stroke-width="2"/>
+  <text x="888" y="220" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="9" fill="#fff" font-weight="700">8.4</text>
+  <text x="908" y="220" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#e4e4e7">Alex Chen</text>
+  <rect x="1040" y="208" width="80" height="16" rx="3" fill="#22c55e" opacity="0.15"/>
+  <text x="1080" y="220" text-anchor="middle" font-family="monospace" font-size="9" fill="#4ade80">&#x2713; Yes</text>
+
+  <rect x="868" y="242" width="270" height="36" rx="6" fill="#27272a" stroke="#3f3f46" stroke-width="0.5"/>
+  <circle cx="888" cy="260" r="10" fill="#22c55e" stroke="#18181b" stroke-width="2"/>
+  <text x="888" y="264" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="9" fill="#fff" font-weight="700">7.7</text>
+  <text x="908" y="264" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#e4e4e7">Jordan Lee</text>
+  <rect x="1040" y="252" width="80" height="16" rx="3" fill="#818cf8" opacity="0.15"/>
+  <text x="1080" y="264" text-anchor="middle" font-family="monospace" font-size="9" fill="#818cf8">&#x2192; Maybe</text>
+
+  <rect x="868" y="286" width="270" height="36" rx="6" fill="#27272a" stroke="#3f3f46" stroke-width="0.5"/>
+  <circle cx="888" cy="304" r="10" fill="#f59e0b" stroke="#18181b" stroke-width="2"/>
+  <text x="888" y="308" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="9" fill="#fff" font-weight="700">6.1</text>
+  <text x="908" y="308" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#e4e4e7">Sam Rivera</text>
+  <rect x="1040" y="296" width="80" height="16" rx="3" fill="#71717a" opacity="0.15"/>
+  <text x="1080" y="308" text-anchor="middle" font-family="monospace" font-size="9" fill="#71717a">&#x2014;</text>
+
+  <rect x="868" y="330" width="270" height="36" rx="6" fill="#27272a" stroke="#3f3f46" stroke-width="0.5"/>
+  <circle cx="888" cy="348" r="10" fill="#ef4444" stroke="#18181b" stroke-width="2"/>
+  <text x="888" y="352" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="9" fill="#fff" font-weight="700">3.4</text>
+  <text x="908" y="348" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#e4e4e7">Pat Kim</text>
+  <rect x="1040" y="340" width="80" height="16" rx="3" fill="#ef4444" opacity="0.15"/>
+  <text x="1080" y="352" text-anchor="middle" font-family="monospace" font-size="9" fill="#f87171">&#x2717; No</text>
+
+  <!-- Flags indicator -->
+  <rect x="868" y="378" width="90" height="18" rx="9" fill="#27272a" stroke="#f59e0b" stroke-width="0.5"/>
+  <text x="913" y="390" text-anchor="middle" font-family="monospace" font-size="9" fill="#f59e0b">&#x26A0; 2 flagged</text>
+
+  <text x="1000" y="400" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#71717a">Auto-graded. Ranked. Tamper-flagged.</text>
+
+  <!-- ==================== Bottom bar ==================== -->
+  <rect x="0" y="440" width="1200" height="80" fill="#0a0a0b"/>
+  <line x1="0" y1="440" x2="1200" y2="440" stroke="#27272a" stroke-width="1"/>
+
+  <!-- Flow summary -->
+  <text x="600" y="470" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="14" fill="#71717a">
+    pip install interviewsignal &amp;&amp; interview dashboard
+  </text>
+  <text x="600" y="496" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="13" fill="#52525b">
+    Create interview  &#x2192;  Share code  &#x2192;  Candidates work with AI  &#x2192;  Auto-grade  &#x2192;  Triage  &#x2192;  Hire
+  </text>
+
+  <!-- Top accent line -->
+  <rect x="0" y="0" width="1200" height="3" fill="url(#accent)" opacity="0.6"/>
+</svg>

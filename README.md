@@ -27,6 +27,10 @@ AI-graded take-home assessments that capture the candidate's <em>thought process
 pip install interviewsignal && interview install
 ```
 
+<br>
+
+<img src="docs/images/hero.svg" alt="interviewsignal flow — create interview, candidate works with AI, auto-graded results" width="100%"/>
+
 </div>
 
 ---
@@ -47,55 +51,25 @@ The transcript captures who drove the thinking. That's the signal no one else ca
 
 ## How it looks
 
-<table>
-<tr>
-<td width="50%">
+### Candidate starts a session in the terminal
 
-**Candidate (terminal)**
+<img src="docs/images/terminal-start.png" alt="Candidate starts interview session — GitHub OAuth, problem statement appears" width="100%"/>
 
-```
-❯ /interview INT-4829-XK
+### Candidate works with full-power AI
 
-  Welcome, Alex Chen.
+<img src="docs/images/terminal-working.png" alt="Candidate doing EDA on Titanic dataset — AI collaboration captured" width="100%"/>
 
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Build a rate limiter that supports
-  sliding window and fixed window
-  strategies...
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+### HM reviews auto-graded submissions in the dashboard
 
-  ⏱ Time limit: 90 minutes
-  📁 GitHub repo: interview-INT-4829-XK
-  🔒 Session recording active
+<img src="docs/images/dashboard.png" alt="Dashboard showing candidates ranked by score with flags" width="100%"/>
 
-  Work normally. Ask the AI questions,
-  write code, run tests. When done:
-  /submit
-```
+### Full transcript with diffs, grading, and tamper detection
 
-</td>
-<td width="50%">
+<img src="docs/images/detail-transcript.png" alt="Candidate detail page — transcript with GitHub-style diffs, grade panel, verify chain" width="100%"/>
 
-**Hiring manager (browser)**
+### AI grades against your rubric — dimension by dimension
 
-```
-┌─────────────────────────────────────┐
-│  INT-4829-XK        ↻ Regrade      │
-│  Rate Limiter — Senior Backend      │
-├─────────────────────────────────────┤
-│  ✓ Alex Chen      8.2  ██████████░ │
-│  → Jordan Lee     7.7  █████████░░ │
-│  → Sam Rivera     6.1  ███████░░░░ │
-│  ✗ Pat Kim        3.4  ████░░░░░░░ │
-│                                     │
-│  ⚑ 2 flagged · 12 submissions      │
-│  ↓ Export CSV                       │
-└─────────────────────────────────────┘
-```
-
-</td>
-</tr>
-</table>
+<img src="docs/images/detail-grading.png" alt="Claude's Analysis — per-dimension rubric scores with evidence from transcript" width="100%"/>
 
 ---
 
