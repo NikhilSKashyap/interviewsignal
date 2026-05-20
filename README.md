@@ -93,16 +93,17 @@ pip install interviewsignal && interview install
 
 ## interviewsignal vs the status quo
 
-|  | Phone screen | Take-home test | LeetCode | ATS grading | **interviewsignal** |
+|  | Phone screen | Take-home test | LeetCode | AI screening SaaS | **interviewsignal** |
 |:---|:---:|:---:|:---:|:---:|:---:|
 | **Scales to 200+ candidates** | 🚫 | ⚠️ Manual review | ⚠️ Pass/fail only | ✅ | ✅ |
-| **Captures thought process** | ⚠️ Interviewer notes | 🚫 | 🚫 | 🚫 | ✅ Hash-chained transcript |
-| **AI-native** | 🚫 | 🚫 "No AI" policies | 🚫 | 🚫 | ✅ Full-power AI, graded on usage |
-| **Real problems, real tools** | ⚠️ | ✅ | 🚫 Contrived | ⚠️ | ✅ |
-| **Candidate gets feedback** | 🚫 Usually ghosted | 🚫 | 🚫 | 🚫 | ✅ Score + summary |
-| **Setup cost** | High (scheduling) | Medium | Medium (platform) | High (vendor) | **`pip install`, done** |
-| **Tamper detection** | N/A | 🚫 Honor system | ⚠️ Proctoring | 🚫 | ✅ 9 automated flags |
-| **Cost** | Engineer time | Engineer time | $$$$/seat | $$$$/seat | **Free + self-hosted** |
+| **Captures thought process** | ⚠️ Interviewer notes | 🚫 | 🚫 | ⚠️ Sandboxed only | ✅ Hash-chained transcript |
+| **AI-native** | 🚫 | 🚫 "No AI" policies | 🚫 | ✅ | ✅ Full-power AI, graded on usage |
+| **Real problems, real tools** | ⚠️ | ✅ | 🚫 Contrived | ⚠️ Sandboxed | ✅ Candidate's own IDE |
+| **Candidate gets feedback** | 🚫 Usually ghosted | 🚫 | 🚫 | ⚠️ Varies | ✅ Score + summary |
+| **Setup cost** | High (scheduling) | Medium | Medium (platform) | High (vendor + procurement) | **`pip install`, done** |
+| **Tamper detection** | N/A | 🚫 Honor system | ⚠️ Proctoring | ⚠️ Sandboxed browser | ✅ 9 automated flags |
+| **Self-hosted / private** | N/A | N/A | 🚫 | 🚫 Multi-tenant cloud | ✅ Your infra, your data |
+| **Cost** | Engineer time | Engineer time | $$$$/seat | **$100+/seat, 5-20 assessments/mo** | **Free forever** |
 
 ---
 
@@ -160,28 +161,55 @@ graph TD
 
 interviewsignal installs as a skill into your AI coding assistant. It captures the full conversation — prompts, reasoning, every tool call — and builds an append-only, hash-chained session log. After each turn, it silently commits changed files to the local repo. On `/submit`, the log is sealed and pushed to the relay.
 
+<table>
+<tr>
+<td width="50%">
+
+**HM creates interview**
 ```
-HM creates interview                    Candidate works
-───────────────────                     ─────────────────────────────
-interview dashboard                     /interview INT-4829-XK
-  → setup wizard (first run)              → fetches problem from relay
-  → problem + rubric + time limit         → GitHub OAuth (1 account = 1 submission)
-  → code INT-4829-XK created              → interview-{code} repo created
-  → package pushed to relay               → session recording starts
-                                              → hooks capture every tool call
-                                              → append-only events.jsonl
-                                              → SHA-256 hash chain
-                                              → silent commit after each turn
-                                          /submit
-                                              → session sealed
-                                              → git push → GitHub
-HM reviews                                    → pushed to relay
-───────────────────                           → score + summary shown
+interview dashboard
+  → setup wizard (first run)
+  → problem + rubric + time limit
+  → code INT-4829-XK created
+  → package pushed to relay
+```
+
+**HM reviews**
+```
 interview dashboard
   → submissions arrive, auto-graded
   → flags highlight anomalies
   → batch advance / reject
 ```
+
+</td>
+<td width="50%">
+
+**Candidate works**
+```
+/interview INT-4829-XK
+  → fetches problem from relay
+  → GitHub OAuth (1 account = 1 submission)
+  → interview-{code} repo created
+  → session recording starts
+      → hooks capture every tool call
+      → append-only events.jsonl
+      → SHA-256 hash chain
+      → silent commit after each turn
+```
+
+**Candidate submits**
+```
+/submit
+  → session sealed
+  → git push → GitHub
+  → pushed to relay
+  → score + summary shown
+```
+
+</td>
+</tr>
+</table>
 
 ---
 
@@ -201,16 +229,36 @@ interview dashboard
 
 ## What gets captured
 
-| Event | What's recorded |
-|:---|:---|
-| **Candidate prompts** | Exact message to the AI assistant |
-| **AI reasoning** | Plan before each action ("I'll use a hash map because...") |
-| **File operations** | Reads (path), writes (path + content hash), edits (path + change summary) |
-| **Bash commands** | Command + exit code |
-| **Git history** | Per-prompt commits with timestamp + prompt snippet; full commit log in manifest |
-| **GitHub repo** | Auto-created `interview-{code}` — full commit history pushed on submit |
-| **Timestamps** | Millisecond precision on every event |
-| **Session flags** | Quality + tamper signals (too fast, no iteration, hooks gap, diff mismatch, commit mismatch, prompt ratio) |
+<table>
+<tr>
+<td width="50%">
+<h4>💬 Conversation</h4>
+<p><strong>Candidate prompts</strong> — exact message to the AI<br>
+<strong>AI reasoning</strong> — plan before each action<br>
+<strong>Timestamps</strong> — millisecond precision on every event</p>
+</td>
+<td width="50%">
+<h4>🛠️ Tool Calls</h4>
+<p><strong>File reads</strong> — path<br>
+<strong>File writes</strong> — path + content hash<br>
+<strong>File edits</strong> — path + change summary<br>
+<strong>Bash commands</strong> — command + exit code</p>
+</td>
+</tr>
+<tr>
+<td width="50%">
+<h4>📂 Git State</h4>
+<p><strong>Per-prompt commits</strong> — timestamp + prompt snippet<br>
+<strong>Full commit log</strong> — hash, message, files changed<br>
+<strong>GitHub repo</strong> — auto-created <code>interview-{code}</code>, pushed on submit</p>
+</td>
+<td width="50%">
+<h4>🚩 Session Flags</h4>
+<p><strong>Quality</strong> — too fast, few interactions, no iteration, uniform timing, no prompts<br>
+<strong>Tamper</strong> — hooks gap, diff mismatch, commit mismatch, prompt ratio</p>
+</td>
+</tr>
+</table>
 
 > The session log is append-only and hash-chained. Any tampering breaks the chain. Raw file contents are never stored — only paths, hashes, and summaries.
 
@@ -232,7 +280,7 @@ interview dashboard
 
 The relay stores interview packages and candidate sessions so everyone only needs to share a short code.
 
-### Option 1 — Self-hosted (~$5/mo, fully private)
+### Option 1 — Self-hosted (~$5/mo, fully private) ← recommended
 
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/new/template?template=https://github.com/NikhilSKashyap/interviewsignal)
 
