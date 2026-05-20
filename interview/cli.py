@@ -121,6 +121,65 @@ def _upsert_interview_agents_entry(path: Path, entry: str = CODEX_INTERVIEW_ENTR
     path.write_text(entry)
 
 
+def _codex_hook_group(event_name: str, hook_cmd: str) -> dict:
+    group = {
+        "hooks": [{
+            "type": "command",
+            "command": f"{hook_cmd} {event_name}",
+        }]
+    }
+    if event_name in ("pre", "post"):
+        group["matcher"] = "*"
+    return group
+
+
+def _write_codex_hooks(path: Path, hook_cmd: str):
+    """Merge interviewsignal hooks into a Codex hooks file without clobbering others."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    settings = {}
+    if path.exists():
+        try:
+            settings = json.loads(path.read_text())
+        except Exception:
+            settings = {}
+
+    # Migrate the early experimental shape written by interviewsignal <= 0.9.15.
+    for stale_key in ("PreToolUse", "PostToolUse", "UserPromptSubmit", "Stop"):
+        settings.pop(stale_key, None)
+
+    if not isinstance(settings.get("hooks"), dict):
+        settings["hooks"] = {}
+
+    event_map = {
+        "UserPromptSubmit": "user_prompt",
+        "PreToolUse": "pre",
+        "PostToolUse": "post",
+        "Stop": "stop",
+    }
+    hook_events = settings["hooks"]
+    for codex_event, command_arg in event_map.items():
+        existing = hook_events.get(codex_event, [])
+        if not isinstance(existing, list):
+            existing = []
+        preserved = []
+        for group in existing:
+            if not isinstance(group, dict):
+                preserved.append(group)
+                continue
+            handlers = group.get("hooks", [])
+            ours = any(
+                isinstance(handler, dict)
+                and "interview.hooks.codex_hook" in handler.get("command", "")
+                for handler in handlers
+            )
+            if not ours:
+                preserved.append(group)
+        preserved.append(_codex_hook_group(command_arg, hook_cmd))
+        hook_events[codex_event] = preserved
+
+    path.write_text(json.dumps(settings, indent=2))
+
+
 def _install_claude(verbose=True):
     """Install skill + PreToolUse/PostToolUse hooks for Claude Code."""
     cfg = PLATFORMS["claude"]
@@ -280,54 +339,16 @@ def _install_codex(verbose=True):
         print(f"  ✓ Codex skill installed: {agents_skill_dir / 'SKILL.md'}")
         print(f"    Restart Codex if /interview is not recognized immediately.")
 
-    hooks_dir = Path(".codex")
-    hooks_dir.mkdir(exist_ok=True)
-    hooks_file = hooks_dir / "hooks.json"
-    hooks = {}
-    if hooks_file.exists():
-        try:
-            hooks = json.loads(hooks_file.read_text())
-        except Exception:
-            pass
-
-    # Migrate the early experimental shape written by interviewsignal <= 0.9.15.
-    for stale_key in ("PreToolUse", "PostToolUse", "UserPromptSubmit", "Stop"):
-        hooks.pop(stale_key, None)
-
     hook_cmd = f"{sys.executable} -m interview.hooks.codex_hook"
-    if not isinstance(hooks.get("hooks"), dict):
-        hooks["hooks"] = {}
-    hook_events = hooks["hooks"]
-    hook_events["UserPromptSubmit"] = [{
-        "hooks": [{
-            "type": "command",
-            "command": f"{hook_cmd} user_prompt",
-        }]
-    }]
-    hook_events["PreToolUse"] = [{
-        "matcher": "*",
-        "hooks": [{
-            "type": "command",
-            "command": f"{hook_cmd} pre",
-        }]
-    }]
-    hook_events["PostToolUse"] = [{
-        "matcher": "*",
-        "hooks": [{
-            "type": "command",
-            "command": f"{hook_cmd} post",
-        }]
-    }]
-    hook_events["Stop"] = [{
-        "hooks": [{
-            "type": "command",
-            "command": f"{hook_cmd} stop",
-        }]
-    }]
-
-    hooks_file.write_text(json.dumps(hooks, indent=2))
+    hooks_file = Path(".codex") / "hooks.json"
+    _write_codex_hooks(hooks_file, hook_cmd)
     if verbose:
         print(f"  ✓ Codex hooks installed: {hooks_file}")
+
+    global_hooks_file = Path.home() / ".codex" / "hooks.json"
+    _write_codex_hooks(global_hooks_file, hook_cmd)
+    if verbose:
+        print(f"  ✓ Codex global hooks installed: {global_hooks_file}")
         print(f"     Restart Codex after install so hooks are loaded.")
 
     import subprocess as _sp
@@ -607,8 +628,13 @@ def cmd_uninstall(args):
 
         print(f"\n✓ interviewsignal uninstalled.")
     elif platform_name == "codex":
-        hooks_file = PLATFORMS["codex"]["hooks_json"]
-        if hooks_file.exists():
+        hook_files = [
+            PLATFORMS["codex"]["hooks_json"],
+            Path.home() / ".codex" / "hooks.json",
+        ]
+        for hooks_file in hook_files:
+            if not hooks_file.exists():
+                continue
             try:
                 settings = json.loads(hooks_file.read_text())
                 hook_events = settings.get("hooks", {})

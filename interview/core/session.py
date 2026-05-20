@@ -15,6 +15,7 @@ Event types captured:
 """
 
 import argparse
+import datetime
 import hashlib
 import json
 import os
@@ -31,6 +32,7 @@ INTERVIEW_DIR = Path.home() / ".interview"
 SESSIONS_DIR = INTERVIEW_DIR / "sessions"
 ACTIVE_SESSION_FILE = INTERVIEW_DIR / "active_session.json"
 CONFIG_FILE = INTERVIEW_DIR / "config.json"
+CODEX_SESSIONS_DIR = Path.home() / ".codex" / "sessions"
 
 
 def ensure_dirs():
@@ -213,6 +215,22 @@ def _add_github_remote(repo_url: str):
         pass
 
 
+def _get_interview_remote_url() -> str | None:
+    """Return the configured interview remote URL, without embedded credentials."""
+    try:
+        out = subprocess.check_output(
+            ["git", "remote", "get-url", "interview"],
+            stderr=subprocess.DEVNULL,
+        ).decode().strip()
+        if not out:
+            return None
+        if out.startswith("https://") and "@" in out.split("://", 1)[1]:
+            return "https://" + out.split("@", 1)[1]
+        return out
+    except Exception:
+        return None
+
+
 def _git_push_session(session_meta: dict) -> bool:
     """
     Stage and commit all session changes, then push to the GitHub remote.
@@ -297,7 +315,13 @@ def _events_file(code: str) -> Path:
     return SESSIONS_DIR / code / "events.jsonl"
 
 
-def _append_event(code: str, event_type: str, payload: dict, prev_hash: str = "") -> str:
+def _append_event(
+    code: str,
+    event_type: str,
+    payload: dict,
+    prev_hash: str = "",
+    timestamp: float | None = None,
+) -> str:
     """
     Append an event to the session log.
     Returns the hash of this event (used as prev_hash for the next).
@@ -306,7 +330,7 @@ def _append_event(code: str, event_type: str, payload: dict, prev_hash: str = ""
     event_dir.mkdir(parents=True, exist_ok=True)
 
     # body is everything except hash and prev_hash — prev_hash is prepended raw
-    body = {"type": event_type, "timestamp": time.time(), "payload": payload}
+    body = {"type": event_type, "timestamp": timestamp or time.time(), "payload": payload}
     event = {
         "type": body["type"],
         "timestamp": body["timestamp"],
@@ -319,6 +343,191 @@ def _append_event(code: str, event_type: str, payload: dict, prev_hash: str = ""
         f.write(json.dumps(event) + "\n")
 
     return event["hash"]
+
+
+def _parse_iso_ts(ts_str: str) -> float:
+    try:
+        ts = ts_str.rstrip("Z")
+        fmt = "%Y-%m-%dT%H:%M:%S.%f" if "." in ts else "%Y-%m-%dT%H:%M:%S"
+        dt = datetime.datetime.strptime(ts, fmt)
+        return dt.replace(tzinfo=datetime.timezone.utc).timestamp()
+    except Exception:
+        return 0.0
+
+
+def _extract_codex_text(content) -> str:
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            if block.get("type") in ("input_text", "output_text", "text"):
+                text = str(block.get("text", "")).strip()
+                if text:
+                    parts.append(text)
+        return "\n".join(parts)
+    return ""
+
+
+def _json_or_raw(value):
+    if not isinstance(value, str):
+        return value if isinstance(value, dict) else {"raw": value}
+    try:
+        parsed = json.loads(value)
+        return parsed if isinstance(parsed, dict) else {"raw": parsed}
+    except Exception:
+        return {"raw": value[:1000]}
+
+
+def _should_skip_codex_message(event_type: str, text: str) -> bool:
+    stripped = text.strip()
+    if event_type == "user_prompt" and (
+        stripped.startswith("/interview ") or stripped == "/submit"
+    ):
+        return True
+    if event_type == "assistant_message" and (
+        "INTERVIEW SESSION" in stripped and "PROBLEM STATEMENT" in stripped
+    ):
+        return True
+    return False
+
+
+def _first_codex_code_timestamp(path: Path, code: str) -> float:
+    try:
+        lines = path.read_text(errors="ignore").splitlines()
+    except Exception:
+        return 0.0
+    for line in lines:
+        if code not in line:
+            continue
+        try:
+            obj = json.loads(line)
+        except Exception:
+            continue
+        ts = _parse_iso_ts(obj.get("timestamp", ""))
+        if ts:
+            return ts
+    return 0.0
+
+
+def _find_codex_log_for_code(code: str, started_at: float | None = None) -> Path | None:
+    if not CODEX_SESSIONS_DIR.exists():
+        return None
+    best: Path | None = None
+    best_score: float | None = None
+    for candidate in CODEX_SESSIONS_DIR.rglob("*.jsonl"):
+        first_ts = _first_codex_code_timestamp(candidate, code)
+        if not first_ts:
+            continue
+        score = abs(first_ts - started_at) if started_at else -candidate.stat().st_mtime
+        if best_score is None or score < best_score:
+            best = candidate
+            best_score = score
+    return best
+
+
+def _collect_codex_events(log_path: Path, started_at: float, ended_at: float) -> list[dict]:
+    imported: list[dict] = []
+    try:
+        lines = log_path.read_text(errors="ignore").splitlines()
+    except Exception:
+        return imported
+
+    for line in lines:
+        try:
+            obj = json.loads(line)
+        except Exception:
+            continue
+
+        ts = _parse_iso_ts(obj.get("timestamp", ""))
+        if ts < started_at or ts > ended_at:
+            continue
+        if obj.get("type") != "response_item":
+            continue
+
+        payload = obj.get("payload", {})
+        payload_type = payload.get("type")
+
+        if payload_type == "message":
+            role = payload.get("role")
+            event_type = "user_prompt" if role == "user" else "assistant_message"
+            if role not in ("user", "assistant"):
+                continue
+            text = _extract_codex_text(payload.get("content", ""))
+            if not text or _should_skip_codex_message(event_type, text):
+                continue
+            imported.append({"type": event_type, "timestamp": ts, "payload": {"text": text}})
+            continue
+
+        if payload_type in ("function_call", "custom_tool_call"):
+            imported.append({
+                "type": "tool_call",
+                "timestamp": ts,
+                "payload": {
+                    "tool_name": payload.get("name", ""),
+                    "tool_input": _json_or_raw(payload.get("arguments", payload.get("input", {}))),
+                    "platform": "codex",
+                },
+            })
+            continue
+
+        if payload_type in ("function_call_output", "custom_tool_call_output"):
+            output = str(payload.get("output", ""))
+            imported.append({
+                "type": "tool_result",
+                "timestamp": ts,
+                "payload": {
+                    "tool_name": payload.get("name", ""),
+                    "response_summary": {"output": output[:1000]},
+                    "platform": "codex",
+                },
+            })
+
+    return imported
+
+
+def _maybe_import_codex_events(session: dict, ended_at: float) -> dict | None:
+    code = session["code"]
+    existing = _read_events(code)
+    has_transcript = any(e.get("type") in ("user_prompt", "assistant_message") for e in existing)
+    if has_transcript:
+        return None
+
+    started_at = float(session.get("started_at") or 0)
+    candidates: list[tuple[int, float, Path, list[dict]]] = []
+    if CODEX_SESSIONS_DIR.exists():
+        for path in CODEX_SESSIONS_DIR.rglob("*.jsonl"):
+            first_ts = _first_codex_code_timestamp(path, code)
+            if not first_ts:
+                continue
+            imported_events = _collect_codex_events(path, started_at, ended_at)
+            if not imported_events:
+                continue
+            candidates.append((
+                len(imported_events),
+                abs(first_ts - started_at) if started_at else -path.stat().st_mtime,
+                path,
+                imported_events,
+            ))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: (-item[0], item[1]))
+    _, _, log_path, imported = candidates[0]
+
+    prev_hash = session.get("last_event_hash", "")
+    for event in imported:
+        prev_hash = _append_event(
+            code,
+            event["type"],
+            event["payload"],
+            prev_hash,
+            timestamp=event["timestamp"],
+        )
+    session["last_event_hash"] = prev_hash
+    _save_active_session(session)
+    return {"log_path": str(log_path), "imported_events": len(imported)}
 
 
 def _read_events(code: str) -> list[dict]:
@@ -579,12 +788,22 @@ def seal_session(code: str) -> dict:
     ended_at = time.time()
     elapsed_minutes = round((ended_at - session["started_at"]) / 60, 1)
 
+    # Codex Desktop writes a rollout JSONL even when lifecycle hooks were not
+    # installed or did not fire. If the event log is sparse, import that
+    # transcript before sealing so grading sees the candidate's actual session.
+    codex_repair = _maybe_import_codex_events(session, ended_at)
+    if codex_repair:
+        session = _load_active_session() or session
+
     # Push session code to GitHub repo (non-blocking)
     push_ok = False
+    if not session.get("github_repo_url"):
+        recovered_repo_url = _get_interview_remote_url()
+        if recovered_repo_url:
+            session["github_repo_url"] = recovered_repo_url
     if session.get("github_repo_url") and session.get("github_token"):
         push_ok = _git_push_session(session)
-        if not push_ok:
-            session["github_repo_url"] = None
+    session["github_push_ok"] = push_ok
 
     # Final git diff + per-prompt commit log
     git_base = session.get("git_base_commit")
@@ -610,6 +829,7 @@ def seal_session(code: str) -> dict:
         "final_git_snapshot": final_git,
         "git_diff_summary": f"{len(git_diff.splitlines())} lines changed",
         "git_diff_note": git_diff_note,
+        "codex_repair": codex_repair,
     }, prev_hash)
 
     # Build final manifest
@@ -620,6 +840,7 @@ def seal_session(code: str) -> dict:
         "candidate_email":   session.get("candidate_email"),
         "github_username":   session.get("github_username"),
         "github_repo_url":   session.get("github_repo_url"),
+        "github_push_ok":    session.get("github_push_ok", False),
         "github_avatar_url": session.get("avatar_url"),
         "hm_email":          session.get("hm_email"),
         "cc_emails":         session.get("cc_emails", []),
@@ -635,6 +856,7 @@ def seal_session(code: str) -> dict:
         "git_base_commit":   session.get("git_base_commit"),
         "git_diff":          git_diff,
         "commit_log":        commit_log,
+        "codex_repair":      codex_repair,
         "event_count":       len(events),
         "final_hash":        events[-1]["hash"] if events else "",
         "sealed":            True,

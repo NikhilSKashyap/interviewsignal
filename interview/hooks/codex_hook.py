@@ -23,12 +23,14 @@ import json
 import subprocess
 import sys
 import time
+import datetime
 from pathlib import Path
 
 from interview.core import session as core_session
 
 INTERVIEW_DIR = Path.home() / ".interview"
 ACTIVE_SESSION_FILE = INTERVIEW_DIR / "active_session.json"
+CODEX_SESSIONS_DIR = Path.home() / ".codex" / "sessions"
 
 
 def _load_active_session() -> dict | None:
@@ -130,6 +132,86 @@ def _last_prompt(session: dict) -> str:
     return prompt if isinstance(prompt, str) else ""
 
 
+def _parse_iso_ts(ts_str: str) -> float:
+    try:
+        ts = ts_str.rstrip("Z")
+        fmt = "%Y-%m-%dT%H:%M:%S.%f" if "." in ts else "%Y-%m-%dT%H:%M:%S"
+        dt = datetime.datetime.strptime(ts, fmt)
+        return dt.replace(tzinfo=datetime.timezone.utc).timestamp()
+    except Exception:
+        return 0.0
+
+
+def _extract_codex_text(content) -> str:
+    """Extract plain text from Codex message content blocks."""
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            if block.get("type") in ("input_text", "output_text", "text"):
+                text = block.get("text", "").strip()
+                if text:
+                    parts.append(text)
+        return "\n".join(parts)
+    return ""
+
+
+def _find_codex_conv_file(session_id: str) -> "Path | None":
+    """Search ~/.codex/sessions for the rollout JSONL that matches session_id."""
+    if not session_id or not CODEX_SESSIONS_DIR.exists():
+        return None
+    pattern = f"*{session_id}.jsonl"
+    for candidate in CODEX_SESSIONS_DIR.rglob(pattern):
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _collect_codex_messages(
+    conv_file: Path, last_stop_ts: float
+) -> tuple[list[tuple[float, str]], list[tuple[float, str]]]:
+    user_msgs: list[tuple[float, str]] = []
+    assistant_msgs: list[tuple[float, str]] = []
+
+    try:
+        lines = conv_file.read_text().splitlines()
+    except Exception:
+        return user_msgs, assistant_msgs
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except Exception:
+            continue
+
+        ts = _parse_iso_ts(obj.get("timestamp", ""))
+        if ts <= last_stop_ts:
+            continue
+
+        if obj.get("type") != "response_item":
+            continue
+        payload = obj.get("payload", {})
+        if payload.get("type") != "message":
+            continue
+
+        role = payload.get("role", "")
+        text = _extract_codex_text(payload.get("content", ""))
+        if not text:
+            continue
+        if role == "user":
+            user_msgs.append((ts, text))
+        elif role == "assistant":
+            assistant_msgs.append((ts, text))
+
+    return user_msgs, assistant_msgs
+
+
 def _silent_git_commit(user_text: str):
     try:
         subprocess.run(["git", "add", "-A"], timeout=2, capture_output=True)
@@ -160,6 +242,10 @@ def handle_user_prompt_submit(data: dict) -> int:
         session = _load_active_session() or session
         session["last_user_prompt"] = text
         session["last_prompt_ts"] = time.time()
+        session["last_stop_ts"] = max(
+            float(session.get("last_stop_ts") or 0),
+            session["last_prompt_ts"],
+        )
         _save_active_session(session)
 
     elapsed = _elapsed_str(session)
@@ -236,12 +322,38 @@ def handle_post_tool_use(data: dict) -> int:
 
 
 def handle_stop(data: dict) -> int:
-    # Codex's Stop payload carries session_id and cwd only — no assistant response text.
-    # assistant_message events are absent for Codex sessions; the event log will show
-    # user_prompt and tool_call/tool_result sequences but not AI responses.
     session = _load_active_session()
     if not session:
         return 0
+
+    session_id = data.get("session_id", "")
+    conv_file = _find_codex_conv_file(session_id)
+    last_stop_ts = float(session.get("last_stop_ts") or session.get("started_at") or 0)
+
+    user_msgs: list[tuple[float, str]] = []
+    assistant_msgs: list[tuple[float, str]] = []
+    if conv_file:
+        user_msgs, assistant_msgs = _collect_codex_messages(conv_file, last_stop_ts)
+
+    if user_msgs or assistant_msgs:
+        session = _load_active_session()
+        if not session:
+            return 0
+
+    if user_msgs:
+        _, text = user_msgs[-1]
+        if len(text) > 2000:
+            text = text[:2000] + f"...[{len(text)} chars]"
+        _log_event(session, "user_prompt", {"text": text})
+        session = _load_active_session() or session
+        session["last_user_prompt"] = text
+
+    if assistant_msgs:
+        _, text = assistant_msgs[-1]
+        if len(text) > 3000:
+            text = text[:3000] + f"...[{len(text)} chars]"
+        _log_event(session, "assistant_message", {"text": text})
+        session = _load_active_session() or session
 
     session["last_stop_ts"] = time.time()
     _save_active_session(session)
