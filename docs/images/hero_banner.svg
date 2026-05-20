@@ -1,0 +1,46 @@
+<svg width="1200" height="400" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#050709"/>
+      <stop offset="100%" stop-color="#0d1117"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2ea043" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#58a6ff" stop-opacity="0.15"/>
+    </linearGradient>
+  </defs>
+  <rect width="100%" height="100%" fill="url(#bg)"/>
+  <rect width="100%" height="100%" fill="url(#glow)"/>
+  
+  <!-- Terminal outline left -->
+  <rect x="50" y="60" width="500" height="280" rx="10" fill="#010409" stroke="#30363d" stroke-width="2"/>
+  <circle cx="80" cy="90" r="6" fill="#ff5f56"/>
+  <circle cx="105" cy="90" r="6" fill="#ffbd2e"/>
+  <circle cx="130" cy="90" r="6" fill="#27c93f"/>
+  <text x="80" y="140" font-family="monospace" font-size="18" fill="#2ea043">❯ interview INT-4829-XK</text>
+  <text x="80" y="175" font-family="monospace" font-size="16" fill="#8b949e">  Welcome, Candidate.</text>
+  <text x="80" y="210" font-family="monospace" font-size="16" fill="#c9d1d9">  Building rate limiter...</text>
+  <text x="80" y="245" font-family="monospace" font-size="16" fill="#58a6ff">  AI context loaded.</text>
+  <text x="80" y="280" font-family="monospace" font-size="16" fill="#8957e5">  Recording session...</text>
+  
+  <!-- Dashboard outline right -->
+  <rect x="650" y="60" width="500" height="280" rx="10" fill="#0d1117" stroke="#30363d" stroke-width="2"/>
+  <rect x="680" y="100" width="440" height="50" rx="6" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+  <text x="700" y="132" font-family="sans-serif" font-size="18" fill="#c9d1d9" font-weight="bold">INT-4829-XK  |  Backend Eng</text>
+  <text x="1010" y="132" font-family="sans-serif" font-size="16" fill="#2ea043">✓ Auto-Graded</text>
+  
+  <rect x="680" y="170" width="440" height="45" rx="6" fill="#161b22"/>
+  <text x="700" y="198" font-family="sans-serif" font-size="16" fill="#c9d1d9">Alex Chen</text>
+  <rect x="850" y="188" width="180" height="12" rx="6" fill="#2ea043"/>
+  <text x="1050" y="198" font-family="sans-serif" font-size="16" fill="#8b949e">8.2</text>
+
+  <rect x="680" y="230" width="440" height="45" rx="6" fill="#161b22"/>
+  <text x="700" y="258" font-family="sans-serif" font-size="16" fill="#c9d1d9">Sam Rivera</text>
+  <rect x="850" y="248" width="120" height="12" rx="6" fill="#d29922"/>
+  <text x="1050" y="258" font-family="sans-serif" font-size="16" fill="#8b949e">6.1</text>
+
+  <!-- Center Tagline -->
+  <rect x="350" y="120" width="500" height="160" rx="15" fill="#0d1117" stroke="#30363d" stroke-width="2" opacity="0.95"/>
+  <text x="600" y="180" font-family="sans-serif" font-size="52" fill="#ffffff" font-weight="900" text-anchor="middle">interviewsignal</text>
+  <text x="600" y="225" font-family="sans-serif" font-size="22" fill="#8b949e" font-weight="500" text-anchor="middle">Code is cheap. Show me the thinking.</text>
+</svg>

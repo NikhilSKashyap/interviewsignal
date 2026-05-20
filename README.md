@@ -1,55 +1,26 @@
 <div align="center">
-
-<!-- HERO -->
-<h1>interviewsignal</h1>
-
-<h3>Every candidate uses AI now. Grade the <em>thinking</em>, not the output.</h3>
-
-<br>
-
-<p><strong>One code. Any number of candidates. Pure signal.</strong></p>
-
-<p>
-AI-graded take-home assessments that capture the candidate's <em>thought process</em> — not just the final answer.<br>
-<code>pip install</code>, share a code, done. Zero setup cost. Completely secure.
-</p>
-
-<br>
+  <img src="docs/images/hero_banner.svg" alt="interviewsignal hero banner" width="100%"/>
 
 [![PyPI](https://img.shields.io/pypi/v/interviewsignal?style=for-the-badge&logo=pypi&logoColor=white&label=PyPI)](https://pypi.org/project/interviewsignal/)
 [![GitHub stars](https://img.shields.io/github/stars/NikhilSKashyap/interviewsignal?style=for-the-badge&logo=github&label=Stars)](https://github.com/NikhilSKashyap/interviewsignal)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
 [![Blog](https://img.shields.io/badge/blog-Code%20Is%20Cheap.%20Show%20Me%20the%20Thinking.-orange?style=for-the-badge)](https://quasappono606366.substack.com/p/code-is-cheap-show-me-the-thinking)
 
-<br>
-
 ```bash
 pip install interviewsignal && interview install
 ```
 
-<br>
-
-<img src="docs/images/hero.svg" alt="interviewsignal flow — create interview, candidate works with AI, auto-graded results" width="100%"/>
-
 </div>
 
 ---
 
-<div align="center">
+> **When every candidate uses AI, code quality converges. Output is no longer signal.**
 
-### The problem
-
-**When every candidate uses AI, code quality converges. Output is no longer signal.**
-
-ATS grading partners (Greenhouse, Lever, Ashby) grade the output — did the code pass tests?<br>
-We grade the **thinking** — how did the candidate decompose the problem, direct the AI, iterate on failures?<br>
-The transcript captures who drove the thinking. That's the signal no one else can see.
-
-</div>
+> ATS platforms grade the output — did the code pass tests? We grade the **thinking** — how the candidate decomposes the problem, directs the AI, and iterates on failures. The transcript captures who drove the thinking. That's the signal no one else can see.
 
 ---
 
-## How it looks
+## The Engine in Action
 
 ### Candidate starts a session in the terminal
 
@@ -73,15 +44,39 @@ The transcript captures who drove the thinking. That's the signal no one else ca
 
 ---
 
-## Why interviewsignal
+## The Unfair Advantage
 
 <table>
-<tr><td>🎯</td><td><strong>Captures thought process, not just output</strong></td><td>Every prompt, every AI interaction, every iteration — hash-chained and tamper-evident. You see <em>how</em> they solved it, not just <em>what</em> they submitted.</td></tr>
-<tr><td>⚡</td><td><strong>Zero setup cost</strong></td><td><code>pip install</code>, share a code, done. No platform. No vendor contract. No procurement cycle. Works in 60 seconds.</td></tr>
-<tr><td>🤖</td><td><strong>AI-native by design</strong></td><td>Candidates work with full-power AI — that's the point. The grading calibrates for <em>how</em> they use AI: high-leverage (directs, verifies) scores well; low-leverage (copy-paste, "yes") scores poorly.</td></tr>
-<tr><td>📊</td><td><strong>Auto-graded + ranked</strong></td><td>Submissions arrive scored against your rubric. Batch advance or reject. Spend 15 minutes triaging 200 candidates instead of 200 hours interviewing them.</td></tr>
-<tr><td>🔒</td><td><strong>Tamper-evident audit trail</strong></td><td>SHA-256 hash chain, per-prompt git commits, cross-verified against tool logs. Gaps in the event stream, code changes outside AI — all flagged automatically.</td></tr>
-<tr><td>🏠</td><td><strong>Self-hosted &amp; private</strong></td><td>Your relay, your data, your API key. Nothing leaves your network. No telemetry. No analytics. No tracking.</td></tr>
+<tr>
+<td width="50%">
+<h3>🔗 Capture the Process</h3>
+<p>Every prompt, tool call, and iteration is hash-chained and tamper-evident. You see <em>how</em> they solved it, not just <em>what</em> they submitted.</p>
+</td>
+<td width="50%">
+<h3>🤖 AI-Native Baseline</h3>
+<p>Candidates use full-power AI — that's the point. High-leverage use (directs, verifies, iterates) scores well. Low-leverage use (paste and accept) scores poorly.</p>
+</td>
+</tr>
+<tr>
+<td width="50%">
+<h3>📊 Triaged in Minutes</h3>
+<p>Submissions arrive auto-graded and ranked against your rubric. Batch advance or reject. 200 candidates in 15 minutes.</p>
+</td>
+<td width="50%">
+<h3>🔒 Fully Private</h3>
+<p>Your relay, your API key. Nothing leaves your network. No telemetry. No analytics. No tracking. Zero external dependencies.</p>
+</td>
+</tr>
+<tr>
+<td width="50%">
+<h3>⚡ Zero Setup Cost</h3>
+<p><code>pip install</code>, share a code, done. No platform to sign up for. No vendor contract. No procurement cycle.</p>
+</td>
+<td width="50%">
+<h3>🤝 Fair to Candidates</h3>
+<p>Real problems, real tools, real feedback. Every candidate gets the same shot regardless of timezone, schedule, or interview anxiety.</p>
+</td>
+</tr>
 </table>
 
 ---
@@ -111,7 +106,7 @@ interview dashboard
 
 First launch opens a setup wizard in your browser — relay URL, API key, create your first interview. Three screens and you're live. The form asks for three things: **problem**, **rubric**, **time limit**. You get back a code like `INT-4829-XK`. Share it with 5 candidates or 500.
 
-> 💡 **Your rubric dimensions are your weights.** If you want thought process to matter more than code quality, make more of your dimensions about process.
+> **Your rubric dimensions are your weights.** If you want thought process to matter more than code quality, make more of your dimensions about process.
 
 ### Candidate — take the interview
 
@@ -167,6 +162,20 @@ interview dashboard
   → flags highlight anomalies
   → batch advance / reject
 ```
+
+---
+
+## Tamper-Evident Architecture
+
+> Candidates control their own machine. Security is detection, not prevention. A sparse or gapped session is its own red flag.
+
+<div align="center">
+  <img src="docs/images/tamper_architecture.svg" alt="Hash chain architecture — Prompt → AI Tool Call → Git Commit, linked by SHA-256" width="100%"/>
+</div>
+
+**Quality Flags** catch sessions completed in under 10 minutes, fewer than 3 tool calls, no iteration pattern, statistically uniform timing, and zero prompts.
+
+**Tamper Flags** catch large gaps in the event stream (hooks disabled), code changes that don't match Write/Edit tool calls (work outside AI), tool calls with no corresponding prompts (selective suppression), and commits with no matching events (cross-verification).
 
 ---
 
@@ -265,17 +274,6 @@ interview configure-llm
 | OpenAI-compatible endpoint | Base URL + key + `format=openai` |
 
 Environment variable overrides: `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, `INTERVIEW_GRADING_MODEL`
-
-</details>
-
-<details>
-<summary><strong>Security & tamper detection</strong></summary>
-
-**Quality flags** catch sessions completed in under 10 minutes, fewer than 3 tool calls, no iteration pattern, statistically uniform timing, and zero prompts.
-
-**Tamper detection flags** catch large gaps in the event stream (hooks disabled), code changes that don't match Write/Edit tool calls (work outside AI), tool calls with no corresponding prompts (selective suppression), and commits with no matching events (cross-verification).
-
-Candidates control their own machine — security is detection, not prevention. A sparse or gapped session is its own red flag.
 
 </details>
 
