@@ -25,6 +25,11 @@ def compute_flags(events: list[dict], manifest: dict) -> list[dict]:
 
     # Session quality flags
     try:
+        flags.extend(_flag_overtime(manifest))
+    except Exception:
+        pass
+
+    try:
         flags.extend(_flag_too_fast(manifest))
     except Exception:
         pass
@@ -74,6 +79,27 @@ def compute_flags(events: list[dict], manifest: dict) -> list[dict]:
 
 
 # ── individual flag detectors ─────────────────────────────────────────────────
+
+def _flag_overtime(manifest: dict) -> list[dict]:
+    """Flag when elapsed_minutes exceeds time_limit_minutes. Score is auto-penalized separately."""
+    elapsed = manifest.get("elapsed_minutes")
+    time_limit = manifest.get("time_limit_minutes")
+    if not elapsed or not time_limit:
+        return []
+    overtime = float(elapsed) - float(time_limit)
+    if overtime <= 0:
+        return []
+    severity = "yellow" if overtime <= 20 else "red"
+    return [{
+        "id":       "overtime",
+        "severity": severity,
+        "label":    "Submitted after time limit",
+        "detail":   (
+            f"Session ran {overtime:.1f} min over the {float(time_limit):.0f}-minute limit "
+            f"({float(elapsed):.1f} min total). Score automatically penalized."
+        ),
+    }]
+
 
 def _flag_too_fast(manifest: dict) -> list[dict]:
     """Proportional thresholds against time_limit; absolute fallback when no limit set."""

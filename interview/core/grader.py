@@ -30,6 +30,51 @@ DEFAULT_GRADING_MODEL  = "claude-haiku-4-5-20251001"   # fast + cheap, good enou
 DEFAULT_BASE_URL       = "https://api.anthropic.com"
 MAX_TOKENS             = 2048
 
+# Overtime penalty table: (max_overtime_minutes, score_deduction).
+# Applied to overall_score (0–10 scale) after AI grading, not injected into the prompt.
+# Tiers: 0–10 min over → -0.5, 10–20 → -1.0, 20–30 → -1.5, 30–60 → -2.5, 60+ → -4.0
+_OVERTIME_PENALTY_TABLE = [
+    (10,  0.5),
+    (20,  1.0),
+    (30,  1.5),
+    (60,  2.5),
+    (float("inf"), 4.0),
+]
+
+
+def _overtime_penalty(elapsed: float, time_limit: float) -> float:
+    """Return the score deduction for a session that ran over its time limit."""
+    overtime = elapsed - time_limit
+    if overtime <= 0:
+        return 0.0
+    for threshold, penalty in _OVERTIME_PENALTY_TABLE:
+        if overtime <= threshold:
+            return penalty
+    return _OVERTIME_PENALTY_TABLE[-1][1]
+
+
+def _apply_overtime_penalty(grading: dict, manifest: dict) -> dict:
+    """
+    Deduct overtime penalty from overall_score in-place.
+    Adds an 'overtime_penalty' key with audit metadata so the dashboard can display it.
+    Returns the same dict.
+    """
+    elapsed = manifest.get("elapsed_minutes")
+    time_limit = manifest.get("time_limit_minutes")
+    if not elapsed or not time_limit:
+        return grading
+    penalty = _overtime_penalty(float(elapsed), float(time_limit))
+    if penalty == 0.0:
+        return grading
+    raw_score = grading.get("overall_score", 0)
+    grading["overall_score"] = round(max(0.0, raw_score - penalty), 2)
+    grading["overtime_penalty"] = {
+        "penalty":          penalty,
+        "raw_score":        raw_score,
+        "overtime_minutes": round(float(elapsed) - float(time_limit), 1),
+    }
+    return grading
+
 
 # ─── LLM config ──────────────────────────────────────────────────────────────
 #
@@ -548,6 +593,7 @@ def grade_session_from_data(
     if "overall_score" not in grading or "dimensions" not in grading:
         raise GradingError(f"Unexpected auto-grading response shape: {list(grading.keys())}")
 
+    _apply_overtime_penalty(grading, manifest)
     return grading
 
 
@@ -626,6 +672,8 @@ def grade_session(code: str) -> dict:
     # Validate shape
     if "overall_score" not in grading or "dimensions" not in grading:
         raise GradingError(f"Unexpected grading response shape: {list(grading.keys())}")
+
+    _apply_overtime_penalty(grading, manifest)
 
     # Save via decisions.save_grade (which also audit-logs)
     from interview.core.decisions import save_grade
