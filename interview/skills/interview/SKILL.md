@@ -34,7 +34,9 @@ python -m interview.core.session start --code INT-4829-XK
 
 The command collects identity from config, handles GitHub OAuth (opens a browser tab), and prints the session header and full problem statement. Do not ask the candidate anything before or after running it.
 
-**Once the command exits: output nothing. Do not summarise, analyse, or comment on the problem. Wait silently for the candidate's first message.**
+After the command completes, show the full interview banner and problem statement from stdout to the candidate verbatim. Do not add commentary before or after it.
+
+If stdout is not visible in the chat, read `~/.interview/active_session.json` and render the interview code, start time, time limit, and `problem` field as the visible session banner. Wait for the candidate's next message and treat all subsequent work as part of the active interview session.
 
 ---
 

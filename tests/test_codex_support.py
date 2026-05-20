@@ -8,6 +8,9 @@ from interview.hooks import codex_hook
 
 def test_install_codex_writes_valid_hooks_json(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(cli.Path, "home", lambda: home)
     (tmp_path / ".codex").mkdir()
     (tmp_path / ".codex" / "hooks.json").write_text(json.dumps({
         "PreToolUse": {"command": "old-shape"},
@@ -42,6 +45,12 @@ def test_install_codex_writes_valid_hooks_json(tmp_path, monkeypatch):
     assert "/interview <CODE>" in agents_text
     assert "/submit" in agents_text
     assert "$interview" not in agents_text
+    assert "If stdout is not visible in the chat" in agents_text
+
+    global_agents_text = (home / ".codex" / "AGENTS.md").read_text()
+    assert "show the full interview banner and" in global_agents_text
+    assert "problem statement from stdout" in global_agents_text
+    assert (home / ".agents" / "skills" / "interview" / "SKILL.md").exists()
 
 
 def test_codex_hooks_log_prompt_tool_call_and_result(tmp_path, monkeypatch, capsys):

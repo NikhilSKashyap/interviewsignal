@@ -25,6 +25,37 @@ INTERVIEW_DIR = Path.home() / ".interview"
 SKILL_SRC = Path(__file__).parent / "skills" / "interview" / "SKILL.md"
 SUBMIT_SKILL_SRC = Path(__file__).parent / "skills" / "submit" / "SKILL.md"
 
+CODEX_INTERVIEW_ENTRY = """
+## interview skill
+When the user types `/interview <CODE>`, this is an interviewsignal candidate session.
+Immediately run:
+
+```bash
+python -m interview.core.session start --code <CODE>
+```
+
+Do not inspect the repo first. Do not explain the plan first. Do not ask for
+confirmation. After the command completes, show the full interview banner and
+problem statement from stdout to the candidate verbatim. Do not add commentary
+before or after it.
+
+If stdout is not visible in the chat, read `~/.interview/active_session.json`
+and render the interview code, start time, time limit, and `problem` field as
+the visible session banner. Wait for the candidate's next message and treat all
+subsequent work as part of the active interview session.
+
+When the user types `/submit` and an interviewsignal session is active, run:
+
+```bash
+python -m interview.core.session seal
+python -m interview.core.report generate --code <CODE>
+python -m interview.core.transport send --code <CODE>
+```
+
+Show only the submission confirmation and any score output returned by the
+configured sharing policy.
+""".strip()
+
 
 # ─── Platform install targets ────────────────────────────────────────────────
 
@@ -55,6 +86,39 @@ PLATFORMS = {
         "conventions_md": Path("CONVENTIONS.md"),
     },
 }
+
+
+def _upsert_interview_agents_entry(path: Path, entry: str = CODEX_INTERVIEW_ENTRY):
+    """Add or replace the interviewsignal block in a Codex AGENTS.md file."""
+    entry = entry.strip() + "\n"
+    markers = ["\n## interview skill", "\n# interviewsignal"]
+    if path.exists():
+        content = path.read_text()
+        search_content = "\n" + content
+        start = -1
+        marker_len = 0
+        for marker in markers:
+            idx = search_content.find(marker)
+            if idx != -1 and (start == -1 or idx < start):
+                start = idx
+                marker_len = len(marker)
+        if start != -1:
+            content_start = max(start - 1, 0)
+            section_start = start + marker_len
+            next_heading = search_content.find("\n## ", section_start)
+            next_top_heading = search_content.find("\n# ", section_start)
+            next_candidates = [i for i in (next_heading, next_top_heading) if i != -1]
+            content_end = (min(next_candidates) - 1) if next_candidates else len(content)
+            prefix = content[:content_start].rstrip()
+            suffix = content[content_end:].lstrip()
+            updated = (prefix + "\n\n" if prefix else "") + entry
+            if suffix:
+                updated += "\n" + suffix
+            path.write_text(updated)
+            return
+        path.write_text(content.rstrip() + "\n\n" + entry)
+        return
+    path.write_text(entry)
 
 
 def _install_claude(verbose=True):
@@ -195,34 +259,26 @@ When the user types `/interview` or `/submit`, invoke the Skill tool with `skill
 def _install_codex(verbose=True):
     """Install skill for Codex via AGENTS.md + hooks.json."""
     agents_md = Path("AGENTS.md")
-    entry = """
-## interview skill
-- **interview** — AI-native interview platform.
-  - `/interview <CODE>` — Start a candidate session.
-  - `/submit` — Seal the active session and send the report.
-  - Hiring managers use `interview dashboard` in a terminal.
+    codex_global_agents_md = Path.home() / ".codex" / "AGENTS.md"
 
-When the user types `/interview <CODE>`, immediately run:
-  `python -m interview.core.session start --code <CODE>`
-Then show the command's stdout verbatim and wait for the candidate's next message.
-
-When the user types `/submit`, run:
-  `python -m interview.core.session seal`
-  `python -m interview.core.report generate --code <CODE>`
-  `python -m interview.core.transport send --code <CODE>`
-
-While a session is active, the Codex hooks capture prompts and tool calls.
-Before substantive work on each candidate turn, log your plan:
-  `python -m interview.core.session log --event-type thinking --payload '{"plan":"YOUR APPROACH"}'`
-"""
-    if agents_md.exists():
-        content = agents_md.read_text()
-        if "interview skill" not in content:
-            agents_md.write_text(content + entry)
-    else:
-        agents_md.write_text(entry)
+    _upsert_interview_agents_entry(agents_md)
     if verbose:
         print(f"  ✓ AGENTS.md updated")
+
+    codex_global_agents_md.parent.mkdir(parents=True, exist_ok=True)
+    _upsert_interview_agents_entry(codex_global_agents_md)
+    if verbose:
+        print(f"  ✓ Codex global AGENTS.md updated: {codex_global_agents_md}")
+
+    # Install a global /interview skill for Codex/Codex-like local skill loaders.
+    # Keep /submit in AGENTS.md to avoid conflicts with other tools' global
+    # submit skills.
+    agents_skill_dir = Path.home() / ".agents" / "skills" / "interview"
+    agents_skill_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(SKILL_SRC, agents_skill_dir / "SKILL.md")
+    if verbose:
+        print(f"  ✓ Codex skill installed: {agents_skill_dir / 'SKILL.md'}")
+        print(f"    Restart Codex if /interview is not recognized immediately.")
 
     hooks_dir = Path(".codex")
     hooks_dir.mkdir(exist_ok=True)
@@ -278,7 +334,12 @@ Before substantive work on each candidate turn, log your plan:
     try:
         test = _sp.run(
             [sys.executable, "-m", "interview.hooks.codex_hook", "pre"],
-            input='{"tool_name":"local_shell","tool_input":{}}',
+            input=json.dumps({
+                "tool_name": "local_shell",
+                "tool_input": {
+                    "command": "python -m interview.core.session log --event-type thinking",
+                },
+            }),
             capture_output=True, text=True, timeout=5,
         )
         if test.returncode != 0:
