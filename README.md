@@ -22,6 +22,14 @@ pip install interviewsignal && interview install
 
 ## The Engine in Action
 
+<div align="center">
+  <img src="docs/images/demo.gif" alt="Live demo — candidate session → AI grading → dashboard review" width="100%"/>
+  <p><em>Candidate works in terminal. Dashboard auto-grades and ranks.</em></p>
+</div>
+
+<details>
+<summary><strong>See full screenshots</strong></summary>
+
 ### Candidate starts a session in the terminal
 
 <img src="docs/images/terminal-start.png" alt="Candidate starts interview session — GitHub OAuth, problem statement appears" width="100%"/>
@@ -41,6 +49,8 @@ pip install interviewsignal && interview install
 ### AI grades against your rubric — dimension by dimension
 
 <img src="docs/images/detail-grading.png" alt="Claude's Analysis — per-dimension rubric scores with evidence from transcript" width="100%"/>
+
+</details>
 
 ---
 
