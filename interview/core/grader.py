@@ -30,16 +30,18 @@ DEFAULT_GRADING_MODEL  = "claude-haiku-4-5-20251001"   # fast + cheap, good enou
 DEFAULT_BASE_URL       = "https://api.anthropic.com"
 MAX_TOKENS             = 2048
 
-# Overtime penalty table: (max_overtime_minutes, score_deduction).
-# Applied to overall_score (0–10 scale) after AI grading, not injected into the prompt.
-# Tiers: 0–10 min over → -0.5, 10–20 → -1.0, 20–30 → -1.5, 30–60 → -2.5, 60+ → -4.0
-_OVERTIME_PENALTY_TABLE = [
+# Overtime penalty tiers: (tier_end_minutes, penalty_at_tier_end).
+# Within each tier the penalty grows as position² (accelerating curve), so a candidate
+# barely over the boundary gets almost no deduction while one deep in the tier gets most.
+# At exactly 10/20/30/60 min over the deduction equals the tier's max value exactly.
+# 60+ min over: flat cap of -4.0.
+_OVERTIME_TIERS = [
     (10,  0.5),
     (20,  1.0),
     (30,  1.5),
     (60,  2.5),
-    (float("inf"), 4.0),
 ]
+_OVERTIME_CAP = 4.0
 
 
 def _overtime_penalty(elapsed: float, time_limit: float) -> float:
@@ -47,10 +49,15 @@ def _overtime_penalty(elapsed: float, time_limit: float) -> float:
     overtime = elapsed - time_limit
     if overtime <= 0:
         return 0.0
-    for threshold, penalty in _OVERTIME_PENALTY_TABLE:
-        if overtime <= threshold:
-            return penalty
-    return _OVERTIME_PENALTY_TABLE[-1][1]
+    if overtime > _OVERTIME_TIERS[-1][0]:
+        return _OVERTIME_CAP
+    prev_end, prev_penalty = 0.0, 0.0
+    for tier_end, tier_penalty in _OVERTIME_TIERS:
+        if overtime <= tier_end:
+            position = (overtime - prev_end) / (tier_end - prev_end)  # 0→1 within tier
+            return prev_penalty + (tier_penalty - prev_penalty) * (position ** 2)
+        prev_end, prev_penalty = tier_end, tier_penalty
+    return _OVERTIME_CAP
 
 
 def _apply_overtime_penalty(grading: dict, manifest: dict) -> dict:
