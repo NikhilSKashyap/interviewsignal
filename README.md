@@ -239,20 +239,29 @@ interview dashboard
 
 Submissions after the time limit are accepted — but automatically penalized. The deduction is applied to the AI-graded score post-grading, not injected into the grading prompt, so it can't be argued away.
 
-The penalty grows as a quadratic curve within each band, meaning a candidate barely over the boundary loses almost nothing while one deep in the band feels it accelerate:
+**The math**
 
-| Time over limit | Score deduction (out of 10) |
-|:---|:---|
-| 1 min | −0.01 |
-| 5 min | −0.13 |
-| 7 min | −0.25 |
-| 10 min | −0.50 |
-| 20 min | −1.00 |
-| 30 min | −1.50 |
-| 60 min | −2.50 |
-| 60+ min | −4.00 (cap) |
+Overtime is divided into bands: 0–10 min, 10–20 min, 20–30 min, 30–60 min, and 60+ min (capped). Within each band the penalty grows as a quadratic curve — not a flat step — so a candidate barely over the boundary loses almost nothing while one deep in the band feels it accelerate:
 
-The dashboard shows the raw AI score, the overtime deduction, and the adjusted final score separately. A flag is also raised — yellow for ≤20 min over, red beyond.
+```
+position = (overtime - band_start) / (band_end - band_start)   ← 0.0 to 1.0
+penalty  = prev_band_max + (this_band_max - prev_band_max) × position²
+```
+
+Band maxima on the 0–10 score scale: **−0.5** at 10 min, **−1.0** at 20 min, **−1.5** at 30 min, **−2.5** at 60 min, **−4.0** cap beyond that.
+
+**Example — 7 minutes over a 60-minute interview, raw AI score 7.5**
+
+```
+overtime  = 7 min  →  falls in the 0–10 min band
+position  = 7 / 10 = 0.70
+penalty   = 0 + (0.5 − 0) × 0.70² = 0.5 × 0.49 = −0.245
+final score = 7.5 − 0.245 = 7.26
+```
+
+Compare: 1 min over costs only −0.005; 10 min over costs the full −0.5. The curve means being slightly late is forgiving, but lingering well past the limit compounds quickly.
+
+The dashboard shows the raw AI score, overtime deduction, and adjusted final score separately. A flag is raised alongside — yellow for ≤20 min over, red beyond.
 
 ---
 
