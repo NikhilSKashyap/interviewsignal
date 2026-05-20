@@ -8,6 +8,7 @@
 
 ```bash
 pip install interviewsignal && interview install
+# Codex: pip install interviewsignal && interview install --platform codex
 ```
 
 </div>
@@ -129,6 +130,7 @@ First launch opens a setup wizard in your browser — relay URL, API key, create
 
 ```bash
 pip install interviewsignal && interview install
+# Codex: pip install interviewsignal && interview install --platform codex
 /interview INT-4829-XK
 ```
 

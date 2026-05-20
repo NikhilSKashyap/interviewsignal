@@ -197,9 +197,23 @@ def _install_codex(verbose=True):
     agents_md = Path("AGENTS.md")
     entry = """
 ## interview skill
-Type `$interview hm` to set up an interview as a hiring manager.
-Type `$interview <CODE>` to start a candidate session.
-Type `$submit` to end the session and send the report.
+- **interview** — AI-native interview platform.
+  - `/interview <CODE>` — Start a candidate session.
+  - `/submit` — Seal the active session and send the report.
+  - Hiring managers use `interview dashboard` in a terminal.
+
+When the user types `/interview <CODE>`, immediately run:
+  `python -m interview.core.session start --code <CODE>`
+Then show the command's stdout verbatim and wait for the candidate's next message.
+
+When the user types `/submit`, run:
+  `python -m interview.core.session seal`
+  `python -m interview.core.report generate --code <CODE>`
+  `python -m interview.core.transport send --code <CODE>`
+
+While a session is active, the Codex hooks capture prompts and tool calls.
+Before substantive work on each candidate turn, log your plan:
+  `python -m interview.core.session log --event-type thinking --payload '{"plan":"YOUR APPROACH"}'`
 """
     if agents_md.exists():
         content = agents_md.read_text()
@@ -220,11 +234,61 @@ Type `$submit` to end the session and send the report.
         except Exception:
             pass
 
-    hook_cmd = f"{sys.executable} -m interview.hooks.claude_hook"
-    hooks["PreToolUse"] = {"command": f"{hook_cmd} pre"}
+    # Migrate the early experimental shape written by interviewsignal <= 0.9.15.
+    for stale_key in ("PreToolUse", "PostToolUse", "UserPromptSubmit", "Stop"):
+        hooks.pop(stale_key, None)
+
+    hook_cmd = f"{sys.executable} -m interview.hooks.codex_hook"
+    if not isinstance(hooks.get("hooks"), dict):
+        hooks["hooks"] = {}
+    hook_events = hooks["hooks"]
+    hook_events["UserPromptSubmit"] = [{
+        "hooks": [{
+            "type": "command",
+            "command": f"{hook_cmd} user_prompt",
+        }]
+    }]
+    hook_events["PreToolUse"] = [{
+        "matcher": "*",
+        "hooks": [{
+            "type": "command",
+            "command": f"{hook_cmd} pre",
+        }]
+    }]
+    hook_events["PostToolUse"] = [{
+        "matcher": "*",
+        "hooks": [{
+            "type": "command",
+            "command": f"{hook_cmd} post",
+        }]
+    }]
+    hook_events["Stop"] = [{
+        "hooks": [{
+            "type": "command",
+            "command": f"{hook_cmd} stop",
+        }]
+    }]
+
     hooks_file.write_text(json.dumps(hooks, indent=2))
     if verbose:
         print(f"  ✓ Codex hooks installed: {hooks_file}")
+        print(f"     Restart Codex after install so hooks are loaded.")
+
+    import subprocess as _sp
+    try:
+        test = _sp.run(
+            [sys.executable, "-m", "interview.hooks.codex_hook", "pre"],
+            input='{"tool_name":"local_shell","tool_input":{}}',
+            capture_output=True, text=True, timeout=5,
+        )
+        if test.returncode != 0:
+            raise RuntimeError(test.stderr.strip())
+        if verbose:
+            print(f"  ✓ Hook reachability check passed")
+    except Exception as e:
+        print(f"\n  ⚠  Hook reachability check FAILED: {e}")
+        print(f"     The hook command is: {hook_cmd} pre")
+        print(f"     Reinstall interviewsignal with the Python used by Codex.")
 
 
 def _install_cursor(verbose=True):
@@ -427,7 +491,8 @@ def cmd_install(args):
             print()
             print(f"\n✓ interviewsignal installed.\n")
             print(f"  Hiring manager: run 'interview dashboard' to create interviews and review submissions")
-            print(f"  Candidate:      open Claude Code and type /interview <CODE>\n")
+            platform_hint = "Codex" if platform_name == "codex" else "Claude Code"
+            print(f"  Candidate:      open {platform_hint} and type /interview <CODE>\n")
             return
 
     print("  To skip the name/email prompt during interviews, we'll save your identity now.")
@@ -448,7 +513,8 @@ def cmd_install(args):
 
     print(f"\n✓ interviewsignal installed.\n")
     print(f"  Hiring manager: run 'interview dashboard' to create interviews and review submissions")
-    print(f"  Candidate:      open Claude Code and type /interview <CODE>\n")
+    platform_hint = "Codex" if platform_name == "codex" else "Claude Code"
+    print(f"  Candidate:      open {platform_hint} and type /interview <CODE>\n")
 
 
 def cmd_uninstall(args):
@@ -479,6 +545,39 @@ def cmd_uninstall(args):
                 print(f"  ⚠ Could not update settings.json: {e}")
 
         print(f"\n✓ interviewsignal uninstalled.")
+    elif platform_name == "codex":
+        hooks_file = PLATFORMS["codex"]["hooks_json"]
+        if hooks_file.exists():
+            try:
+                settings = json.loads(hooks_file.read_text())
+                hook_events = settings.get("hooks", {})
+                if isinstance(hook_events, dict):
+                    for hook_type in ["UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"]:
+                        groups = hook_events.get(hook_type)
+                        if isinstance(groups, list):
+                            filtered = []
+                            for group in groups:
+                                handlers = group.get("hooks", []) if isinstance(group, dict) else []
+                                ours = any(
+                                    isinstance(h, dict)
+                                    and "interview.hooks.codex_hook" in h.get("command", "")
+                                    for h in handlers
+                                )
+                                if not ours:
+                                    filtered.append(group)
+                            if filtered:
+                                hook_events[hook_type] = filtered
+                            else:
+                                hook_events.pop(hook_type, None)
+                    settings["hooks"] = hook_events
+                    hooks_file.write_text(json.dumps(settings, indent=2))
+                    print(f"  ✓ Codex hooks removed from {hooks_file}")
+            except Exception as e:
+                print(f"  ⚠ Could not update {hooks_file}: {e}")
+
+        print(f"\n✓ interviewsignal uninstalled.")
+    else:
+        print(f"  Platform '{platform_name}' uninstall is not implemented.")
 
 
 def cmd_configure_email(args):

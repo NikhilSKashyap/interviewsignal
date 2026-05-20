@@ -203,7 +203,8 @@ def main():
     print(f"\n✓ Interview created.\n")
     print(f"  Code: {result['code']}\n")
     print(f"Share this code with your candidate. They run:\n")
-    print(f"  pip install interviewsignal && interview install")
+    print(f"  Claude Code: pip install interviewsignal && interview install")
+    print(f"  Codex:       pip install interviewsignal && interview install --platform codex")
     print(f"  /interview {result['code']}\n")
     if relay_url:
         print(f"Candidates appear in your dashboard when they submit.")

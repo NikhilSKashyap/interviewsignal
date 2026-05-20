@@ -534,7 +534,11 @@ def _build_create_interview_html(in_wizard: bool = False, error: str = "") -> st
 
 def _build_create_success_html(code: str) -> str:
     safe_code = escape(code)
-    install_lines = f"pip install interviewsignal && interview install\n/interview {code}"
+    install_lines = (
+        "Claude Code: pip install interviewsignal && interview install\n"
+        "Codex:       pip install interviewsignal && interview install --platform codex\n"
+        f"/interview {code}"
+    )
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>

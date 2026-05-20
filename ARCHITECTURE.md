@@ -125,6 +125,19 @@ Claude Code PreToolUse, PostToolUse, and Stop hooks installed by `interview inst
   and `assistant_message` events. This makes prompt capture reliable without relying on injected
   instructions. Guards against infinite loops via `stop_hook_active` flag.
 
+### `interview/hooks/codex_hook.py`
+Codex UserPromptSubmit, PreToolUse, PostToolUse, and Stop hooks installed by
+`interview install --platform codex`.
+
+- **UserPromptSubmit**: logs the candidate prompt directly from the Codex hook payload and injects
+  a lightweight plan-logging reminder via `additionalContext`.
+- **PreToolUse/PostToolUse**: logs tool calls/results using Codex's Claude-compatible PascalCase
+  hook payload shape. PreToolUse uses `systemMessage` because Codex does not currently support
+  Claude-style `additionalContext` on that hook.
+- **Stop**: Codex does not expose a Claude-style local conversation JSONL for this hook, so Stop
+  records the turn boundary and performs the silent per-prompt git commit using the last captured
+  prompt.
+
 ### `interview/relay/server.py`
 Multi-tenant relay HTTP server (pure stdlib). Binds to `0.0.0.0:8080` by default.
 Auth model: `POST /register` and `GET /interviews/{code}` are open. All other routes require
@@ -324,8 +337,8 @@ Candidate checks score:
 Each platform is a ~30-line function in `cli.py`:
 
 1. Add an entry to `PLATFORMS` dict with install paths.
-2. Write `_install_<platform>(verbose=True)` that copies SKILL.md and wires up
-   `interview.hooks.claude_hook pre/post/stop` as the platform's hook equivalents.
+2. Write `_install_<platform>(verbose=True)` that installs the platform instructions and wires up
+   a platform-specific hook module for prompt, tool, and stop events.
 3. Add the platform to `cmd_install()` dispatch and CLI argument choices.
 
 The hook protocol varies by platform, but the core logic in `claude_hook.py` reads from stdin
