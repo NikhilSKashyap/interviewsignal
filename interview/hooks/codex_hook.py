@@ -30,8 +30,6 @@ from interview.core import session as core_session
 INTERVIEW_DIR = Path.home() / ".interview"
 ACTIVE_SESSION_FILE = INTERVIEW_DIR / "active_session.json"
 
-NEW_TURN_GAP = 30
-
 
 def _load_active_session() -> dict | None:
     try:
@@ -126,9 +124,6 @@ def _is_session_log_call(tool_name: str, tool_input: dict) -> bool:
     return "interview.core.session" in cmd and " log " in cmd
 
 
-def _is_new_turn(session: dict) -> bool:
-    return (time.time() - session.get("last_tool_ts", 0)) > NEW_TURN_GAP
-
 
 def _last_prompt(session: dict) -> str:
     prompt = session.get("last_user_prompt", "")
@@ -193,7 +188,6 @@ def handle_pre_tool_use(data: dict) -> int:
     tool_name = _tool_name(data)
     tool_input = _tool_input(data)
     is_log_call = _is_session_log_call(tool_name, tool_input)
-    new_turn = _is_new_turn(session) and not is_log_call
 
     if not is_log_call:
         _log_event(session, "tool_call", {
@@ -205,22 +199,9 @@ def handle_pre_tool_use(data: dict) -> int:
         session["last_tool_ts"] = time.time()
         _save_active_session(session)
 
-    elapsed = _elapsed_str(session)
-    warning = _time_warning(session)
-    code = session["code"]
-    if is_log_call:
-        message = f"[interview: {code} - {elapsed}{warning}]"
-    elif new_turn:
-        message = (
-            f"INTERVIEW CAPTURE - {code} - {elapsed}{warning}: "
-            "log your plan before acting."
-        )
-    else:
-        message = f"[interview: active - {code} - {elapsed}{warning} - /submit to end]"
-
-    # Codex currently treats PreToolUse as a guardrail hook, not a developer
-    # context injection point. systemMessage is the supported low-friction nudge.
-    print(json.dumps({"systemMessage": message}))
+    # Codex's PreToolUse is a guardrail hook — stdout controls approve/block only.
+    # Context injection happens via UserPromptSubmit additionalContext instead.
+    print(json.dumps({}))
     return 0
 
 
@@ -255,22 +236,12 @@ def handle_post_tool_use(data: dict) -> int:
 
 
 def handle_stop(data: dict) -> int:
+    # Codex's Stop payload carries session_id and cwd only — no assistant response text.
+    # assistant_message events are absent for Codex sessions; the event log will show
+    # user_prompt and tool_call/tool_result sequences but not AI responses.
     session = _load_active_session()
     if not session:
         return 0
-
-    assistant_text = (
-        data.get("assistant_message")
-        or data.get("assistantMessage")
-        or data.get("response")
-        or data.get("output")
-    )
-    if isinstance(assistant_text, str) and assistant_text.strip():
-        text = assistant_text.strip()
-        if len(text) > 3000:
-            text = text[:3000] + f"...[{len(text)} chars]"
-        _log_event(session, "assistant_message", {"text": text})
-        session = _load_active_session() or session
 
     session["last_stop_ts"] = time.time()
     _save_active_session(session)

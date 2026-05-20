@@ -70,7 +70,7 @@ def test_codex_hooks_log_prompt_tool_call_and_result(tmp_path, monkeypatch, caps
         "tool_input": {"command": "pytest", "long": "x" * 600},
     }) == 0
     pre_output = json.loads(capsys.readouterr().out)
-    assert "systemMessage" in pre_output
+    assert pre_output == {}  # approve with no injection; context goes via UserPromptSubmit
 
     assert codex_hook.handle_post_tool_use({
         "tool_name": "local_shell",
