@@ -14,9 +14,15 @@ pip install interviewsignal && interview install
 
 ---
 
-> **When every candidate uses AI, code quality converges. Output is no longer signal.**
+## What is AI-native broad-interviewing?
 
-> ATS platforms grade the output — did the code pass tests? We grade the **thinking** — how the candidate decomposes the problem, directs the AI, and iterates on failures. The transcript captures who drove the thinking. That's the signal no one else can see.
+Traditional hiring relies on **broadcast-rejection** — filtering out hundreds of talented developers based on resume keywords or rigid pass/fail LeetCode puzzles because manual screening doesn't scale.
+
+**interviewsignal** enables **AI-native broad-interviewing**: a high-volume, high-fidelity asynchronous screening model that opens the funnel wide without draining engineering resources. Share a code. Every candidate works the problem on their own time, in their own IDE, with their own AI tools. The session captures the full thought process — every prompt, every decision, every iteration. Submissions arrive auto-graded and ranked. You spend 15 minutes triaging, not 200 hours interviewing.
+
+> **When every candidate uses AI, code quality converges. Output is no longer signal.** ATS platforms grade the output — did the code pass tests? We grade the **thinking** — how the candidate decomposes the problem, directs the AI, and iterates on failures. The transcript captures who drove the thinking. That's the signal no one else can see.
+
+> **Broad-interview, not broadcast-reject. Pure signal.**
 
 ---
 
