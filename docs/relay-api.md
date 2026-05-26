@@ -248,6 +248,10 @@ Candidate submits a sealed session package. Candidate submissions use the per-in
 with the matching `hm_key`. If GitHub OAuth is configured on the relay, `session_token` is also
 required.
 
+Auto-grading runs by default when the interview has `auto_grade: true` and either the relay
+operator configured `GRADING_API_KEY` or the HM's dashboard-pushed interview package includes
+an interview-scoped `grading_api_key`. `GET /interviews/{code}` never exposes that key.
+
 Request body:
 ```json
 {

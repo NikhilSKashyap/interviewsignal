@@ -671,9 +671,12 @@ class RelayHandler(BaseHTTPRequestHandler):
 
         # --- Auto-grading (best-effort, non-fatal) ---
         auto_graded = False
-        grading_api_key = os.environ.get("GRADING_API_KEY", "").strip()
+        grading_api_key = (
+            os.environ.get("GRADING_API_KEY", "").strip()
+            or _store.get_grading_api_key(hm_key, code)
+        )
         if not grading_api_key:
-            print(f"[auto-grade] {code}/{cid}: GRADING_API_KEY not set — skipping", flush=True)
+            print(f"[auto-grade] {code}/{cid}: no grading API key configured — skipping", flush=True)
         else:
             try:
                 auto_grade_flag = _store.get_auto_grade(hm_key, code)
@@ -778,7 +781,12 @@ class RelayHandler(BaseHTTPRequestHandler):
         if body is None or not body.get("rubric", "").strip():
             return self._error(400, "invalid_payload", "Missing 'rubric' field.")
         try:
-            result = _store.update_rubric(hm_key, code, body["rubric"].strip())
+            result = _store.update_rubric(
+                hm_key,
+                code,
+                body["rubric"].strip(),
+                body.get("grading_api_key"),
+            )
             self._json(result)
         except StoreError as e:
             return self._error(404, "not_found", str(e))

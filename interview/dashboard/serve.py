@@ -2692,7 +2692,11 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
                     from interview.core.transport import get_hm_key, get_relay_api_key
                     relay_url_val = get_relay_url()
                     token = get_hm_key() or get_relay_api_key()
-                    req_body = json.dumps({"rubric": rubric}).encode()
+                    relay_payload = {"rubric": rubric}
+                    grading_api_key = _get_config().get("anthropic_api_key", "").strip()
+                    if grading_api_key:
+                        relay_payload["grading_api_key"] = grading_api_key
+                    req_body = json.dumps(relay_payload).encode()
                     req = urllib.request.Request(
                         f"{relay_url_val}/interviews/{code}/rubric",
                         data=req_body,

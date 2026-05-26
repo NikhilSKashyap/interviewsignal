@@ -191,8 +191,8 @@ class SessionStore:
         return self._load_json(self._interviews_dir(hm_key) / f"{code}.json")
 
     # Fields safe to expose to candidates via GET /interviews/{code}.
-    # hm_key, rubric, sharing, auto_grade, audit_email, hm_email, cc_emails,
-    # candidate_email, and anonymize are deliberately excluded.
+    # hm_key, rubric, sharing, auto_grade, grading_api_key, audit_email,
+    # hm_email, cc_emails, candidate_email, and anonymize are deliberately excluded.
     _CANDIDATE_SAFE_FIELDS = frozenset({
         "code", "problem", "time_limit_minutes", "relay_url",
         "submit_token", "created_at", "problem_hash",
@@ -240,14 +240,23 @@ class SessionStore:
         # include this field, and those should keep the product default.
         return bool(pkg.get("auto_grade", True))
 
-    def update_rubric(self, hm_key: str, code: str, rubric: str) -> dict:
-        """Update the rubric for an existing interview. Returns updated config."""
+    def get_grading_api_key(self, hm_key: str, code: str) -> str:
+        """Return the interview-scoped grading API key, if one was stored."""
+        pkg = self._load_json(self._interviews_dir(hm_key) / f"{code}.json")
+        if pkg is None:
+            return ""
+        return str(pkg.get("grading_api_key") or "").strip()
+
+    def update_rubric(self, hm_key: str, code: str, rubric: str, grading_api_key: str | None = None) -> dict:
+        """Update the rubric/key for an existing interview. Returns updated config."""
         path = self._interviews_dir(hm_key) / f"{code}.json"
         pkg = self._load_json(path)
         if pkg is None:
             raise StoreError(f"Interview {code} not found.")
         pkg["rubric"] = rubric
-        self._save_json(path, pkg)
+        if grading_api_key is not None:
+            pkg["grading_api_key"] = grading_api_key.strip()
+        self._write_atomic(path, json.dumps(pkg, indent=2))
         return {"code": code, "rubric_updated": True}
 
     def get_interview_config(self, hm_key: str, code: str) -> dict | None:

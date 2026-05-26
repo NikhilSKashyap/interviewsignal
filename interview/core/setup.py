@@ -53,6 +53,21 @@ def candidate_package(payload: dict) -> dict:
     return {k: v for k, v in payload.items() if k in allowed}
 
 
+def _get_grading_api_key() -> str:
+    """Return the HM's grading key for relay-side auto-grading, if configured."""
+    env_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    if env_key:
+        return env_key
+    config_file = INTERVIEW_DIR / "config.json"
+    if config_file.exists():
+        try:
+            cfg = json.loads(config_file.read_text())
+            return str(cfg.get("anthropic_api_key") or "").strip()
+        except Exception:
+            pass
+    return ""
+
+
 def create_interview(
     problem: str,
     rubric: str,
@@ -103,6 +118,9 @@ def create_interview(
         "hm_key": hm_key,
         "submit_token": secrets.token_urlsafe(32),
         "auto_grade": True,
+        # Server-side only. candidate_package() strips this before any public
+        # GET /interviews/<code> response, same as rubric and hm_key.
+        "grading_api_key": _get_grading_api_key(),
     }
 
     # Save locally on HM's machine
