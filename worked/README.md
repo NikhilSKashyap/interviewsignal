@@ -8,11 +8,19 @@ Each example is a complete, ready-to-use interview you can deploy with `intervie
 
 ## Available Examples
 
-| Example | Target Role | Time | Startup Type |
-|---------|------------|------|-------------|
-| [rate-limiter/](rate-limiter/) | Backend Engineer | 90 min | API/infra, developer tools (Stripe, Resend, Plaid) |
-| [webhook-delivery/](webhook-delivery/) | Backend Engineer | 90 min | SaaS/B2B platforms (Pylon, incident.io, Svix) |
-| [agent-task-queue/](agent-task-queue/) | Backend Engineer | 90 min | AI agent infrastructure (30%+ of current YC batch) |
+| | Rate Limiter | Webhook Delivery | Agent Task Queue |
+|---|---|---|---|
+| **Target role** | Backend Engineer | Backend Engineer | Backend Engineer |
+| **Time** | 90 min | 90 min | 90 min |
+| **Core algorithm** | Token bucket | Retry + backoff | DAG topo sort |
+| **AI generates core** | ✓ easily | ✓ easily | ✓ easily |
+| **Where signal lives** | Edge cases + threading | Scope triage + DLQ design | Failure propagation + timeout |
+| **Prioritization required** | Low — fits in 90 min | High — too much for 90 min | Medium — concurrency eats time |
+| **Startup type** | API/infra, dev tools | SaaS, B2B integrations | AI agent infra (YC hot) |
+| **Difficulty** | Mid-senior | Senior | Senior+ |
+| **Folder** | [rate-limiter/](rate-limiter/) | [webhook-delivery/](webhook-delivery/) | [agent-task-queue/](agent-task-queue/) |
+
+> All three problems share the same structure: AI generates the core algorithm instantly, but the engineering judgment (edge cases, failure modes, concurrency) is where candidates differentiate. That's by design — it's what makes them good interviewsignal problems.
 
 ---
 
@@ -21,16 +29,20 @@ Each example is a complete, ready-to-use interview you can deploy with `intervie
 ```
 worked/
   rate-limiter/
-    PROBLEM.md          ← what the candidate sees
-    RUBRIC.md           ← what the AI grader evaluates against
-    grading.json        ← sample graded result (score + per-dimension breakdown)
-    session_transcript  ← sample session showing the thought process
-    review.md           ← post-hoc review of grading accuracy
+    PROBLEM.md              ← what the candidate sees
+    RUBRIC.md               ← what the AI grader evaluates against
+    candidate-a-strong.md   ← transcript of a strong session (scored 8.2)
+    candidate-b-weak.md     ← transcript of a weak session (scored 4.8)
+    grading-a.json          ← graded result for candidate A
+    grading-b.json          ← graded result for candidate B
+    review.md               ← what the grader got right and missed
 ```
 
 **PROBLEM.md** is what you paste into the "Create Interview" form. It's written as a real engineering problem with context, not a LeetCode puzzle.
 
 **RUBRIC.md** is what you paste into the rubric field. The AI grader uses these dimensions and weights to score the session. Tweak the weights to match what your team values.
+
+**candidate-a / candidate-b** are the showcase. Same problem, same rubric, same AI tools — completely different signal. Candidate A drives the thinking and uses AI as a force multiplier. Candidate B pastes the problem and goes along for the ride. The transcript captures the difference no resume ever could.
 
 ---
 
