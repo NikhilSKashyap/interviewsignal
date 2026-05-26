@@ -29,35 +29,24 @@ Traditional hiring relies on **broadcast-rejection** — filtering out hundreds 
 
 ## The Engine in Action
 
-<div align="center">
-  <img src="docs/images/demo.gif" alt="Live demo — candidate session → AI grading → dashboard review" width="100%"/>
-  <p><em>Candidate works in terminal. Dashboard auto-grades and ranks.</em></p>
-</div>
+<table>
+<tr>
+<td width="50%">
 
-<details>
-<summary><strong>See full screenshots</strong></summary>
+**Candidate** — works in terminal with full-power AI
 
-### Candidate starts a session in the terminal
+<img src="docs/images/candidate.webp" alt="Candidate session — prompts, tool calls, and reasoning captured in real time" width="100%"/>
 
-<img src="docs/images/terminal-start.png" alt="Candidate starts interview session — GitHub OAuth, problem statement appears" width="100%"/>
+</td>
+<td width="50%">
 
-### Candidate works with full-power AI
+**Hiring Manager** — reviews auto-graded submissions in the dashboard
 
-<img src="docs/images/terminal-working.png" alt="Candidate doing EDA on Titanic dataset — AI collaboration captured" width="100%"/>
+<img src="docs/images/HM.webp" alt="HM dashboard — candidates ranked by score, flags, transcript, and grading" width="100%"/>
 
-### HM reviews auto-graded submissions in the dashboard
-
-<img src="docs/images/dashboard.png" alt="Dashboard showing candidates ranked by score with flags" width="100%"/>
-
-### Full transcript with diffs, grading, and tamper detection
-
-<img src="docs/images/detail-transcript.png" alt="Candidate detail page — transcript with GitHub-style diffs, grade panel, verify chain" width="100%"/>
-
-### AI grades against your rubric — dimension by dimension
-
-<img src="docs/images/detail-grading.png" alt="Claude's Analysis — per-dimension rubric scores with evidence from transcript" width="100%"/>
-
-</details>
+</td>
+</tr>
+</table>
 
 ---
 
