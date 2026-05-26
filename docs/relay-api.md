@@ -222,6 +222,26 @@ Returns `409` if the code is already registered.
 
 ---
 
+### `DELETE /interviews/{code}`
+Retire an interview code. Existing candidate submissions remain available to the HM, but the
+code is removed from the public lookup index, so future `GET /interviews/{code}` requests return
+`404`.
+
+Auth: HM Bearer token required.
+
+Response:
+```json
+{
+  "code": "INT-4829-XK",
+  "retired": true,
+  "retired_at": "2026-05-25T10:00:00Z"
+}
+```
+
+Returns `404` if the interview does not belong to the authenticated HM.
+
+---
+
 ### `POST /sessions`
 Candidate submits a sealed session package. Candidate submissions use the per-interview
 `submit_token` from `GET /interviews/{code}`. HM/admin callers may alternatively authenticate

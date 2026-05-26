@@ -702,6 +702,8 @@ def _build_dashboard_html(
                     f'<div style="display:flex;gap:8px;margin-top:10px;align-items:center">'
                     f'<button class="btn btn-sm" id="btn-save-rubric" data-code="{safe_current}" '
                     f'style="border-color:#312e81;color:#818cf8">Save Rubric</button>'
+                    f'<button class="btn btn-sm" id="btn-retire-code" data-code="{safe_current}" '
+                    f'style="border-color:#7f1d1d;color:#f87171;margin-left:auto">Retire Code</button>'
                     f'<span id="rubric-status" style="font-size:12px;color:#52525b"></span>'
                     f'</div></div></details>'
                 )
@@ -1194,6 +1196,32 @@ def _build_dashboard_html(
         status.style.color = '#f87171';
         btn.disabled = false;
         btn.textContent = 'Save Rubric';
+      }});
+  }});
+
+  document.getElementById('btn-retire-code')?.addEventListener('click', function() {{
+    const btn = this;
+    const code = btn.dataset.code;
+    if (!confirm(
+      'Retire ' + code + '?\\n\\n' +
+      'Candidates will no longer be able to start this interview code. Existing submissions stay visible.'
+    )) return;
+    btn.disabled = true;
+    btn.textContent = 'Retiring...';
+    fetch('/retire-interview', {{method:'POST', headers:{{'Content-Type':'application/json'}},
+      body: JSON.stringify({{code}})}})
+      .then(r => r.json()).then(d => {{
+        if (d.ok) {{
+          location.href = '/';
+        }} else {{
+          alert('Could not retire code: ' + (d.error || 'Unknown error'));
+          btn.disabled = false;
+          btn.textContent = 'Retire Code';
+        }}
+      }}).catch(e => {{
+        alert('Could not retire code: ' + e);
+        btn.disabled = false;
+        btn.textContent = 'Retire Code';
       }});
   }});
 
@@ -2679,6 +2707,40 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
                 except Exception as e:
                     self._send_json({"ok": False, "error": f"Relay update failed: {e}"}, 500)
                     return
+            self._send_json({"ok": True})
+
+        elif path == "/retire-interview":
+            code = body.get("code", "").strip()
+            if not code:
+                self._send_json({"ok": False, "error": "Missing code"}, 400)
+                return
+            if get_relay_url():
+                try:
+                    from interview.core.transport import get_hm_key, get_relay_api_key
+                    relay_url_val = get_relay_url()
+                    token = get_hm_key() or get_relay_api_key()
+                    req = urllib.request.Request(
+                        f"{relay_url_val}/interviews/{code}",
+                        headers={"Authorization": f"Bearer {token}"},
+                        method="DELETE",
+                    )
+                    with urllib.request.urlopen(req, timeout=15) as resp:
+                        json.loads(resp.read())
+                except Exception as e:
+                    self._send_json({"ok": False, "error": f"Relay retire failed: {e}"}, 500)
+                    return
+            # Remove the local HM package so the code disappears from local-created state.
+            created_file = INTERVIEW_DIR / "created" / f"{code}.json"
+            token_file = INTERVIEW_DIR / "created" / f"{code}.token"
+            try:
+                if created_file.exists():
+                    archive = created_file.with_suffix(".retired.json")
+                    created_file.replace(archive)
+                if token_file.exists():
+                    token_file.unlink()
+            except Exception as e:
+                self._send_json({"ok": False, "error": f"Local retire failed: {e}"}, 500)
+                return
             self._send_json({"ok": True})
 
         elif path == "/update-sharing":

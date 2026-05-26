@@ -6,6 +6,7 @@ Multi-tenant relay HTTP server. Pure stdlib — no external dependencies.
 Auth model:
   POST /register              — open (no auth)
   GET  /interviews/<code>     — open (public package fetch)
+  DELETE /interviews/<code>   — Bearer <hm_key> required (retire code)
   All other routes            — Bearer <hm_key> required
 
 Usage:
@@ -318,6 +319,18 @@ class RelayHandler(BaseHTTPRequestHandler):
             return self._post_rubric(hm_key, parts[1])
 
         self._error(404, "not_found", f"No route for POST {self.path}")
+
+    def do_DELETE(self):
+        parts = self._parts()
+
+        hm_key = self._auth_hm()
+        if hm_key is None:
+            return self._error(401, "unauthorized", "Valid hm_key required.")
+
+        if len(parts) == 2 and parts[0] == "interviews":
+            return self._delete_interview(hm_key, parts[1])
+
+        self._error(404, "not_found", f"No route for DELETE {self.path}")
 
     # ── open GET handlers ─────────────────────────────────────────────────────
 
@@ -769,6 +782,14 @@ class RelayHandler(BaseHTTPRequestHandler):
             self._json(result)
         except StoreError as e:
             return self._error(404, "not_found", str(e))
+
+    def _delete_interview(self, hm_key: str, code: str):
+        """DELETE /interviews/{code} — retire an interview code."""
+        try:
+            result = _store.retire_interview(hm_key, code)
+            self._json(result)
+        except StoreError:
+            return self._error(404, "not_found", f"No interview for code {code}.")
 
     def _post_sharing(self, hm_key: str, code: str):
         """POST /sessions/{code}/sharing — update sharing config for an interview code."""

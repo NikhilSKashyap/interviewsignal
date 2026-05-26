@@ -350,6 +350,7 @@ class RelayTransport(Transport):
                     entry["title"] = title
                     entry.setdefault("_source", "relay")
                     entry.setdefault("_anonymize", interview.get("anonymize", False))
+                    entry.setdefault("_retired_at", interview.get("retired_at"))
                     flat.append(entry)
             return flat
         except TransportError:

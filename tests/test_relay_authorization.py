@@ -88,3 +88,36 @@ def test_relay_auto_grade_can_be_disabled_explicitly(tmp_path):
     )
 
     assert store.get_auto_grade(hm_key, code) is False
+
+
+def test_retire_interview_makes_code_unfetchable_but_keeps_hm_history(tmp_path):
+    store = SessionStore(tmp_path)
+    hm_key = store.register_hm()
+    code = "INT-1234-AB"
+
+    store.register_interview(
+        hm_key,
+        code,
+        {
+            "code": code,
+            "problem": "Build something",
+            "rubric": "Private scoring notes",
+            "hm_key": hm_key,
+            "relay_url": "https://relay.example",
+        },
+    )
+
+    assert store.lookup_hm_for_code(code) == hm_key
+    public = store.get_interview_candidate(hm_key, code)
+    assert public is not None
+
+    result = store.retire_interview(hm_key, code)
+
+    assert result["retired"] is True
+    assert store.lookup_hm_for_code(code) is None
+    assert store.get_interview_candidate(hm_key, code) is None
+    assert not store.verify_submit_token(hm_key, code, public["submit_token"])
+
+    interviews = store.list_interviews(hm_key)
+    assert interviews[0]["code"] == code
+    assert interviews[0]["retired_at"]

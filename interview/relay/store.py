@@ -153,6 +153,25 @@ class SessionStore:
         index[code] = hm_key
         self._save_code_index(index)
 
+    def retire_interview(self, hm_key: str, code: str) -> dict:
+        """
+        Retire an interview code so candidates can no longer fetch it.
+        Existing submissions stay available to the HM dashboard.
+        """
+        path = self._interviews_dir(hm_key) / f"{code}.json"
+        payload = self._load_json(path)
+        if payload is None:
+            raise StoreError("not_found")
+        index = self._load_code_index()
+        owner = index.get(code)
+        if owner and owner != hm_key:
+            raise StoreError("not_found")
+        index.pop(code, None)
+        payload["retired_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        self._write_atomic(path, json.dumps(payload, indent=2))
+        self._save_code_index(index)
+        return {"code": code, "retired": True, "retired_at": payload["retired_at"]}
+
     def _ensure_submit_token(self, hm_key: str, code: str) -> dict | None:
         """Return the full interview payload, adding a submit token for older records."""
         path = self._interviews_dir(hm_key) / f"{code}.json"
@@ -187,6 +206,8 @@ class SessionStore:
         full = self._ensure_submit_token(hm_key, code)
         if full is None:
             return None
+        if full.get("retired_at"):
+            return None
         return {k: v for k, v in full.items() if k in self._CANDIDATE_SAFE_FIELDS}
 
     def verify_submit_token(self, hm_key: str, code: str, submit_token: str) -> bool:
@@ -194,6 +215,8 @@ class SessionStore:
         if not submit_token:
             return False
         full = self._ensure_submit_token(hm_key, code)
+        if full and full.get("retired_at"):
+            return False
         expected = str((full or {}).get("submit_token", ""))
         return bool(expected) and hmac.compare_digest(str(submit_token), expected)
 
@@ -251,6 +274,7 @@ class SessionStore:
                 "code": code,
                 "title": title,
                 "created_at": payload.get("created_at"),
+                "retired_at": payload.get("retired_at"),
                 "time_limit_minutes": payload.get("time_limit_minutes"),
                 "anonymize": payload.get("anonymize", False),
                 "candidate_count": len(candidates),
