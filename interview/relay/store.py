@@ -213,7 +213,9 @@ class SessionStore:
         pkg = self._load_json(self._interviews_dir(hm_key) / f"{code}.json")
         if pkg is None:
             return False
-        return bool(pkg.get("auto_grade", False))
+        # Auto-grading is opt-out. Older interview packages did not always
+        # include this field, and those should keep the product default.
+        return bool(pkg.get("auto_grade", True))
 
     def update_rubric(self, hm_key: str, code: str, rubric: str) -> dict:
         """Update the rubric for an existing interview. Returns updated config."""

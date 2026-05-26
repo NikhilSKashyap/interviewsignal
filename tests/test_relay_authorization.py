@@ -47,3 +47,44 @@ def test_relay_candidate_payload_uses_scoped_submit_token(tmp_path):
     assert "rubric" not in public
     assert store.verify_submit_token(hm_key, code, public["submit_token"])
     assert not store.verify_submit_token(hm_key, code, "wrong-token")
+
+
+def test_relay_auto_grade_defaults_to_enabled_for_legacy_packages(tmp_path):
+    store = SessionStore(tmp_path)
+    hm_key = store.register_hm()
+    code = "INT-1234-AB"
+
+    store.register_interview(
+        hm_key,
+        code,
+        {
+            "code": code,
+            "problem": "Build something",
+            "rubric": "Private scoring notes",
+            "hm_key": hm_key,
+            "relay_url": "https://relay.example",
+        },
+    )
+
+    assert store.get_auto_grade(hm_key, code) is True
+
+
+def test_relay_auto_grade_can_be_disabled_explicitly(tmp_path):
+    store = SessionStore(tmp_path)
+    hm_key = store.register_hm()
+    code = "INT-1234-AB"
+
+    store.register_interview(
+        hm_key,
+        code,
+        {
+            "code": code,
+            "problem": "Build something",
+            "rubric": "Private scoring notes",
+            "hm_key": hm_key,
+            "relay_url": "https://relay.example",
+            "auto_grade": False,
+        },
+    )
+
+    assert store.get_auto_grade(hm_key, code) is False
