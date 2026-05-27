@@ -101,6 +101,23 @@ Traditional hiring relies on **broadcast-rejection** — filtering out hundreds 
 | **Self-hosted / private** | N/A | N/A | 🚫 | 🚫 Multi-tenant cloud | ✅ Your infra, your data |
 | **Cost** | Engineer time | Engineer time | $$$$/seat | **$100+/seat, 5-20 assessments/mo** | **Free forever** |
 
+## interviewsignal vs Saffron vs OpenRound
+
+All three evaluate how candidates use AI — not just what they submit. The difference is where the candidate works and who owns the data.
+
+|  | **Saffron** | **OpenRound** | **interviewsignal** |
+|:---|:---:|:---:|:---:|
+| **Environment** | Browser IDE (cloud-hosted) | Browser + CLI (hosted) | Candidate's own IDE |
+| **AI tools** | Claude Code (sandboxed) | Platform AI agents | Any — Claude Code, Codex, Gemini, Cursor |
+| **Captures thought process** | ✅ Keystrokes + session replay | ✅ 6 evaluation dimensions | ✅ Hash-chained prompt + tool call log |
+| **Per-prompt git commits** | 🚫 | 🚫 | ✅ |
+| **Tamper detection** | ⚠️ Session replay | ❓ Not stated | ✅ 9 automated flags |
+| **Assessment quota** | 5–15/mo + $49 per extra | Not public | Unlimited |
+| **Pricing** | From $199/mo | Not public | Free forever |
+| **Interview data** | Their servers | Their servers | Your servers |
+| **Self-hosted** | 🚫 | 🚫 | ✅ |
+| **Open source** | 🚫 | 🚫 | ✅ |
+
 ---
 
 ## Quickstart
