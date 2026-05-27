@@ -100,13 +100,13 @@ But the default should not be another hosted assessment vendor. The paid product
 | **AI tools** | Platform-controlled | Platform-controlled | Any — Claude Code, Codex, Gemini, Cursor |
 | **Evidence captured** | Keystrokes + replay | Evaluation dimensions + transcript | Prompts, tool calls, diffs, commits, flags |
 | **Code evolution** | Session replay | Submission trace | Per-prompt git commits |
-| **Tamper evidence** | Trust the platform | Trust the platform | Hash-chained event log + 9 automated flags |
+| **Tamper evidence** | Session replay (platform-verified) | Not stated | Hash-chained event log + 9 automated flags |
 | **Assessment quota** | 5-15/mo + $49 per extra | 5-20/mo + custom | Unlimited |
 | **Pricing** | From $199/mo | From $149/mo ($129/mo annual) | Free forever |
 | **Interview data** | Vendor servers | Vendor servers | Your servers |
 | **Self-hosted/private** | No | No | Yes |
 | **Open source** | No | No | Yes |
-| **Trust model** | Rent the assessment workflow | Rent the assessment workflow | Own and verify the evidence |
+| **Trust model** | Vendor-verified | Vendor-verified | Cryptographically verifiable |
 
 AI-native hiring signal should be inspectable, forkable, and owned by the hiring team. That is the whole point of interviewsignal.
 
