@@ -87,20 +87,6 @@ Traditional hiring relies on **broadcast-rejection** — filtering out hundreds 
 
 ---
 
-## interviewsignal vs the status quo
-
-|  | Phone screen | Take-home test | LeetCode | AI screening SaaS | **interviewsignal** |
-|:---|:---:|:---:|:---:|:---:|:---:|
-| **Scales to 200+ candidates** | 🚫 | ⚠️ Manual review | ⚠️ Pass/fail only | ✅ | ✅ |
-| **Captures thought process** | ⚠️ Interviewer notes | 🚫 | 🚫 | ⚠️ Sandboxed only | ✅ Hash-chained transcript |
-| **AI-native** | 🚫 | 🚫 "No AI" policies | 🚫 | ✅ | ✅ Full-power AI, graded on usage |
-| **Real problems, real tools** | ⚠️ | ✅ | 🚫 Contrived | ⚠️ Sandboxed | ✅ Candidate's own IDE |
-| **Candidate gets feedback** | 🚫 Usually ghosted | 🚫 | 🚫 | ⚠️ Varies | ✅ Score + summary |
-| **Setup cost** | High (scheduling) | Medium | Medium (platform) | High (vendor + procurement) | **`pip install`, done** |
-| **Tamper detection** | N/A | 🚫 Honor system | ⚠️ Proctoring | ⚠️ Sandboxed browser | ✅ 9 automated flags |
-| **Self-hosted / private** | N/A | N/A | 🚫 | 🚫 Multi-tenant cloud | ✅ Your infra, your data |
-| **Cost** | Engineer time | Engineer time | $$$$/seat | **$100+/seat, 5-20 assessments/mo** | **Free forever** |
-
 ## interviewsignal vs Saffron vs OpenRound
 
 All three evaluate how candidates use AI — not just what they submit. The difference is where the candidate works and who owns the data.
@@ -112,8 +98,8 @@ All three evaluate how candidates use AI — not just what they submit. The diff
 | **Captures thought process** | ✅ Keystrokes + session replay | ✅ 6 evaluation dimensions | ✅ Hash-chained prompt + tool call log |
 | **Per-prompt git commits** | 🚫 | 🚫 | ✅ |
 | **Tamper detection** | ⚠️ Session replay | ❓ Not stated | ✅ 9 automated flags |
-| **Assessment quota** | 5–15/mo + $49 per extra | Not public | Unlimited |
-| **Pricing** | From $199/mo | Not public | Free forever |
+| **Assessment quota** | 5–15/mo + $49 per extra | 5–20/mo + custom | Unlimited |
+| **Pricing** | From $199/mo | From $129/mo | Free forever |
 | **Interview data** | Their servers | Their servers | Your servers |
 | **Self-hosted** | 🚫 | 🚫 | ✅ |
 | **Open source** | 🚫 | 🚫 | ✅ |
