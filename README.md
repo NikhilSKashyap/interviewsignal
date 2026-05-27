@@ -99,7 +99,7 @@ All three evaluate how candidates use AI — not just what they submit. The diff
 | **Per-prompt git commits** | 🚫 | 🚫 | ✅ |
 | **Tamper detection** | ⚠️ Session replay | ❓ Not stated | ✅ 9 automated flags |
 | **Assessment quota** | 5–15/mo + $49 per extra | 5–20/mo + custom | Unlimited |
-| **Pricing** | From $199/mo | From $129/mo | Free forever |
+| **Pricing** | From $199/mo | From $149/mo ($129/mo annual) | Free forever |
 | **Interview data** | Their servers | Their servers | Your servers |
 | **Self-hosted** | 🚫 | 🚫 | ✅ |
 | **Open source** | 🚫 | 🚫 | ✅ |
