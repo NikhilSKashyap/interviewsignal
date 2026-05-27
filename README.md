@@ -89,20 +89,26 @@ Traditional hiring relies on **broadcast-rejection** — filtering out hundreds 
 
 ## interviewsignal vs Saffron vs OpenRound
 
-All three evaluate how candidates use AI — not just what they submit. The difference is where the candidate works and who owns the data.
+Saffron and OpenRound validate the category: AI-native interviews are here.
+
+But the default should not be another hosted assessment vendor. The paid products monetize the wrapper: sandbox, quota, dashboard. interviewsignal ships the evidence layer directly: install it, run it in your repo, keep the data, fork the rubric.
 
 |  | **Saffron** | **OpenRound** | **interviewsignal** |
 |:---|:---:|:---:|:---:|
-| **Environment** | Browser IDE (cloud-hosted) | Browser + CLI (hosted) | Candidate's own IDE |
-| **AI tools** | Claude Code (sandboxed) | Platform AI agents | Any — Claude Code, Codex, Gemini, Cursor |
-| **Captures thought process** | ✅ Keystrokes + session replay | ✅ 6 evaluation dimensions | ✅ Hash-chained prompt + tool call log |
-| **Per-prompt git commits** | 🚫 | 🚫 | ✅ |
-| **Tamper detection** | ⚠️ Session replay | ❓ Not stated | ✅ 9 automated flags |
-| **Assessment quota** | 5–15/mo + $49 per extra | 5–20/mo + custom | Unlimited |
+| **Model** | Managed SaaS | Managed SaaS | Open-source infrastructure |
+| **Environment** | Browser IDE sandbox | Hosted browser + CLI flow | Candidate's own IDE |
+| **AI tools** | Platform-controlled | Platform-controlled | Any — Claude Code, Codex, Gemini, Cursor |
+| **Evidence captured** | Keystrokes + replay | Evaluation dimensions + transcript | Prompts, tool calls, diffs, commits, flags |
+| **Code evolution** | Session replay | Submission trace | Per-prompt git commits |
+| **Tamper evidence** | Trust the platform | Trust the platform | Hash-chained event log + 9 automated flags |
+| **Assessment quota** | 5-15/mo + $49 per extra | 5-20/mo + custom | Unlimited |
 | **Pricing** | From $199/mo | From $149/mo ($129/mo annual) | Free forever |
-| **Interview data** | Their servers | Their servers | Your servers |
-| **Self-hosted** | 🚫 | 🚫 | ✅ |
-| **Open source** | 🚫 | 🚫 | ✅ |
+| **Interview data** | Vendor servers | Vendor servers | Your servers |
+| **Self-hosted/private** | No | No | Yes |
+| **Open source** | No | No | Yes |
+| **Trust model** | Rent the assessment workflow | Rent the assessment workflow | Own and verify the evidence |
+
+AI-native hiring signal should be inspectable, forkable, and owned by the hiring team. That is the whole point of interviewsignal.
 
 ---
 
