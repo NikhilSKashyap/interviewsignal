@@ -66,6 +66,8 @@ export async function ensureProfile(userId: string): Promise<string | null> {
   return created.id
 }
 
+export { loadHmProfile } from '@/lib/relayProxy'
+
 export async function getHmKey(userId: string): Promise<string | null> {
   const { data } = await supabaseAdmin
     .from('hm_profiles')
