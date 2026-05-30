@@ -9,6 +9,7 @@ const isPublicRoute = createRouteMatcher([
   "/api/interviews/(.*)",   // candidate fetches problem via legacy path — no auth
   "/api/submit(.*)",        // candidate submits session — no auth (old path)
   "/api/sessions",          // POST — candidate submits via relay client — no auth
+  "/api/sessions/(.*)/score", // GET — candidate fetches own score — no auth
   "/api/votes(.*)",         // upvotes — no auth
   "/api/auth(.*)",          // OAuth status — no auth
 ]);

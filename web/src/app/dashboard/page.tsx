@@ -288,6 +288,9 @@ export default function DashboardPage() {
   const [createPrefill, setCreatePrefill] = useState<Prefill>(null)
   const [newCode, setNewCode]       = useState<string | null>(null)
   const [selected, setSelected]     = useState<Session | null>(null)
+  const [hmKey, setHmKey]           = useState<string | null>(null)
+  const [showKey, setShowKey]       = useState(false)
+  const [keyCopied, setKeyCopied]   = useState(false)
 
   useEffect(() => {
     if (!isLoaded) return
@@ -304,8 +307,9 @@ export default function DashboardPage() {
         } catch { /* ignore */ }
       }
 
-      // Sync profile on every dashboard load
+      // Sync profile + fetch hm_key for local dashboard
       await fetch('/api/user/sync', { method: 'POST' })
+      fetch('/api/me').then(r => r.json()).then(d => setHmKey(d.hm_key ?? null))
 
       const [ivRes, sRes] = await Promise.all([
         fetch('/api/interviews'),
@@ -377,12 +381,40 @@ export default function DashboardPage() {
             {activeCode ? `${activeCode} — submissions` : 'All submissions'}
             <span className="ml-2 text-xs font-normal text-zinc-600">{displaySessions.length}</span>
           </h1>
-          <button
-            onClick={() => setShowCreate(true)}
-            className="rounded-md bg-white px-3 py-1.5 text-xs font-medium text-black hover:bg-zinc-200 lg:hidden"
-          >
-            + New interview
-          </button>
+          <div className="flex items-center gap-2">
+            {hmKey && (
+              <div className="relative">
+                <button
+                  onClick={() => setShowKey(s => !s)}
+                  className="rounded-md border border-zinc-700 px-3 py-1.5 text-xs text-zinc-400 hover:border-zinc-500 hover:text-white"
+                  title="Local dashboard API key"
+                >
+                  API key
+                </button>
+                {showKey && (
+                  <div className="absolute right-0 top-9 z-50 w-80 rounded-xl border border-zinc-700 bg-zinc-900 p-4 shadow-2xl">
+                    <p className="mb-2 text-xs font-medium text-zinc-300">Local dashboard key</p>
+                    <p className="mb-3 text-xs text-zinc-500">Paste into <code className="text-zinc-400">~/.interview/config.json</code> as <code className="text-zinc-400">"hm_key"</code></p>
+                    <div className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2">
+                      <code className="flex-1 truncate text-xs text-emerald-400">{hmKey}</code>
+                      <button
+                        onClick={() => { navigator.clipboard.writeText(hmKey); setKeyCopied(true); setTimeout(() => setKeyCopied(false), 2000) }}
+                        className="shrink-0 rounded px-2 py-1 text-xs text-zinc-400 hover:text-white hover:bg-zinc-700"
+                      >
+                        {keyCopied ? '✓' : 'Copy'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            <button
+              onClick={() => setShowCreate(true)}
+              className="rounded-md bg-white px-3 py-1.5 text-xs font-medium text-black hover:bg-zinc-200 lg:hidden"
+            >
+              + New interview
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto">
