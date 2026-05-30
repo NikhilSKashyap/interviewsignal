@@ -165,13 +165,22 @@ def load_interview(code: str) -> dict | None:
     except Exception:
         pass
 
-    # 3. Relay lookup — fetch the package from the relay (no auth needed)
+    # 3. Relay lookup — try configured relay first, then community relay
+    COMMUNITY_RELAY = "https://tryinterviewsignal.vercel.app/api"
     try:
         from interview.core.transport import get_relay_url, RelayTransport, TransportError
         relay_url = get_relay_url()
-        if relay_url:
-            rt = RelayTransport(relay_url)
-            return rt.get_interview(code)
+        if relay_url and relay_url != COMMUNITY_RELAY:
+            try:
+                rt = RelayTransport(relay_url)
+                result = rt.get_interview(code)
+                if result:
+                    return result
+            except Exception:
+                pass  # Fall through to community relay
+        # Community relay fallback
+        rt = RelayTransport(COMMUNITY_RELAY)
+        return rt.get_interview(code)
     except Exception:
         pass
 
