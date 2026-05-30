@@ -9,6 +9,7 @@ const isPublicRoute = createRouteMatcher([
   "/api/interviews/(.*)",   // candidate fetches problem via legacy path — no auth
   "/api/submit(.*)",        // candidate submits session — no auth
   "/api/votes(.*)",         // upvotes — no auth
+  "/api/auth(.*)",          // OAuth status — no auth
 ]);
 
 export default clerkMiddleware(async (auth, request) => {
