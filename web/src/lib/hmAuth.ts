@@ -33,23 +33,28 @@ export async function getHmId(req: NextRequest): Promise<string | null> {
 export async function ensureProfile(userId: string): Promise<string | null> {
   const { data: existing } = await supabaseAdmin
     .from('hm_profiles')
-    .select('id, hm_key')
+    .select('id, hm_key, email')
     .eq('clerk_id', userId)
     .single()
 
   if (existing) {
-    // Backfill hm_key if missing
-    if (!existing.hm_key) {
-      await supabaseAdmin
-        .from('hm_profiles')
-        .update({ hm_key: `is_${randomUUID().replace(/-/g, '')}` })
-        .eq('id', existing.id)
+    // Backfill missing fields on existing profiles
+    const updates: Record<string, unknown> = {}
+    if (!existing.hm_key) updates.hm_key = `is_${randomUUID().replace(/-/g, '')}`
+    if (!existing.email) {
+      const user  = await currentUser()
+      const email = user?.emailAddresses?.[0]?.emailAddress ?? null
+      if (email) updates.email = email
+    }
+    if (Object.keys(updates).length > 0) {
+      await supabaseAdmin.from('hm_profiles').update(updates).eq('id', existing.id)
     }
     return existing.id
   }
 
   const user = await currentUser()
   const github = user?.externalAccounts?.find(a => a.provider === 'github')
+  const email  = user?.emailAddresses?.[0]?.emailAddress ?? null
 
   const { data: created, error } = await supabaseAdmin
     .from('hm_profiles')
@@ -57,6 +62,7 @@ export async function ensureProfile(userId: string): Promise<string | null> {
       clerk_id:        userId,
       github_username: github?.username ?? user?.username ?? null,
       github_avatar:   user?.imageUrl   ?? null,
+      email,
       hm_key:          `is_${randomUUID().replace(/-/g, '')}`,
     })
     .select('id')
